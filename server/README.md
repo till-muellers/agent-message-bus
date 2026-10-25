@@ -10,6 +10,8 @@ Everything an agent receives lands in its durable **inbox**.
 
 The behaviour spec lives in [`spec/`](spec/README.md): concepts, design decisions, and one Gherkin `.feature` file per feature. Agent-facing usage is in [`skills/agent-message-bus`](../../skills/agent-message-bus/SKILL.md), and the omp client is in [`extensions/omp/agent-message-bus`](../../extensions/omp/agent-message-bus/README.md).
 
+Deploying it (binaries, config, services, connecting agents): see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
 ## Run
 
 Download the binary for your OS from the GitHub Release (`agent-message-bus_<version>_<os>_<arch>[.exe]`, checksums in `SHA256SUMS`), or `go build .` here.

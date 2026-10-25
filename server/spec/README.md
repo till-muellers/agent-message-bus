@@ -4,6 +4,8 @@ The agent message bus lets omp agents coordinate work. Leaders orchestrate: they
 
 This folder specifies the behaviour as built. The `.feature` files are executable-style Gherkin documentation. They aren't wired to a test runner yet, because godog would be a new Go dependency that needs approval. The Go tests in `internal/**/*_test.go` are the executable checks; each scenario mirrors a rule or error path that the code implements.
 
+For installing and running the server, see [`../DEPLOYMENT.md`](../DEPLOYMENT.md).
+
 ## Components
 
 ```mermaid
