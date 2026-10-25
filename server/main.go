@@ -41,7 +41,7 @@ Environment:
 
 func main() {
 	fs := flag.NewFlagSet("agent-message-bus", flag.ExitOnError)
-	fs.Usage = func() { fmt.Fprint(fs.Output(), usage) }
+	fs.Usage = func() { _, _ = fmt.Fprint(fs.Output(), usage) }
 	detached := fs.Bool("detached", false, "run in the background")
 	_ = fs.Parse(os.Args[1:]) // ExitOnError: --help exits 0, bad flags exit 2
 	if err := dispatch(*detached); err != nil {

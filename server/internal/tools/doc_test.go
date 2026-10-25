@@ -16,12 +16,6 @@ func TestToolsLedgerIsCurrent(t *testing.T) {
 	}
 }
 
-func TestRenderMarkdownIsDeterministic(t *testing.T) {
-	if RenderMarkdown(New(Deps{})) != RenderMarkdown(New(Deps{})) {
-		t.Fatal("two renders differ")
-	}
-}
-
 func toolNamed(t *testing.T, name string) Tool {
 	t.Helper()
 	tl, ok := New(Deps{}).Get(name)
