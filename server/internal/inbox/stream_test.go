@@ -195,7 +195,7 @@ func TestStreamDelivery(t *testing.T) {
 			who:     "memberA",
 			backlog: []string{"a1", "a2"},
 			live: func(t *testing.T, w *world) {
-				w.svc.Publish([]Entry{w.entries["a2"]})
+				w.svc.publish([]Entry{w.entries["a2"]})
 				w.send(t, "worker", "alpha", "a3")
 			},
 			want: []string{"a3"},
@@ -224,8 +224,8 @@ func TestStreamDelivery(t *testing.T) {
 			live: func(t *testing.T, w *world) {
 				a3 := w.insert(t, "worker", "alpha", "a3")
 				a4 := w.insert(t, "worker", "alpha", "a4")
-				w.svc.Publish([]Entry{a4})
-				w.svc.Publish([]Entry{a3})
+				w.svc.publish([]Entry{a4})
+				w.svc.publish([]Entry{a3})
 				w.send(t, "worker", "alpha", "a5")
 			},
 			want: []string{"a3", "a4", "a5"},

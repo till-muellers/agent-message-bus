@@ -174,21 +174,6 @@ Feature: Transports
       And the "Content-Type" header is "application/json"
       And the response body is {"a":1} followed by a newline
 
-  Rule: Strict JSON body helper
-
-    # httpx.DecodeJSON; no route uses it today (tool calls use the argument decoder above).
-
-    Scenario Outline: Decoding a JSON request body (<case>)
-      When a JSON body <body> is decoded into an object with field "name"
-      Then <outcome>
-
-      Examples:
-        | case          | body                              | outcome                                                     |
-        | ok            | {"name":"x"}                      | name is "x"                                                 |
-        | unknown field | {"name":"x","extra":1}            | it fails with invalid "invalid json body: json: unknown field \"extra\"" |
-        | malformed     | {                                 | it fails with invalid "invalid json body: unexpected EOF"   |
-        | too large     | a name longer than 1 MiB          | it fails with invalid "invalid json body: http: request body too large" |
-
   Rule: MCP at /mcp exposes the same tools
 
     # Stateless streamable HTTP with JSON responses; tools only.

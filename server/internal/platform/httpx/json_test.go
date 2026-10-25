@@ -49,39 +49,6 @@ func TestWriteError(t *testing.T) {
 	}
 }
 
-func TestDecodeJSON(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name    string
-		body    string
-		wantErr bool
-	}{
-		{"ok", `{"name":"x"}`, false},
-		{"unknown field", `{"name":"x","extra":1}`, true},
-		{"malformed", `{`, true},
-		{"too large", `{"name":"` + strings.Repeat("a", 1<<20) + `"}`, true},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tc.body))
-			var v struct {
-				Name string `json:"name"`
-			}
-			err := DecodeJSON(r, &v)
-			if !tc.wantErr {
-				if err != nil || v.Name != "x" {
-					t.Fatalf("err = %v, v = %+v", err, v)
-				}
-				return
-			}
-			if k, ok := apperr.KindOf(err); !ok || k != apperr.Invalid {
-				t.Fatalf("err = %v, want invalid", err)
-			}
-		})
-	}
-}
-
 func TestWriteJSON(t *testing.T) {
 	t.Parallel()
 	rec := httptest.NewRecorder()

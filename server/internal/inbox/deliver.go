@@ -16,12 +16,12 @@ func (s *Service) Deliver(ctx context.Context, fn func(tx *sql.Tx) ([]Entry, err
 		if err != nil {
 			return err
 		}
-		stored, err = s.Insert(ctx, tx, es)
+		stored, err = s.insert(ctx, tx, es)
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	s.Publish(stored)
+	s.publish(stored)
 	return nil
 }

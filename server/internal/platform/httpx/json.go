@@ -10,8 +10,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
 
-const maxBodyBytes = 1 << 20
-
 var statusByKind = map[apperr.Kind]int{
 	apperr.Invalid:         http.StatusBadRequest,
 	apperr.Unauthenticated: http.StatusUnauthorized,
@@ -49,14 +47,4 @@ func WriteError(w http.ResponseWriter, err error) {
 	}
 	slog.Error("internal error", "err", err)
 	WriteJSON(w, http.StatusInternalServerError, errorBody{errorDetail{Code: "internal", Message: "internal error"}})
-}
-
-// DecodeJSON decodes the request body (max 1 MiB, no unknown fields) into v.
-func DecodeJSON(r *http.Request, v any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBodyBytes))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
-		return apperr.New(apperr.Invalid, "invalid json body: %v", err)
-	}
-	return nil
 }

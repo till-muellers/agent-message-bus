@@ -67,20 +67,15 @@ func applyMigration(ctx context.Context, db *sql.DB, fsys fs.FS, m migration) er
 	if err != nil {
 		return fmt.Errorf("reading migration %s: %w", m.name, err)
 	}
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("beginning migration %s: %w", m.name, err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, string(body)); err != nil {
-		return fmt.Errorf("applying migration %s: %w", m.name, err)
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`, m.version, now); err != nil {
-		return fmt.Errorf("recording migration %s: %w", m.name, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing migration %s: %w", m.name, err)
-	}
-	return nil
+	return InTx(ctx, db, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, string(body)); err != nil {
+			return fmt.Errorf("applying migration %s: %w", m.name, err)
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
+			m.version, Timestamp(time.Now()))
+		if err != nil {
+			return fmt.Errorf("recording migration %s: %w", m.name, err)
+		}
+		return nil
+	})
 }

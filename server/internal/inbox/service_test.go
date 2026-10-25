@@ -76,7 +76,7 @@ func (w *world) entry(agent, space, body string) Entry {
 // insert stores one entry and records it by body.
 func (w *world) insert(t *testing.T, agent, space, body string) Entry {
 	t.Helper()
-	got, err := w.svc.Insert(t.Context(), w.db, []Entry{w.entry(agent, space, body)})
+	got, err := w.svc.insert(t.Context(), w.db, []Entry{w.entry(agent, space, body)})
 	if err != nil {
 		t.Fatalf("Insert %s: %v", body, err)
 	}
@@ -87,7 +87,7 @@ func (w *world) insert(t *testing.T, agent, space, body string) Entry {
 // send stores one entry and publishes it, as producers do after commit.
 func (w *world) send(t *testing.T, agent, space, body string) {
 	t.Helper()
-	w.svc.Publish([]Entry{w.insert(t, agent, space, body)})
+	w.svc.publish([]Entry{w.insert(t, agent, space, body)})
 }
 
 // read returns the bodies visible to the named principal.
@@ -121,7 +121,7 @@ func TestInsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
-	got, err := w.svc.Insert(t.Context(), tx, in)
+	got, err := w.svc.insert(t.Context(), tx, in)
 	if err != nil {
 		t.Fatalf("Insert: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestReadDefaultLimit(t *testing.T) {
 	for i := range 101 {
 		es = append(es, w.entry("lead", "alpha", fmt.Sprintf("bulk%d", i)))
 	}
-	if _, err := w.svc.Insert(t.Context(), w.db, es); err != nil {
+	if _, err := w.svc.insert(t.Context(), w.db, es); err != nil {
 		t.Fatalf("Insert: %v", err)
 	}
 	got, err := w.svc.Read(t.Context(), w.principals["leader"], 0, 0)
@@ -275,7 +275,7 @@ func TestPublishSignalsEachAgentOnce(t *testing.T) {
 	t.Cleanup(cancelW)
 	lead, cancelL := w.pub.Subscribe(topic(w.agents["lead"]))
 	t.Cleanup(cancelL)
-	w.svc.Publish([]Entry{w.entries["a1"], w.entries["b1"], w.entries["l1"], w.entries["a2"]})
+	w.svc.publish([]Entry{w.entries["a1"], w.entries["b1"], w.entries["l1"], w.entries["a2"]})
 	for name, live := range map[string]<-chan []byte{"worker": worker, "lead": lead} {
 		if got := signals(t, live); got != 1 {
 			t.Fatalf("%s got %d signals, want 1", name, got)

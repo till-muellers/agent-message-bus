@@ -39,8 +39,8 @@ func NewService(conn *sql.DB, pub publisher, now func() time.Time) *Service {
 
 func topic(agentID int64) string { return fmt.Sprintf("inbox/%d", agentID) }
 
-// Insert stores es through q and returns copies with CreatedAt and ID set.
-func (s *Service) Insert(ctx context.Context, q db.DBTX, es []Entry) ([]Entry, error) {
+// insert stores es through q and returns copies with CreatedAt and ID set.
+func (s *Service) insert(ctx context.Context, q db.DBTX, es []Entry) ([]Entry, error) {
 	createdAt := db.Timestamp(s.now())
 	out := make([]Entry, 0, len(es))
 	for _, e := range es {
@@ -55,9 +55,9 @@ func (s *Service) Insert(ctx context.Context, q db.DBTX, es []Entry) ([]Entry, e
 	return out, nil
 }
 
-// Publish sends one empty wake-up signal to topic inbox/<agentID> per distinct
+// publish sends one empty wake-up signal to topic inbox/<agentID> per distinct
 // agent in es. Call it after the inserting tx commits.
-func (s *Service) Publish(es []Entry) {
+func (s *Service) publish(es []Entry) {
 	seen := make(map[int64]struct{}, len(es))
 	for _, e := range es {
 		if _, ok := seen[e.AgentID]; ok {
