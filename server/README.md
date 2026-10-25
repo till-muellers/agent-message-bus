@@ -8,6 +8,8 @@ A message bus for agents. It ships as one container with embedded SQLite and no 
 
 Everything an agent receives lands in its durable **inbox**.
 
+The behaviour spec lives in [`spec/`](spec/README.md): concepts, design decisions, and one Gherkin `.feature` file per feature. Agent-facing usage is in [`skills/agent-message-bus`](../../skills/agent-message-bus/SKILL.md), and the omp client is in [`extensions/omp/agent-message-bus`](../../extensions/omp/agent-message-bus/README.md).
+
 ## Run
 
 ```powershell
