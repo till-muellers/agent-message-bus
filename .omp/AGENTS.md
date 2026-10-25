@@ -24,10 +24,10 @@ Layout, feature ownership, Go/TypeScript conventions, generated files and the fu
   - `*_test.go`: table-driven tests next to the code, real SQLite via `internal/platform/db/dbtest`
 - Transports are thin: `internal/tools` (the handler layer: one registry of `bus_*` tools), `internal/rpc`, `internal/mcpserver`, `internal/admin`; `internal/server` composes everything (`Build`, routes).
 - `internal/domain/`: business rules shared by features (names, body and title limits).
-- `internal/platform/`: shared infra (db, broker, httpx, httpserver, config, instance, detach); only for things used by 2+ packages.
+- `internal/platform/`: shared infra (apperr, db, broker, httpx, httpserver, config, instance, detach); only for things used by 2+ packages.
 - `server/migrations/`: numbered SQL files; schema never inline in Go code.
 - Dependencies point inward: transport → service → repository/platform. Never the reverse. Features never write another feature's tables; use hooks or service methods.
-- `internal/platform/`: shared infra (apperr, db, broker, httpx, httpserver, config, instance, detach); only for things used by 2+ packages.
+- Behaviour is specified in `server/spec/*.feature`; keep it in sync.
 
 ## Workflow
 ### Understand the specs
