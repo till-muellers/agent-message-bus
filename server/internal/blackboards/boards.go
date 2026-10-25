@@ -21,13 +21,11 @@ type BoardInfo struct {
 
 // List returns the space's blackboards ordered by name.
 func (s *Service) List(ctx context.Context, p auth.Principal, space string) ([]BoardInfo, error) {
-	var out []BoardInfo
-	err := s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
-		var err error
-		out, err = listBoards(ctx, tx, m.SpaceID)
+	m, err := s.spaces.Resolve(ctx, p, space)
+	if err != nil {
 		return nil, err
-	})
-	return out, err
+	}
+	return listBoards(ctx, s.db, m.SpaceID)
 }
 
 // Create adds a blackboard owned by the caller; any participant may create one.
@@ -43,7 +41,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, space, name stri
 		if found {
 			return nil, apperr.New(apperr.Conflict, "blackboard %s already exists", name)
 		}
-		return nil, insertBoard(ctx, tx, m.SpaceID, name, m.AgentID, s.stamp())
+		return nil, insertBoard(ctx, tx, m.SpaceID, name, m.AgentID, db.Timestamp(s.now()))
 	})
 }
 
@@ -70,7 +68,7 @@ func removeBoard(ctx context.Context, tx db.DBTX, m spaces.Membership, b board) 
 	if err := deleteBoard(ctx, tx, b.id); err != nil {
 		return nil, err
 	}
-	return notify(m, ids, inbox.BlackboardRemoved, inbox.Entry{Blackboard: b.name}), nil
+	return m.Notify(ids, inbox.Entry{Type: inbox.BlackboardRemoved, Blackboard: b.name}), nil
 }
 
 func mustFindBoard(ctx context.Context, q db.DBTX, spaceID int64, name string) (board, error) {

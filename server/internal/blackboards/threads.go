@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
@@ -40,24 +41,23 @@ type Post struct {
 
 // ListThreads returns a board's threads ordered by latest post, newest first.
 func (s *Service) ListThreads(ctx context.Context, p auth.Principal, space, name string) ([]ThreadInfo, error) {
-	var out []ThreadInfo
-	err := s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
-		b, err := mustFindBoard(ctx, tx, m.SpaceID, name)
-		if err != nil {
-			return nil, err
-		}
-		out, err = listThreads(ctx, tx, b.id)
+	m, err := s.spaces.Resolve(ctx, p, space)
+	if err != nil {
 		return nil, err
-	})
-	return out, err
+	}
+	b, err := mustFindBoard(ctx, s.db, m.SpaceID, name)
+	if err != nil {
+		return nil, err
+	}
+	return listThreads(ctx, s.db, b.id)
 }
 
 // CreateThread inserts a thread with its first post and subscribes the creator.
 func (s *Service) CreateThread(ctx context.Context, p auth.Principal, space, name, title, body string) (int64, error) {
-	if err := validTitle(title); err != nil {
+	if err := domain.ValidTitle(title); err != nil {
 		return 0, err
 	}
-	if err := validBody(body); err != nil {
+	if err := domain.ValidBody(body); err != nil {
 		return 0, err
 	}
 	var id int64
@@ -66,10 +66,11 @@ func (s *Service) CreateThread(ctx context.Context, p auth.Principal, space, nam
 		if err != nil {
 			return nil, err
 		}
-		if id, err = insertThread(ctx, tx, b.id, title, m.AgentID, s.stamp()); err != nil {
+		at := db.Timestamp(s.now())
+		if id, err = insertThread(ctx, tx, b.id, title, m.AgentID, at); err != nil {
 			return nil, err
 		}
-		if _, err = insertPost(ctx, tx, id, m.AgentID, body, s.stamp()); err != nil {
+		if _, err = insertPost(ctx, tx, id, m.AgentID, body, at); err != nil {
 			return nil, err
 		}
 		return nil, subscribe(ctx, tx, id, m.AgentID)
@@ -79,20 +80,22 @@ func (s *Service) CreateThread(ctx context.Context, p auth.Principal, space, nam
 
 // ReadThread returns a thread with its posts ordered by id.
 func (s *Service) ReadThread(ctx context.Context, p auth.Principal, space string, id int64) (Thread, error) {
-	var out Thread
-	err := s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
-		t, err := mustFindThread(ctx, tx, m.SpaceID, id)
-		if err != nil {
-			return nil, err
-		}
-		out = Thread{ID: t.id, Blackboard: t.board, Title: t.title, CreatedBy: t.createdBy}
-		if out.Subscribed, err = isSubscribed(ctx, tx, id, m.AgentID); err != nil {
-			return nil, err
-		}
-		out.Posts, err = listPosts(ctx, tx, id)
-		return nil, err
-	})
-	return out, err
+	m, err := s.spaces.Resolve(ctx, p, space)
+	if err != nil {
+		return Thread{}, err
+	}
+	t, err := mustFindThread(ctx, s.db, m.SpaceID, id)
+	if err != nil {
+		return Thread{}, err
+	}
+	out := Thread{ID: t.id, Blackboard: t.board, Title: t.title, CreatedBy: t.createdBy}
+	if out.Subscribed, err = isSubscribed(ctx, s.db, id, m.AgentID); err != nil {
+		return Thread{}, err
+	}
+	if out.Posts, err = listPosts(ctx, s.db, id); err != nil {
+		return Thread{}, err
+	}
+	return out, nil
 }
 
 // RemoveThread deletes a thread (creator or leader), notifying subscribers except the caller.
@@ -112,7 +115,8 @@ func (s *Service) RemoveThread(ctx context.Context, p auth.Principal, space stri
 		if err := deleteThread(ctx, tx, id); err != nil {
 			return nil, err
 		}
-		return notify(m, ids, inbox.ThreadRemoved, inbox.Entry{Blackboard: t.board, ThreadID: id, ThreadTitle: t.title}), nil
+		proto := inbox.Entry{Type: inbox.ThreadRemoved, Blackboard: t.board, ThreadID: id, ThreadTitle: t.title}
+		return m.Notify(ids, proto), nil
 	})
 }
 
