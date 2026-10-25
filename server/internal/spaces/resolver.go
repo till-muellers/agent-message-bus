@@ -8,13 +8,36 @@ import (
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 // Resolver is the single authorization gate for space-scoped operations.
-type Resolver struct{ db auth.DBTX }
+type Resolver struct{ db db.DBTX }
 
 // NewResolver returns a Resolver reading from db.
-func NewResolver(db *sql.DB) *Resolver { return &Resolver{db: db} }
+func NewResolver(conn *sql.DB) *Resolver { return &Resolver{db: conn} }
+
+// ParticipantID returns the agent id of participant name in spaceID; found is false otherwise.
+func (r *Resolver) ParticipantID(ctx context.Context, q db.DBTX, spaceID int64, name string) (id int64, found bool, err error) {
+	err = q.QueryRowContext(ctx, `SELECT a.id FROM participants p JOIN agents a ON a.id = p.agent_id
+		WHERE p.space_id = ? AND a.name = ?`, spaceID, name).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("looking up participant %s: %w", name, err)
+	}
+	return id, true, nil
+}
+
+// ParticipantIDs returns the agent ids of every participant of spaceID, ascending.
+func (r *Resolver) ParticipantIDs(ctx context.Context, q db.DBTX, spaceID int64) ([]int64, error) {
+	ids, err := db.QueryIDs(ctx, q, `SELECT agent_id FROM participants WHERE space_id = ? ORDER BY agent_id`, spaceID)
+	if err != nil {
+		return nil, fmt.Errorf("listing participants of space %d: %w", spaceID, err)
+	}
+	return ids, nil
+}
 
 // Resolve returns p's membership in space or a forbidden/not-found error.
 // NEVER call it while holding a transaction (the pool has one connection); use ResolveTx.

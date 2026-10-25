@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"database/sql"
+
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
 
 // Kind is the class of an authenticated caller.
@@ -40,4 +42,13 @@ func WithPrincipal(ctx context.Context, p Principal) context.Context {
 func FromContext(ctx context.Context) (Principal, bool) {
 	p, ok := ctx.Value(principalKey{}).(Principal)
 	return p, ok
+}
+
+// RequirePrincipal returns the principal in ctx or Unauthenticated "bearer token required".
+func RequirePrincipal(ctx context.Context) (Principal, error) {
+	p, ok := FromContext(ctx)
+	if !ok {
+		return Principal{}, apperr.New(apperr.Unauthenticated, "bearer token required")
+	}
+	return p, nil
 }
