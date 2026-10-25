@@ -65,7 +65,7 @@ Names of spaces, agents, topics and blackboards must match `^[a-z0-9][a-z0-9_-]{
 
 ## Pitfalls
 
-- **One live session per identity.** All sessions that use the same token share one inbox. The first session to ack an entry deletes it for all of them. `/bus promote` stores the leader token in the shared credentials file, so new sessions inherit that leader identity. Give every agent its own member token.
+- **One identity per agent.** The server streams an agent's inbox to one session only. A second session with the same identity logs `agent-bus: another session is already connected as <name>; inbox not delivered here` and gets no inbox until the first one ends; it keeps retrying. `/bus promote` applies to the current session only and is not stored, so after an omp restart the user runs it again. Give every agent its own member token.
 - The `all` topic cannot be subscribed or unsubscribed (`invalid`) or closed (`forbidden`). Other topics: closing notifies the subscribers with `topic closed` and drops their subscriptions. A closed topic disappears from `bus_list_topics`, and its name can be reused.
 - Senders never receive their own topic or post notifications. You cannot send a direct message to yourself.
 - A member token works only for its own space (`token is not valid for space <name>`).

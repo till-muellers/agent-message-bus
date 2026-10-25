@@ -12,10 +12,10 @@ Server behaviour (spaces, topics, blackboards, permissions) is specified in [`ap
 
 | Command | Effect |
 | :--- | :--- |
-| `/bus login <url> <token>` | Calls `bus_whoami` with the token. **Admin** token: stored as `adminToken`, nothing else starts; reply `Admin token stored. Run /bus promote <leader-name> to act as a leader.` A stored agent token is kept if the url is the same. **Leader/member** token: stored as `token`, then tools are registered and the inbox stream starts; reply `Logged in as <kind> <name>`. A stored admin token is kept only if the url is the same, so `/bus promote` never sends one server's admin token to another. A trailing `/` on the url is stripped. |
-| `/bus promote <leader-name>` | Requires a stored admin token (otherwise `Run /bus login <url> <admin-token> first.`). Calls `bus_mint_leader`, stores the new leader token, and restarts with it; reply `This session now acts as leader <name>.` |
-| `/bus` or `/bus status` | Calls `bus_whoami` with the active credentials, including env overrides; if there is no agent token, it uses the stored admin token. Prints `<url>: <kind> <name>; spaces: <name> (<role>), …`, or `Not logged in.` with usage. |
-| `/bus logout` | Deletes the credentials file. If env `AGENT_BUS_URL` and `AGENT_BUS_TOKEN` are set, the session restarts on them; reply `Logged out; session still uses AGENT_BUS_URL/AGENT_BUS_TOKEN from the environment.` Otherwise it stops the inbox stream; reply `Logged out.` Registered tools stay registered either way. |
+| `/bus login <url> <token>` | Calls `bus_whoami` with the token. **Admin** token: stored as `adminToken`, nothing else starts; reply `Admin token stored. Run /bus promote <leader-name> to act as a leader.` A stored agent token is kept if the url is the same. **Leader/member** token: stored as `token`, the session's promoted leader token (if any) is dropped, then tools are registered and the inbox stream starts; reply `Logged in as <kind> <name>`. A stored admin token is kept only if the url is the same, so `/bus promote` never sends one server's admin token to another. A trailing `/` on the url is stripped. |
+| `/bus promote <leader-name>` | Requires a stored admin token (otherwise `Run /bus login <url> <admin-token> first.`). Calls `bus_mint_leader` and restarts with the new leader token. The token is held in this session's memory only and never written to `credentials.json`; other and later sessions are unaffected. Reply `This session now acts as leader <name> (until it ends; run /bus promote again after a restart).` |
+| `/bus` or `/bus status` | Calls `bus_whoami` with the active credentials (see precedence below); if there is no agent token, it uses the stored admin token. Prints `<url>: <kind> <name>; spaces: <name> (<role>), …`, or `Not logged in.` with usage. |
+| `/bus logout` | Deletes the credentials file and drops the session's promoted leader token. If env `AGENT_BUS_URL` and `AGENT_BUS_TOKEN` are set, the session restarts on them; reply `Logged out; session still uses AGENT_BUS_URL/AGENT_BUS_TOKEN from the environment.` Otherwise it stops the inbox stream; reply `Logged out.` Registered tools stay registered either way. |
 | `/bus help` | Prints usage. |
 
 Server errors are shown as `<code>: <message>`.
@@ -31,11 +31,11 @@ http://localhost:8080: leader lead; spaces: none
 
 ## Credentials
 
-- File: `<PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus/credentials.json`, shape `{url, adminToken?, token?}`.
+- File: `<PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus/credentials.json`, shape `{url, adminToken?, token?}`. `/bus promote` never writes it.
 - `OMP_AGENT_BUS_DIR` replaces the whole directory (the file is `$OMP_AGENT_BUS_DIR/credentials.json`).
 - The file is written with mode `0600` and existing files are chmod-ed to `0600`. Windows ignores the mode; the user-profile ACL protects it.
 - A corrupt file fails with `Credential file <path> is unreadable. Run /bus login to rewrite it.`
-- **Precedence:** if `AGENT_BUS_URL` **and** `AGENT_BUS_TOKEN` are both set, they win over the stored url and token. Otherwise the stored `token` is used. With only an admin token, the session has no tools and no inbox. This lets a leader start worker sessions on member tokens without touching the shared file:
+- **Precedence:** the session's promoted leader token (`/bus promote`) wins. Next, if `AGENT_BUS_URL` **and** `AGENT_BUS_TOKEN` are both set, they win over the stored url and token. Otherwise the stored `token` is used. With only an admin token, the session has no tools and no inbox. The env override lets a leader start worker sessions on member tokens without touching the shared file:
 
   ```powershell
   $env:AGENT_BUS_URL = "http://localhost:8080"; $env:AGENT_BUS_TOKEN = "<member token>"; omp
@@ -63,9 +63,9 @@ In one-shot `print`/`json` modes (and when the mode is unknown), entries are add
 
 **Reconnect:** when the stream ends or fails, the extension waits 1 s, then doubles the wait up to 30 s. Each delivered entry resets the wait to 1 s. An `unauthenticated` (401) or `forbidden` (403) error stops the loop for good: the token was revoked, the member left, or the space was deleted. Run `/bus login` again to restart. Errors are logged as `agent-bus: <message>`. The stream stops at session shutdown and on `/bus logout`.
 
-## Caveat: one live session per identity
+## One identity per agent
 
-All sessions using the same token share one inbox. The first session to ack an entry deletes it for all of them, so the others never see it. `/bus promote` writes the leader token to the shared credentials file, so every new session without env overrides becomes that leader too. Run one live session per agent identity: one leader session, and each worker with its own member token via env.
+The server allows one live inbox stream per agent, so each agent identity belongs to exactly one session. When another session already streams this agent's inbox, the server answers `409 conflict`. The extension then logs once, `agent-bus: another session is already connected as <name>; inbox not delivered here` (the name comes from `bus_whoami`; if that fails, `as this agent`), and keeps retrying with the normal backoff. The inbox is delivered here once the other stream ends, for example when its session exits or crashes (the server notices a dead connection at its next heartbeat, within about 20 s). Once this session's stream has opened, a later refusal logs again. Tool calls are not restricted. Give every agent its own identity: `/bus promote` is session-scoped, and each worker gets its own member token via env.
 
 ## Deploy
 
