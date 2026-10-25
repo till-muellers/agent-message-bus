@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,8 +17,8 @@ func TestLoad(t *testing.T) {
 	}{
 		{
 			name: "defaults",
-			env:  map[string]string{"AMB_ADMIN_TOKEN": valid},
-			want: Config{Addr: ":8080", DBPath: "/data/agent-message-bus.db", AdminToken: valid},
+			env:  map[string]string{"AMB_ADMIN_TOKEN": valid, "XDG_DATA_HOME": "X"},
+			want: Config{Addr: ":8080", DBPath: filepath.Join("X", "agent-message-bus", "agent-message-bus.db"), AdminToken: valid},
 		},
 		{
 			name: "overrides",
@@ -34,7 +35,7 @@ func TestLoad(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := Load(func(k string) string { return tc.env[k] })
+			got, err := load(func(k string) string { return tc.env[k] }, "linux", func() (string, error) { return "H", nil })
 			if tc.wantErr != "" {
 				if err == nil || err.Error() != tc.wantErr {
 					t.Fatalf("err = %v, want %q", err, tc.wantErr)

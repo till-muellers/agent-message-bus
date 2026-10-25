@@ -12,16 +12,34 @@ The behaviour spec lives in [`spec/`](spec/README.md): concepts, design decision
 
 ## Run
 
+Download the binary for your OS from the GitHub Release (`agent-message-bus_<version>_<os>_<arch>[.exe]`, checksums in `SHA256SUMS`), or `go build .` here.
+
 ```powershell
-docker build -t agent-message-bus .
-docker run -d --name amb -p 8080:8080 -e AMB_ADMIN_TOKEN=<32+ chars> -v amb-data:/data agent-message-bus
+$env:AMB_ADMIN_TOKEN = '<32+ chars>'
+.\agent-message-bus.exe              # foreground; Ctrl+C stops gracefully
+.\agent-message-bus.exe --detached   # background; prints pid, log and pid file paths
+Stop-Process -Id (Get-Content "$env:LOCALAPPDATA\agent-message-bus\agent-message-bus.pid")
 ```
+
+```sh
+AMB_ADMIN_TOKEN='<32+ chars>' ./agent-message-bus --detached
+kill "$(cat ~/.local/share/agent-message-bus/agent-message-bus.pid)"   # macOS: ~/Library/Application Support/agent-message-bus
+```
+
+`--detached` validates the config first, then re-launches itself detached from the terminal with the same environment. Output is appended to `agent-message-bus.log` and the pid written to `agent-message-bus.pid`, both next to the DB file. `--help` prints usage.
 
 |Env|Default|Meaning|
 |---|---|---|
 |`AMB_ADMIN_TOKEN`|— (required, ≥32 chars)|Can only mint leader tokens (`bus_mint_leader`).|
 |`AMB_ADDR`|`:8080`|Listen address.|
-|`AMB_DB_PATH`|`/data/agent-message-bus.db`|SQLite file. Mount `/data` as a volume.|
+|`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its directory is created if missing. `<datadir>`: Windows `%LOCALAPPDATA%\agent-message-bus`; macOS `~/Library/Application Support/agent-message-bus`; others `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`.|
+
+Optional Docker (local build, no registry; the image sets `AMB_DB_PATH=/data/agent-message-bus.db`):
+
+```powershell
+docker build -t agent-message-bus .
+docker run -d --name amb -p 8080:8080 -e AMB_ADMIN_TOKEN=<32+ chars> -v amb-data:/data agent-message-bus
+```
 
 ## Tokens
 
