@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/server"
@@ -110,5 +112,58 @@ func TestCreateSpaceAddsAllTopic(t *testing.T) {
 	callTool(t, srv, lead.Token, "bus_list_topics", `{"space":"proj"}`, &topics)
 	if len(topics) != 1 || topics[0].Name != "all" || topics[0].CreatedBy != "boss" {
 		t.Fatalf("got %+v", topics)
+	}
+}
+
+// openStream opens GET /v1/inbox/stream as token; closing it drops the connection.
+func openStream(t *testing.T, srv *httptest.Server, token string) (int, []byte, func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/v1/inbox/stream", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeStream := func() { cancel(); _ = res.Body.Close() }
+	if res.StatusCode == http.StatusOK {
+		return res.StatusCode, nil, closeStream
+	}
+	defer closeStream()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.StatusCode, body, func() {}
+}
+
+func TestInboxStreamOnePerAgent(t *testing.T) {
+	srv := newServer(t)
+	var lead struct{ Token string }
+	callTool(t, srv, adminToken, "bus_mint_leader", `{"name":"boss"}`, &lead)
+	status, _, closeFirst := openStream(t, srv, lead.Token)
+	if status != http.StatusOK {
+		t.Fatalf("first stream status %d", status)
+	}
+	status, body, _ := openStream(t, srv, lead.Token)
+	if status != http.StatusConflict || !strings.Contains(string(body), `"code":"conflict"`) ||
+		!strings.Contains(string(body), "agent boss already has an active inbox stream") {
+		t.Fatalf("second stream: %d %s", status, body)
+	}
+	closeFirst()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		status, _, closeNext := openStream(t, srv, lead.Token)
+		closeNext()
+		if status == http.StatusOK {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("stream after disconnect still %d", status)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

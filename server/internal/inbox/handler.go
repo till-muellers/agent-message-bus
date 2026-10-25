@@ -6,11 +6,13 @@ import (
 	"net/http"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/httpx"
 )
 
 // StreamHandler serves GET /v1/inbox/stream as server-sent events: the stored
 // backlog, then live entries, until the request, root or subscription ends.
+// Each agent has one stream slot: a second concurrent stream gets 409 Conflict.
 type StreamHandler struct {
 	svc  *Service
 	root context.Context
@@ -27,6 +29,11 @@ func (h StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
+	if !h.svc.slots.acquire(p.AgentID) {
+		httpx.WriteError(w, apperr.New(apperr.Conflict, "agent %s already has an active inbox stream", p.AgentName))
+		return
+	}
+	defer h.svc.slots.release(p.AgentID)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	stop := context.AfterFunc(h.root, cancel)

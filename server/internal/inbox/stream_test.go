@@ -31,21 +31,7 @@ type sseReader struct {
 // startStream serves StreamHandler(root) as the named principal and opens the stream.
 func startStream(root context.Context, t *testing.T, w *world, who string) *sseReader {
 	t.Helper()
-	p := w.principals[who]
-	h := w.svc.StreamHandler(root)
-	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(rw, r.WithContext(auth.WithPrincipal(r.Context(), p)))
-	}))
-	t.Cleanup(srv.Close)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
-	if err != nil {
-		t.Fatalf("building request: %v", err)
-	}
-	resp, err := srv.Client().Do(req)
-	if err != nil {
-		t.Fatalf("opening stream: %v", err)
-	}
-	t.Cleanup(func() { _ = resp.Body.Close() })
+	resp := openStream(t.Context(), root, t, w, who)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -56,6 +42,28 @@ func startStream(root context.Context, t *testing.T, w *world, who string) *sseR
 		t.Fatalf("Cache-Control = %q, want no-store", got)
 	}
 	return readSSE(t, resp.Body)
+}
+
+// openStream serves StreamHandler(root) as the named principal on its own
+// server and sends the stream request under ctx; the body closes at cleanup.
+func openStream(ctx, root context.Context, t *testing.T, w *world, who string) *http.Response {
+	t.Helper()
+	p := w.principals[who]
+	h := w.svc.StreamHandler(root)
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(rw, r.WithContext(auth.WithPrincipal(r.Context(), p)))
+	}))
+	t.Cleanup(srv.Close)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("opening stream: %v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp
 }
 
 func readSSE(t *testing.T, body io.Reader) *sseReader {

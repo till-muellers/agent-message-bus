@@ -266,6 +266,50 @@ Feature: Agent inbox
       When the inbox stream handler runs without an authenticated caller
       Then the call fails with unauthenticated "bearer token required"
 
+  Rule: One live inbox stream per agent
+
+    # One identity per agent: each agent has one stream slot, held from the
+    # moment its stream is accepted until that stream ends for any reason
+    # (client disconnect, server shutdown or a dropped live subscription).
+    # The slot is per agent, not per token, so a member's space tokens share it.
+    # Tool calls are not restricted.
+
+    Scenario: A second stream for the same agent is rejected with conflict
+      Given member "worker" opened the inbox stream with its "alpha" token
+      When member "worker" opens the inbox stream with its "beta" token
+      Then the response status is 409
+      And the call fails with conflict "agent worker already has an active inbox stream"
+
+    Scenario: The first stream keeps delivering after a second one is rejected
+      Given the stream heartbeat interval is 1 millisecond
+      And member "worker" opened the inbox stream with its "alpha" token
+      And the stream sent entries "a1, a2"
+      And a second inbox stream for member "worker" was rejected with conflict
+      When entry "a3" for "worker" in space "alpha" is stored and published
+      Then the first stream sends entries "a3"
+
+    Scenario: The slot is released when the stream's client disconnects
+      Given member "worker" opened the inbox stream with its "alpha" token
+      When the client closes the connection
+      Then member "worker" can open the inbox stream with its "alpha" token again once the server notices the disconnect
+
+    Scenario: The slot is released when the server cancels the stream
+      Given the stream heartbeat interval is 1 millisecond
+      And member "worker" opened the inbox stream with its "beta" token
+      And the stream sent entries "b1" and a heartbeat
+      When the server cancels that stream and it closes
+      Then member "worker" can open the inbox stream with its "beta" token again
+
+    Scenario: A member and a leader each have their own slot
+      Given member "worker" opened the inbox stream with its "alpha" token
+      When leader "lead" opens the inbox stream
+      Then the response status is 200
+
+    Scenario: A leader and a member each have their own slot
+      Given leader "lead" opened the inbox stream
+      When member "worker" opens the inbox stream with its "alpha" token
+      Then the response status is 200
+
   Rule: The live channel fans out per recipient and drops slow listeners
 
     # In-process broker; the server sizes each listener's buffer at 256 messages.

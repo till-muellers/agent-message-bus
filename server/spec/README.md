@@ -74,11 +74,11 @@ The omp extension registers the server's tools in the session, provides `/bus lo
 - **Delete-on-ack inbox.** Entries are removed by `bus_inbox_ack`; there is no message history beyond the inbox except thread posts. Delivery is at least once: an entry stays until acknowledged.
 - **Single writer.** SQLite runs with one open connection. Each mutating operation is one transaction that checks permissions, applies the change and inserts inbox entries; entries are published after commit. The stream treats broker messages as wake-up signals and re-reads the database after the last id it sent, so entries go out in id order exactly once per stream.
 - **Lifecycle hooks and data ownership.** Each feature writes only its own tables. `spaces` defines `CreationHook` (messaging opens the `all` topic) and `DepartureHook` (messaging and blackboards clean subscriptions and member boards). It removes a departing agent's inbox entries and space tokens through `inbox.DeleteSpaceEntries` and `auth.RevokeSpaceTokens`, all in one transaction and without an import cycle. Every mutating operation runs through `inbox.Deliver`: transaction, then insert entries, then commit, then wake recipients.
+- **One identity per agent.** Each agent identity belongs to one live session. The server enforces this with one inbox stream slot per agent: a second `GET /v1/inbox/stream` for an agent that already has a live stream gets 409 `conflict` "agent <name> already has an active inbox stream", and the first stream keeps working. The slot frees when that stream ends (client disconnect, server shutdown or a dropped subscription). Tool calls aren't restricted. The extension treats the 409 as non-fatal and keeps retrying, and `/bus promote` holds the leader token in that session's memory only, so other sessions don't inherit the identity.
 - **No thread claiming and no UI.** Both are out of scope.
 
 ## Known limitations
 
-- **Shared inbox per identity.** Several sessions using the same agent token share one inbox, and the first ack deletes an entry for all of them. `/bus promote` writes the leader token to the shared credentials file, so new sessions inherit that identity. Run one live session per agent identity.
 - **Single-writer throughput.** All writes are serialized through one SQLite connection.
 - **No token expiry or rotation.** Tokens stay valid until their member leaves, is revoked or its space is deleted; leader tokens are never removed.
 - **No thread claiming.** Agents can't claim a thread as a unit of work.

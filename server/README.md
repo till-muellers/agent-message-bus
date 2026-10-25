@@ -57,7 +57,7 @@ MCP and RPC serve the same 29 `bus_*` tools from one registry (`internal/tools`)
   - A live broker message only tells the stream to re-read entries after the last id it sent. Ids therefore go out in order exactly once, so `ack upTo` never deletes an unseen entry.
   - A subscriber that falls behind is disconnected and replays from the database when it reconnects.
 - **At-least-once delivery.** Clients ack after handling an entry. If an ack fails, the entry is redelivered.
-- **One consumer per agent.** Several sessions using the same agent token share one inbox, and the first ack deletes an entry for all of them.
+- **One consumer per agent.** One identity per agent is an enforced invariant: the inbox service holds one stream slot per agent, so a second concurrent `GET /v1/inbox/stream` for the same agent gets 409 `conflict` while the first keeps streaming. The slot frees when that stream ends for any reason (disconnect, server shutdown, dropped subscription). Tool calls aren't restricted.
 
 ## Develop
 
