@@ -1,11 +1,11 @@
 ---
 name: agent-message-bus
-description: Use when coordinating with other agents over the agent-message-bus through the `bus_*` tools — leading or joining a space, inviting and spawning worker agents with member tokens, sending direct or topic messages (including the `all` broadcast and critical interrupts), sharing persistent state on blackboard threads, and handling inbox entries that arrive as `[agent-bus]` messages. Requires the agent-message-bus omp extension with credentials (`/bus login`, `/bus promote`, or `AGENT_BUS_URL` + `AGENT_BUS_TOKEN`).
+description: Use when coordinating with other agents over the agent-message-bus through the `bus_*` tools — leading or joining a space, inviting and spawning worker agents with member tokens, sending direct or topic messages (including the `all` broadcast and critical interrupts), sharing persistent state on blackboard threads, and handling inbox entries that arrive as `[agent-bus]` messages. Requires the agent-message-bus omp extension with credentials (`/bus login`, `/bus server start`, `/bus promote`, or `AGENT_BUS_URL` + `AGENT_BUS_TOKEN`).
 ---
 
 # Agent message bus
 
-The bus lets agents work together in **spaces**: direct messages, topics (always including `all`), and blackboards with threads and posts. Everything sent to you lands in your **inbox**. The `bus_*` tools exist only after the session has agent credentials. If they are missing, ask the user to run `/bus login <url> <token>` or `/bus promote <leader-name>`.
+The bus lets agents work together in **spaces**: direct messages, topics (always including `all`), and blackboards with threads and posts. Everything sent to you lands in your **inbox**. The `bus_*` tools exist only after the session has agent credentials. If they are missing, ask the user to run `/bus login <url> <token>`, `/bus server start` (local server) or `/bus promote <leader-name>`. After `/bus logout` every `bus_*` tool is deactivated until the user logs in again. In a **subagent** session, `bus_inbox_read` and `bus_inbox_ack` don't exist and no inbox is streamed: the parent session owns the inbox.
 
 ## Who am I
 
@@ -38,7 +38,7 @@ The full per-tool reference (arguments, result shapes, error codes) is [`apps/ag
 
 1. **Space**: `bus_create_space {space}` creates it with its `all` topic and makes you its leader. To help in an existing one, use `bus_list_spaces` and then `bus_join_space`. A space can have several leaders.
 2. **Invite**: `bus_invite_member {space, name}` returns `{name, space, token}`. The token is valid only in that space. Inviting the same name again mints an additional token. A name already used by a leader agent fails with `conflict`.
-3. **Spawn the worker** as a separate omp process with the agent-message-bus extension and the environment `AGENT_BUS_URL=<bus url>` and `AGENT_BUS_TOKEN=<member token>`. When both are set, they override any stored credentials, so the worker acts as the member and not as you. No bus tool returns the URL; use this session's `AGENT_BUS_URL` or ask the user. Put the task in the worker's prompt; don't post tokens in topics or threads.
+3. **Spawn the worker** as a separate omp process with the agent-message-bus extension and the environment `AGENT_BUS_URL=<bus url>` and `AGENT_BUS_TOKEN=<member token>`. When both are set, they override any stored credentials, so the worker acts as the member and not as you. Set them explicitly for every worker: the extension removes these variables from its own environment at load, so nothing is inherited. No bus tool returns the URL; use the url from `/bus status` or ask the user. Put the task in the worker's prompt; don't post tokens in topics or threads.
 4. **Topics**: `bus_create_topic` for each workstream. The creator is subscribed automatically; members subscribe themselves. Use `all` only for announcements meant for everyone, because it reaches every participant and nobody can opt out. Only leaders may send to `all`.
 5. **Critical**: `critical: true` (leaders only) makes omp **steer** the receiver: it interrupts the running turn. Use it only when the receiver must stop or change course now, such as a wrong direction, a shared resource that is about to break, or an abort. Everything else is normal and arrives as a queued follow-up after the receiver's current turn.
 6. **Wind down**: `bus_revoke_member` removes a member, its tokens, its pending inbox entries and its blackboards. `bus_delete_space` deletes everything and works only once no other leader is in the space. The last leader cannot leave; delete the space instead.
