@@ -4,13 +4,12 @@ package inbox
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 const (
@@ -18,21 +17,6 @@ const (
 	maxLimit         = 500
 	defaultHeartbeat = 20 * time.Second
 )
-
-const insertSQL = `INSERT INTO inbox (agent_id, space_id, type, from_name, critical,
-	topic, blackboard, thread_id, thread_title, body, created_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-// selectSQL takes agent_id, after, space filter (twice; 0 = all spaces), limit.
-const selectSQL = `SELECT i.id, i.agent_id, i.space_id, s.name, i.type, i.from_name, i.critical,
-	COALESCE(i.topic, ''), COALESCE(i.blackboard, ''), COALESCE(i.thread_id, 0),
-	COALESCE(i.thread_title, ''), COALESCE(i.body, ''), i.created_at
-	FROM inbox i JOIN spaces s ON s.id = i.space_id
-	WHERE i.agent_id = ? AND i.id > ? AND (? = 0 OR i.space_id = ?)
-	ORDER BY i.id LIMIT ?`
-
-// ackSQL takes agent_id, upTo, space filter (twice; 0 = all spaces).
-const ackSQL = `DELETE FROM inbox WHERE agent_id = ? AND id <= ? AND (? = 0 OR space_id = ?)`
 
 // publisher is the broker surface the inbox needs.
 type publisher interface {
@@ -49,19 +33,19 @@ type Service struct {
 }
 
 // NewService builds the inbox; now stamps CreatedAt on inserted entries.
-func NewService(db *sql.DB, pub publisher, now func() time.Time) *Service {
-	return &Service{db: db, pub: pub, now: now, heartbeat: defaultHeartbeat}
+func NewService(conn *sql.DB, pub publisher, now func() time.Time) *Service {
+	return &Service{db: conn, pub: pub, now: now, heartbeat: defaultHeartbeat}
 }
 
 func topic(agentID int64) string { return fmt.Sprintf("inbox/%d", agentID) }
 
-// Insert stores es through tx and returns copies with CreatedAt and ID set.
-func (s *Service) Insert(ctx context.Context, tx auth.DBTX, es []Entry) ([]Entry, error) {
-	createdAt := s.now().UTC().Format(time.RFC3339Nano)
+// Insert stores es through q and returns copies with CreatedAt and ID set.
+func (s *Service) Insert(ctx context.Context, q db.DBTX, es []Entry) ([]Entry, error) {
+	createdAt := db.Timestamp(s.now())
 	out := make([]Entry, 0, len(es))
 	for _, e := range es {
 		e.CreatedAt = createdAt
-		id, err := insertEntry(ctx, tx, e)
+		id, err := insertEntry(ctx, q, e)
 		if err != nil {
 			return nil, err
 		}
@@ -71,31 +55,16 @@ func (s *Service) Insert(ctx context.Context, tx auth.DBTX, es []Entry) ([]Entry
 	return out, nil
 }
 
-func insertEntry(ctx context.Context, tx auth.DBTX, e Entry) (int64, error) {
-	res, err := tx.ExecContext(ctx, insertSQL, e.AgentID, e.SpaceID, string(e.Type), e.From, e.Critical,
-		nullString(e.Topic), nullString(e.Blackboard), sql.NullInt64{Int64: e.ThreadID, Valid: e.ThreadID != 0},
-		nullString(e.ThreadTitle), nullString(e.Body), e.CreatedAt)
-	if err != nil {
-		return 0, fmt.Errorf("inserting inbox entry for agent %d: %w", e.AgentID, err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("reading inbox entry id: %w", err)
-	}
-	return id, nil
-}
-
-func nullString(v string) sql.NullString { return sql.NullString{String: v, Valid: v != ""} }
-
-// Publish pushes each entry to topic inbox/<agentID>. Call it after the inserting tx commits.
+// Publish sends one empty wake-up signal to topic inbox/<agentID> per distinct
+// agent in es. Call it after the inserting tx commits.
 func (s *Service) Publish(es []Entry) {
+	seen := make(map[int64]struct{}, len(es))
 	for _, e := range es {
-		payload, err := json.Marshal(e)
-		if err != nil {
-			slog.Error("encoding inbox entry", "id", e.ID, "err", err)
+		if _, ok := seen[e.AgentID]; ok {
 			continue
 		}
-		s.pub.Publish(topic(e.AgentID), payload)
+		seen[e.AgentID] = struct{}{}
+		s.pub.Publish(topic(e.AgentID), nil)
 	}
 }
 
@@ -109,29 +78,7 @@ func (s *Service) Read(ctx context.Context, p auth.Principal, after int64, limit
 	if err != nil {
 		return nil, err
 	}
-	space := spaceFilter(p)
-	rows, err := s.db.QueryContext(ctx, selectSQL, p.AgentID, after, space, space, limit)
-	if err != nil {
-		return nil, fmt.Errorf("reading inbox of agent %d: %w", p.AgentID, err)
-	}
-	defer func() { _ = rows.Close() }()
-	return scanEntries(rows)
-}
-
-func scanEntries(rows *sql.Rows) ([]Entry, error) {
-	es := []Entry{}
-	for rows.Next() {
-		var e Entry
-		if err := rows.Scan(&e.ID, &e.AgentID, &e.SpaceID, &e.Space, &e.Type, &e.From, &e.Critical,
-			&e.Topic, &e.Blackboard, &e.ThreadID, &e.ThreadTitle, &e.Body, &e.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scanning inbox entry: %w", err)
-		}
-		es = append(es, e)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating inbox entries: %w", err)
-	}
-	return es, nil
+	return selectEntries(ctx, s.db, p.AgentID, after, spaceFilter(p), limit)
 }
 
 // Ack deletes p's entries with id <= upTo (members: only their space) and
@@ -140,16 +87,12 @@ func (s *Service) Ack(ctx context.Context, p auth.Principal, upTo int64) (int64,
 	if err := requireAgent(p); err != nil {
 		return 0, err
 	}
-	space := spaceFilter(p)
-	res, err := s.db.ExecContext(ctx, ackSQL, p.AgentID, upTo, space, space)
-	if err != nil {
-		return 0, fmt.Errorf("acking inbox of agent %d: %w", p.AgentID, err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("counting acked inbox entries: %w", err)
-	}
-	return n, nil
+	return ackEntries(ctx, s.db, p.AgentID, upTo, spaceFilter(p))
+}
+
+// DeleteSpaceEntries drops every entry of agentID in spaceID through q.
+func (s *Service) DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, spaceID int64) error {
+	return deleteSpaceEntries(ctx, q, agentID, spaceID)
 }
 
 func requireAgent(p auth.Principal) error {
