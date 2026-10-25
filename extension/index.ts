@@ -18,7 +18,7 @@
  */
 import { join } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { agentConfigDir } from "../_shared/credential-store.ts";
+import { agentConfigDir } from "./lib/shared/credential-store.ts";
 import { activateBusTools, deactivateBusTools } from "./lib/activation.ts";
 import { findOnPath, resolveBinary } from "./lib/binary.ts";
 import { createClient, type FetchLike } from "./lib/client.ts";

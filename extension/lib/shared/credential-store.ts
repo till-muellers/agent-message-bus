@@ -1,9 +1,9 @@
 /**
  * Owner-only JSON file store for extension credentials.
  *
- * `_shared/` is a support library folder, NOT an extension: it has no
- * `index.ts`, so omp never auto-loads it. Extension packages import it
- * explicitly and supply the file location, the content validation and the
+ * `lib/shared/` is a support library folder, NOT an extension: omp only loads
+ * the entry declared in `package.json` (`extension/index.ts`). Callers import
+ * it explicitly and supply the file location, the content validation and the
  * error to show when the file cannot be parsed.
  *
  * Files are written with mode 0600 and an existing file is chmod-ed to 0600

@@ -1,8 +1,8 @@
 /**
- * Slash-command helpers shared by extension packages.
+ * Slash-command helpers shared by the extension's modules.
  *
- * `_shared/` is a support library folder, NOT an extension: it has no
- * `index.ts`, so omp never auto-loads it.
+ * `lib/shared/` is a support library folder, NOT an extension: omp only loads
+ * the entry declared in `package.json` (`extension/index.ts`).
  */
 
 /** What a command handler shows the user. */

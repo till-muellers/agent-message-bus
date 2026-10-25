@@ -3,7 +3,7 @@
  * handler gets the credential store, the HTTP client and the loop controls,
  * and returns the message to show.
  */
-import { type CommandResult, parseArgs } from "../../_shared/command.ts";
+import { type CommandResult, parseArgs } from "./shared/command.ts";
 import { BusError, type BusClient } from "./client.ts";
 import { type CredentialStore, resolveActive, type SessionCredentials, trimUrl } from "./credentials.ts";
 import { type ServerCli, serverCommand } from "./server.ts";

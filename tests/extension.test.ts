@@ -4,11 +4,11 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { type JsonSchema, toZod, type Zod } from "../extensions/omp/agent-message-bus/lib/schema.ts";
-import { createBusExtension } from "../extensions/omp/agent-message-bus/index.ts";
-import { BusError, type BusClient, createClient, type FetchLike, type RemoteTool } from "../extensions/omp/agent-message-bus/lib/client.ts";
-import { runCommand, type CommandDeps, USAGE } from "../extensions/omp/agent-message-bus/lib/command.ts";
-import { conflictWarning } from "../extensions/omp/agent-message-bus/lib/conflict.ts";
+import { type JsonSchema, toZod, type Zod } from "../extension/lib/schema.ts";
+import { createBusExtension } from "../extension/index.ts";
+import { BusError, type BusClient, createClient, type FetchLike, type RemoteTool } from "../extension/lib/client.ts";
+import { runCommand, type CommandDeps, USAGE } from "../extension/lib/command.ts";
+import { conflictWarning } from "../extension/lib/conflict.ts";
 import {
 	type CredentialStore,
 	configDir,
@@ -16,18 +16,18 @@ import {
 	resolveActive,
 	type SessionCredentials,
 	type StoredCredentials,
-} from "../extensions/omp/agent-message-bus/lib/credentials.ts";
-import { createDeliver, deliveryOptions } from "../extensions/omp/agent-message-bus/lib/deliver.ts";
-import { formatEntry } from "../extensions/omp/agent-message-bus/lib/format.ts";
-import { type Entry, runInboxLoop } from "../extensions/omp/agent-message-bus/lib/inbox.ts";
-import { parseSse } from "../extensions/omp/agent-message-bus/lib/sse.ts";
-import { activateBusTools, deactivateBusTools } from "../extensions/omp/agent-message-bus/lib/activation.ts";
-import { resolveBinary } from "../extensions/omp/agent-message-bus/lib/binary.ts";
-import { assetName, expectedSum, RELEASES_URL } from "../extensions/omp/agent-message-bus/lib/download.ts";
-import { consumeEnv } from "../extensions/omp/agent-message-bus/lib/env.ts";
-import type { Runner } from "../extensions/omp/agent-message-bus/lib/runner.ts";
-import { createServerCli, type ServerCli } from "../extensions/omp/agent-message-bus/lib/server.ts";
-import { INBOX_TOOLS, registerRemoteTools, type RemoteToolsOptions } from "../extensions/omp/agent-message-bus/lib/tools.ts";
+} from "../extension/lib/credentials.ts";
+import { createDeliver, deliveryOptions } from "../extension/lib/deliver.ts";
+import { formatEntry } from "../extension/lib/format.ts";
+import { type Entry, runInboxLoop } from "../extension/lib/inbox.ts";
+import { parseSse } from "../extension/lib/sse.ts";
+import { activateBusTools, deactivateBusTools } from "../extension/lib/activation.ts";
+import { resolveBinary } from "../extension/lib/binary.ts";
+import { assetName, expectedSum, RELEASES_URL } from "../extension/lib/download.ts";
+import { consumeEnv } from "../extension/lib/env.ts";
+import type { Runner } from "../extension/lib/runner.ts";
+import { createServerCli, type ServerCli } from "../extension/lib/server.ts";
+import { INBOX_TOOLS, registerRemoteTools, type RemoteToolsOptions } from "../extension/lib/tools.ts";
 
 /**
  * Recording stand-in for `pi.zod` (no zod package in this repo): nodes keep enough state to rebuild JSON schema.
@@ -994,14 +994,14 @@ describe("binary resolution", () => {
 	const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 	const ASSET = "agent-message-bus_1.2.3_linux_amd64";
 
-	/** Fake GitHub: latest release amb-v1.2.3 with the linux/amd64 asset and SHA256SUMS listing `sum`. */
+	/** Fake GitHub: latest release v1.2.3 with the linux/amd64 asset and SHA256SUMS listing `sum`. */
 	function fakeGitHub(sum = sha(BYTES)) {
 		const urls: string[] = [];
 		const fetchFn: FetchLike = async url => {
 			urls.push(url);
 			if (url === RELEASES_URL)
 				return Response.json({
-					tag_name: "amb-v1.2.3",
+					tag_name: "v1.2.3",
 					assets: [
 						{ name: ASSET, browser_download_url: "https://dl/asset" },
 						{ name: "SHA256SUMS", browser_download_url: "https://dl/sums" },

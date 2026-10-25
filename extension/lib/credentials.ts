@@ -12,7 +12,7 @@
  * never written to the file. `/bus logout` clears all three.
  */
 import { join } from "node:path";
-import { agentConfigDir, createJsonFileStore, type JsonFileStore } from "../../_shared/credential-store.ts";
+import { agentConfigDir, createJsonFileStore, type JsonFileStore } from "./shared/credential-store.ts";
 
 export interface StoredCredentials {
 	url: string;

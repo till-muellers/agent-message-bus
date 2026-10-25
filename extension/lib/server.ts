@@ -2,7 +2,7 @@
  * `/bus server start|stop|status`: drives a local agent-message-bus through its
  * CLI (`start`, `stop`, `status --json`, `admin-token`).
  */
-import type { CommandResult } from "../../_shared/command.ts";
+import type { CommandResult } from "./shared/command.ts";
 import type { CredentialStore } from "./credentials.ts";
 import type { Runner } from "./runner.ts";
 

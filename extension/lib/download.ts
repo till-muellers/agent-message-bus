@@ -84,7 +84,7 @@ async function fetchVerified(fetchFn: FetchLike, release: Release, name: string)
 /** Returns the cached binary of the latest release, downloading and verifying it first when missing. */
 export async function downloadBinary(options: DownloadOptions): Promise<string> {
 	const release = await latestRelease(options.fetchFn);
-	const version = release.tag_name.replace(/^amb-v|^v/, "");
+	const version = release.tag_name.replace(/^v/, "");
 	const name = assetName(version, options.platform, options.arch);
 	const target = join(options.dir, version, binaryName(options.platform));
 	if (await exists(target)) return target;
