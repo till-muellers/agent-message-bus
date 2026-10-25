@@ -30,8 +30,7 @@ func typed(kind, desc string) map[string]any {
 	return map[string]any{"type": kind, "description": desc}
 }
 
-// Shared property schemas.
-// Shared property schemas; constructors return fresh values so no package state is shared.
+// nameDesc describes a name argument with the domain name rule.
 func nameDesc(what string) string {
 	return fmt.Sprintf("%s name, matching %s.", what, domain.NamePattern)
 }

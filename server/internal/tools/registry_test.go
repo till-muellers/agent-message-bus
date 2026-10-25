@@ -38,9 +38,13 @@ func TestSchemasUseAllowedSubset(t *testing.T) {
 	}
 }
 
-func allowedTypes() map[any]bool { return map[any]bool{"object": true, "string": true, "integer": true, "boolean": true} }
+func allowedTypes() map[any]bool {
+	return map[any]bool{"object": true, "string": true, "integer": true, "boolean": true}
+}
 
-func allowedKeys() map[string]bool { return map[string]bool{"type": true, "description": true, "properties": true, "required": true, "additionalProperties": true} }
+func allowedKeys() map[string]bool {
+	return map[string]bool{"type": true, "description": true, "properties": true, "required": true, "additionalProperties": true}
+}
 
 func checkSchema(t *testing.T, s map[string]any) {
 	t.Helper()
