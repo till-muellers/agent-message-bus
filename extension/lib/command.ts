@@ -3,6 +3,7 @@
  * handler gets the credential store, the HTTP client and the loop controls,
  * and returns the message to show.
  */
+import { type CommandResult, parseArgs } from "../../_shared/command.ts";
 import { BusError, type BusClient } from "./client.ts";
 import { type CredentialStore, resolveActive, trimUrl } from "./credentials.ts";
 
@@ -12,13 +13,8 @@ export interface CommandDeps {
 	env: NodeJS.ProcessEnv;
 	/** Re-resolves credentials, registers tools and restarts the inbox loop. */
 	restart(): Promise<void>;
-	/** Stops the inbox loop. */
+	/** Stops the inbox loop and drops the active credentials. */
 	stop(): void;
-}
-
-export interface CommandResult {
-	message: string;
-	level: "info" | "warning" | "error";
 }
 
 interface Whoami {
@@ -34,12 +30,8 @@ export const USAGE = [
 	"  /bus promote <leader-name>   mint a leader token with the stored admin token and use it",
 	"  /bus status                  show who this session is on the bus",
 	"  /bus logout                  forget the stored credentials and stop the inbox stream",
+	"  /bus help                    show this help",
 ].join("\n");
-
-function parseArgs(args: string | string[] | undefined): string[] {
-	if (Array.isArray(args)) return args.map(String).filter(Boolean);
-	return String(args ?? "").trim().split(/\s+/).filter(Boolean);
-}
 
 async function status(deps: CommandDeps): Promise<CommandResult> {
 	const stored = await deps.store.load();
@@ -61,7 +53,7 @@ async function login(deps: CommandDeps, rawUrl: string | undefined, token: strin
 		await deps.store.save({ url, adminToken: token, token: stored?.url === url ? stored.token : undefined });
 		return { message: "Admin token stored. Run /bus promote <leader-name> to act as a leader.", level: "info" };
 	}
-	await deps.store.save({ ...stored, url, token });
+	await deps.store.save({ url, adminToken: stored?.url === url ? stored.adminToken : undefined, token });
 	await deps.restart();
 	return { message: `Logged in as ${me.kind} ${me.name}`, level: "info" };
 }
@@ -77,6 +69,17 @@ async function promote(deps: CommandDeps, name: string | undefined): Promise<Com
 	return { message: `This session now acts as leader ${minted.name}.`, level: "info" };
 }
 
+/** Clears the stored file; env credentials, when set, keep the session active. */
+async function logout(deps: CommandDeps): Promise<CommandResult> {
+	await deps.store.clear();
+	if (!resolveActive(deps.env, undefined)) {
+		deps.stop();
+		return { message: "Logged out.", level: "info" };
+	}
+	await deps.restart();
+	return { message: "Logged out; session still uses AGENT_BUS_URL/AGENT_BUS_TOKEN from the environment.", level: "info" };
+}
+
 export async function runCommand(rawArgs: string | string[] | undefined, deps: CommandDeps): Promise<CommandResult> {
 	const [sub = "status", ...rest] = parseArgs(rawArgs);
 	try {
@@ -88,9 +91,7 @@ export async function runCommand(rawArgs: string | string[] | undefined, deps: C
 			case "promote":
 				return await promote(deps, rest[0]);
 			case "logout":
-				deps.stop();
-				await deps.store.clear();
-				return { message: "Logged out.", level: "info" };
+				return await logout(deps);
 			case "help":
 				return { message: USAGE, level: "info" };
 			default:

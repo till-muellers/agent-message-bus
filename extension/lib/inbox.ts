@@ -1,4 +1,4 @@
-/** Inbox stream consumer: formats entries and runs the reconnecting deliver+ack loop. */
+/** Inbox stream consumer: the wire entry type and the reconnecting deliver+ack loop. */
 import { BusError, type BusClient } from "./client.ts";
 import type { ActiveCredentials } from "./credentials.ts";
 import { parseSse } from "./sse.ts";
@@ -17,27 +17,6 @@ export interface Entry {
 	threadTitle?: string;
 	body?: string;
 	createdAt: string;
-}
-
-function where(e: Entry): string {
-	switch (e.type) {
-		case "direct_message":
-			return "direct";
-		case "topic_message":
-			return `topic #${e.topic}`;
-		case "topic_closed":
-			return `topic #${e.topic} closed`;
-		case "thread_post":
-			return `thread ${e.threadId} "${e.threadTitle}" on ${e.blackboard}`;
-		case "thread_removed":
-			return `thread ${e.threadId} "${e.threadTitle}" removed`;
-		case "blackboard_removed":
-			return `blackboard ${e.blackboard} removed`;
-	}
-}
-
-export function formatEntry(e: Entry): string {
-	return `[agent-bus] ${e.space} · ${where(e)} · from ${e.from}${e.critical ? " · CRITICAL" : ""}\n${e.body ?? ""}`;
 }
 
 export interface InboxLoopOptions {
@@ -69,6 +48,15 @@ function isFatal(error: unknown): boolean {
 	return error instanceof BusError && (error.code === "unauthenticated" || error.code === "forbidden");
 }
 
+/** Acks up to `id`. A failure is only reported: reconnecting would redeliver the entry, and the next ack's higher `upTo` covers it. */
+async function ack(client: BusClient, active: ActiveCredentials, id: number, onError: (error: Error) => void): Promise<void> {
+	try {
+		await client.callTool(active.url, active.token, "bus_inbox_ack", { upTo: id });
+	} catch (error) {
+		onError(error instanceof Error ? error : new Error(String(error)));
+	}
+}
+
 /** Streams the inbox until `signal` aborts or the token is rejected (401/403). */
 export async function runInboxLoop(options: InboxLoopOptions): Promise<void> {
 	const { client, getActive, signal, deliver, onError, sleep = abortableSleep } = options;
@@ -83,7 +71,7 @@ export async function runInboxLoop(options: InboxLoopOptions): Promise<void> {
 				if (frame.event !== "inbox") continue;
 				const entry = JSON.parse(frame.data) as Entry;
 				await deliver(entry);
-				await client.callTool(active.url, active.token, "bus_inbox_ack", { upTo: entry.id });
+				await ack(client, active, entry.id, onError);
 				delay = INITIAL_DELAY_MS;
 			}
 		} catch (error) {
