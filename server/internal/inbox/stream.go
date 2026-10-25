@@ -41,8 +41,10 @@ func streamPrincipal(ctx context.Context) (auth.Principal, error) {
 	return p, requireAgent(p)
 }
 
-// stream subscribes before reading the backlog so nothing published meanwhile
-// is lost; lastSent then drops live copies of entries the backlog delivered.
+// stream subscribes before draining the backlog so nothing published meanwhile
+// is missed. Live messages are only wake-up signals: each one drains the inbox
+// after lastSent, so entries go out once and in id order even when producers
+// publish out of order.
 func (s *Service) stream(ctx context.Context, w http.ResponseWriter, p auth.Principal) error {
 	live, unsubscribe := s.pub.Subscribe(topic(p.AgentID))
 	defer unsubscribe()
@@ -50,20 +52,19 @@ func (s *Service) stream(ctx context.Context, w http.ResponseWriter, p auth.Prin
 	if err != nil {
 		return err
 	}
-	lastSent, err := s.sendBacklog(ctx, sse, p)
+	lastSent, err := s.drain(ctx, sse, p, 0)
 	if err != nil {
 		return err
 	}
 	return s.forwardLive(ctx, sse, p, live, lastSent)
 }
 
-// sendBacklog sends stored entries page by page and returns the last id sent.
-func (s *Service) sendBacklog(ctx context.Context, sse sseWriter, p auth.Principal) (int64, error) {
-	var lastSent int64
+// drain sends p's stored entries after lastSent page by page and returns the last id sent.
+func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, lastSent int64) (int64, error) {
 	for {
 		page, err := s.Read(ctx, p, lastSent, maxLimit)
 		if err != nil {
-			return lastSent, fmt.Errorf("reading backlog: %w", err)
+			return lastSent, fmt.Errorf("reading inbox after %d: %w", lastSent, err)
 		}
 		if len(page) == 0 {
 			return lastSent, nil
@@ -77,6 +78,7 @@ func (s *Service) sendBacklog(ctx context.Context, sse sseWriter, p auth.Princip
 	}
 }
 
+// forwardLive drains the inbox on every wake-up signal and pings while idle.
 func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Principal, live <-chan []byte, lastSent int64) error {
 	ping := time.NewTicker(s.heartbeat)
 	defer ping.Stop()
@@ -88,34 +90,31 @@ func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Princip
 			if err := sse.ping(); err != nil {
 				return err
 			}
-		case payload, ok := <-live:
-			if !ok {
+		case _, ok := <-live:
+			if !ok || !coalesce(live) {
 				return nil
 			}
 			var err error
-			if lastSent, err = forward(sse, p, payload, lastSent); err != nil {
+			if lastSent, err = s.drain(ctx, sse, p, lastSent); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-// forward sends one live payload unless it was already sent or lies outside
-// p's space, and returns the new lastSent.
-func forward(sse sseWriter, p auth.Principal, payload []byte, lastSent int64) (int64, error) {
-	var env envelope
-	if err := json.Unmarshal(payload, &env); err != nil {
-		return lastSent, fmt.Errorf("decoding live inbox entry: %w", err)
+// coalesce discards signals already queued behind the one just received, since
+// one drain covers them all. It reports false if the subscription closed.
+func coalesce(live <-chan []byte) bool {
+	for {
+		select {
+		case _, ok := <-live:
+			if !ok {
+				return false
+			}
+		default:
+			return true
+		}
 	}
-	e := env.Entry
-	e.AgentID, e.SpaceID = p.AgentID, env.SpaceID
-	if e.ID <= lastSent || !visible(p, e.SpaceID) {
-		return lastSent, nil
-	}
-	if err := sse.send(e); err != nil {
-		return lastSent, err
-	}
-	return e.ID, nil
 }
 
 // sseWriter frames server-sent events and flushes each one to the client.

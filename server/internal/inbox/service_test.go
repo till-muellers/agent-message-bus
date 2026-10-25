@@ -297,12 +297,12 @@ func TestPublishRoutesToAgentTopic(t *testing.T) {
 	w.svc.Publish([]Entry{e})
 	select {
 	case payload := <-live:
-		var env envelope
-		if err := json.Unmarshal(payload, &env); err != nil {
+		var got Entry
+		if err := json.Unmarshal(payload, &got); err != nil {
 			t.Fatalf("decoding payload: %v", err)
 		}
-		if env.SpaceID != e.SpaceID || !reflect.DeepEqual(env.Entry, withoutIDs(e)) {
-			t.Fatalf("payload = %+v, want space %d entry %+v", env, e.SpaceID, withoutIDs(e))
+		if want := withoutIDs(e); !reflect.DeepEqual(got, want) {
+			t.Fatalf("payload = %+v, want %+v", got, want)
 		}
 	case <-time.After(waitTimeout):
 		t.Fatal("timed out waiting for published entry")

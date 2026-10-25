@@ -77,22 +77,24 @@ func readSSE(t *testing.T, body io.Reader) *sseReader {
 	return &sseReader{t: t, lines: lines, errc: errc}
 }
 
-func (r *sseReader) nextLine() (string, bool) {
+// nextLine waits for one line; deadline bounds the caller's whole wait, so a
+// steady heartbeat cannot keep a test waiting forever.
+func (r *sseReader) nextLine(deadline <-chan time.Time) (string, bool) {
 	r.t.Helper()
 	select {
 	case line, ok := <-r.lines:
 		return line, ok
-	case <-time.After(waitTimeout):
+	case <-deadline:
 		r.t.Fatal("timed out waiting for stream data")
 		return "", false
 	}
 }
 
-func (r *sseReader) nextFrame() frame {
+func (r *sseReader) nextFrame(deadline <-chan time.Time) frame {
 	r.t.Helper()
 	var f frame
 	for {
-		line, ok := r.nextLine()
+		line, ok := r.nextLine(deadline)
 		if !ok {
 			r.t.Fatal("stream closed while waiting for a frame")
 		}
@@ -116,11 +118,12 @@ func (r *sseReader) nextFrame() frame {
 	}
 }
 
-// nextEntry returns the next inbox event, skipping heartbeats.
+// nextEntry returns the next inbox event within waitTimeout, skipping heartbeats.
 func (r *sseReader) nextEntry() Entry {
 	r.t.Helper()
+	deadline := time.After(waitTimeout)
 	for {
-		f := r.nextFrame()
+		f := r.nextFrame(deadline)
 		if f.comment == "ping" && f.event == "" {
 			continue
 		}
@@ -138,11 +141,31 @@ func (r *sseReader) nextEntry() Entry {
 	}
 }
 
+// entries returns the bodies of the next n inbox events.
+func (r *sseReader) entries(n int) []string {
+	r.t.Helper()
+	got := make([]string, 0, n)
+	for range n {
+		got = append(got, r.nextEntry().Body)
+	}
+	return got
+}
+
+// expectPing asserts the next frame is a heartbeat. Heartbeats start only after
+// the backlog, so a ping proves the stream is waiting for live entries.
+func (r *sseReader) expectPing() {
+	r.t.Helper()
+	if f := r.nextFrame(time.After(waitTimeout)); f != (frame{comment: "ping"}) {
+		r.t.Fatalf("frame = %+v, want ping comment", f)
+	}
+}
+
 // expectClosed waits for the server to end the stream cleanly.
 func (r *sseReader) expectClosed() {
 	r.t.Helper()
+	deadline := time.After(waitTimeout)
 	for {
-		if _, ok := r.nextLine(); !ok {
+		if _, ok := r.nextLine(deadline); !ok {
 			break
 		}
 	}
@@ -154,56 +177,73 @@ func (r *sseReader) expectClosed() {
 func TestStreamDelivery(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name string
-		who  string
-		live func(t *testing.T, w *world) // runs after the backlog arrived
-		want []string                     // backlog then live, in order
+		name    string
+		who     string
+		backlog []string
+		live    func(t *testing.T, w *world) // runs once the stream is live
+		want    []string                     // entries streamed after the backlog
 	}{
 		{
-			name: "backlog then live entry",
-			who:  "memberA",
-			live: func(t *testing.T, w *world) { w.send(t, "worker", "alpha", "a3") },
-			want: []string{"a1", "a2", "a3"},
+			name:    "backlog then live entry",
+			who:     "memberA",
+			backlog: []string{"a1", "a2"},
+			live:    func(t *testing.T, w *world) { w.send(t, "worker", "alpha", "a3") },
+			want:    []string{"a3"},
 		},
 		{
-			name: "live copy of a backlog entry is not repeated",
-			who:  "memberA",
+			name:    "live copy of a backlog entry is not repeated",
+			who:     "memberA",
+			backlog: []string{"a1", "a2"},
 			live: func(t *testing.T, w *world) {
 				w.svc.Publish([]Entry{w.entries["a2"]})
 				w.send(t, "worker", "alpha", "a3")
 			},
-			want: []string{"a1", "a2", "a3"},
+			want: []string{"a3"},
 		},
 		{
-			name: "member skips live entries of other spaces",
-			who:  "memberA",
+			name:    "member skips live entries of other spaces",
+			who:     "memberA",
+			backlog: []string{"a1", "a2"},
 			live: func(t *testing.T, w *world) {
 				w.send(t, "worker", "beta", "b2")
 				w.send(t, "worker", "alpha", "a3")
 			},
-			want: []string{"a1", "a2", "a3"},
+			want: []string{"a3"},
 		},
 		{
-			name: "leader streams every space",
-			who:  "leader",
-			live: func(t *testing.T, w *world) { w.send(t, "lead", "beta", "l3") },
-			want: []string{"l1", "l2", "l3"},
+			name:    "leader streams every space",
+			who:     "leader",
+			backlog: []string{"l1", "l2"},
+			live:    func(t *testing.T, w *world) { w.send(t, "lead", "beta", "l3") },
+			want:    []string{"l3"},
+		},
+		{
+			name:    "entry published out of order is not lost",
+			who:     "memberA",
+			backlog: []string{"a1", "a2"},
+			live: func(t *testing.T, w *world) {
+				a3 := w.insert(t, "worker", "alpha", "a3")
+				a4 := w.insert(t, "worker", "alpha", "a4")
+				w.svc.Publish([]Entry{a4})
+				w.svc.Publish([]Entry{a3})
+				w.send(t, "worker", "alpha", "a5")
+			},
+			want: []string{"a3", "a4", "a5"},
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			w := newWorld(t)
+			w.svc.heartbeat = time.Millisecond
 			stream := startStream(t.Context(), t, w, tc.who)
-			backlog := len(tc.want) - 1
-			got := make([]string, 0, len(tc.want))
-			for range backlog {
-				got = append(got, stream.nextEntry().Body)
+			if got := stream.entries(len(tc.backlog)); !slices.Equal(got, tc.backlog) {
+				t.Fatalf("backlog streamed %v, want %v", got, tc.backlog)
 			}
+			stream.expectPing()
 			tc.live(t, w)
-			got = append(got, stream.nextEntry().Body)
-			if !slices.Equal(got, tc.want) {
-				t.Fatalf("streamed %v, want %v", got, tc.want)
+			if got := stream.entries(len(tc.want)); !slices.Equal(got, tc.want) {
+				t.Fatalf("live streamed %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -212,26 +252,15 @@ func TestStreamDelivery(t *testing.T) {
 func TestStreamClosesOnRootCancel(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
+	w.svc.heartbeat = time.Millisecond
 	root, cancel := context.WithCancel(t.Context())
 	stream := startStream(root, t, w, "memberB")
-	if got := stream.nextEntry().Body; got != "b1" {
-		t.Fatalf("backlog entry = %q, want b1", got)
+	if got := stream.entries(1); !slices.Equal(got, []string{"b1"}) {
+		t.Fatalf("backlog streamed %v, want [b1]", got)
 	}
+	stream.expectPing()
 	cancel()
 	stream.expectClosed()
-}
-
-func TestStreamHeartbeat(t *testing.T) {
-	t.Parallel()
-	w := newWorld(t)
-	w.svc.heartbeat = time.Millisecond
-	stream := startStream(t.Context(), t, w, "memberB")
-	if got := stream.nextEntry().Body; got != "b1" {
-		t.Fatalf("backlog entry = %q, want b1", got)
-	}
-	if f := stream.nextFrame(); f != (frame{comment: "ping"}) {
-		t.Fatalf("frame after backlog = %+v, want ping comment", f)
-	}
 }
 
 func TestStreamAdminForbidden(t *testing.T) {

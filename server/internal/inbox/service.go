@@ -53,13 +53,6 @@ func NewService(db *sql.DB, pub publisher, now func() time.Time) *Service {
 	return &Service{db: db, pub: pub, now: now, heartbeat: defaultHeartbeat}
 }
 
-// envelope is the broker payload: the entry plus the space id its JSON omits,
-// so streams can scope member deliveries without a lookup.
-type envelope struct {
-	SpaceID int64 `json:"spaceId"`
-	Entry   Entry `json:"entry"`
-}
-
 func topic(agentID int64) string { return fmt.Sprintf("inbox/%d", agentID) }
 
 // Insert stores es through tx and returns copies with CreatedAt and ID set.
@@ -97,7 +90,7 @@ func nullString(v string) sql.NullString { return sql.NullString{String: v, Vali
 // Publish pushes each entry to topic inbox/<agentID>. Call it after the inserting tx commits.
 func (s *Service) Publish(es []Entry) {
 	for _, e := range es {
-		payload, err := json.Marshal(envelope{SpaceID: e.SpaceID, Entry: e})
+		payload, err := json.Marshal(e)
 		if err != nil {
 			slog.Error("encoding inbox entry", "id", e.ID, "err", err)
 			continue
@@ -182,10 +175,4 @@ func spaceFilter(p auth.Principal) int64 {
 		return p.SpaceID
 	}
 	return 0
-}
-
-// visible reports whether an entry in spaceID belongs to p's inbox view.
-func visible(p auth.Principal, spaceID int64) bool {
-	f := spaceFilter(p)
-	return f == 0 || f == spaceID
 }
