@@ -99,11 +99,11 @@ func command(ctx context.Context, m instance.Manager, name string, rest []string
 
 func manager(cfg config.Config) instance.Manager {
 	return instance.Manager{
-		Config: cfg,
-		Client: &http.Client{Timeout: 5 * time.Second},
-		Spawn:  func(logPath string) (int, error) { return detach.Start(nil, os.Environ(), logPath) },
-		Kill:   instance.KillPID,
-		Out:    os.Stdout,
+		Config:  cfg,
+		Client:  &http.Client{Timeout: 5 * time.Second},
+		Spawn:   func(logPath string) (int, error) { return detach.Start(nil, os.Environ(), logPath) },
+		Kill:    instance.KillPID,
+		Out:     os.Stdout,
 		Timeout: waitTimeout,
 		Poll:    100 * time.Millisecond,
 	}

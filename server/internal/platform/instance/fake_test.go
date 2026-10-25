@@ -19,12 +19,12 @@ const testToken = "test-admin-token-0123456789-0123456789"
 
 // fakeBus imitates a serving instance.
 type fakeBus struct {
-	srv      *httptest.Server
-	healthy  atomic.Bool
-	obey     bool // whether shutdown actually stops it
-	dir      string
-	mu       sync.Mutex
-	calls    []string // "path auth body"
+	srv     *httptest.Server
+	healthy atomic.Bool
+	obey    bool // whether shutdown actually stops it
+	dir     string
+	mu      sync.Mutex
+	calls   []string // "path auth body"
 }
 
 func newFakeBus(t *testing.T, dir string, obey bool) *fakeBus {

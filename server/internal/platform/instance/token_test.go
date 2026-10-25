@@ -22,10 +22,10 @@ func TestAdminToken(t *testing.T) {
 func TestRotateToken(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name          string
-		env           string
-		running       bool
-		wantErr       string
+		name    string
+		env     string
+		running bool
+		wantErr string
 	}{
 		{name: "env override", env: testToken, wantErr: "AMB_ADMIN_TOKEN is set in the environment; rotate it there"},
 		{name: "not running"},
