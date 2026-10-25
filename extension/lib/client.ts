@@ -1,4 +1,4 @@
-/** HTTP client for the agent-message-bus web API (`/v1/tools`, `/v1/inbox/stream`). */
+/** HTTP client for the agent-message-bus web API (`/v1/tools`, `/v1/inbox/stream`, `/v1/invites/accept`). */
 import type { JsonSchema } from "./schema.ts";
 
 export interface FetchInit {
@@ -27,10 +27,20 @@ export interface RemoteTool {
 	inputSchema: JsonSchema;
 }
 
+/** What redeeming an invite code yields: the member's name, its space, its member token and the first prompt a leader gave it. */
+export interface AcceptedInvite {
+	name: string;
+	space: string;
+	token: string;
+	task?: string;
+}
+
 export interface BusClient {
 	listTools(url: string, token: string): Promise<RemoteTool[]>;
 	callTool(url: string, token: string, name: string, args: Record<string, unknown>): Promise<unknown>;
 	openStream(url: string, token: string, signal: AbortSignal): Promise<Response>;
+	/** Redeems a single-use invite code (sent as the bearer) for a member token. */
+	acceptInvite(url: string, code: string): Promise<AcceptedInvite>;
 }
 
 async function toBusError(response: Response): Promise<BusError> {
@@ -43,6 +53,15 @@ async function toBusError(response: Response): Promise<BusError> {
 		// Not a JSON error body; fall through.
 	}
 	return new BusError(`http_${response.status}`, text || response.statusText || `HTTP ${response.status}`);
+}
+
+function toAcceptedInvite(body: unknown): AcceptedInvite {
+	const { name, space, token, task } = (body ?? {}) as Partial<Record<keyof AcceptedInvite, unknown>>;
+	if (typeof name !== "string" || typeof space !== "string" || typeof token !== "string")
+		throw new BusError("invalid_response", "accept: response has no token");
+	if (task === undefined) return { name, space, token };
+	if (typeof task !== "string") throw new BusError("invalid_response", "accept: task must be a string");
+	return { name, space, token, task };
 }
 
 export function createClient(fetchFn: FetchLike = fetch): BusClient {
@@ -69,6 +88,10 @@ export function createClient(fetchFn: FetchLike = fetch): BusClient {
 		},
 		openStream(url, token, signal) {
 			return request(`${url}/v1/inbox/stream`, { method: "GET", headers: { ...auth(token), Accept: "text/event-stream" }, signal });
+		},
+		async acceptInvite(url, code) {
+			const response = await request(`${url}/v1/invites/accept`, { method: "POST", headers: auth(code) });
+			return toAcceptedInvite(await response.json());
 		},
 	};
 }

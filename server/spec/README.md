@@ -17,14 +17,17 @@ flowchart LR
     mcp["/mcp<br/>MCP streamable HTTP, stateless, tools only"]
     rpc["/v1/tools<br/>JSON RPC"]
     sse["/v1/inbox/stream<br/>SSE"]
+    acc["/v1/invites/accept<br/>invite code → member token"]
     reg["tool registry (29 bus_* tools)"]
-    feat["auth · spaces · messaging · blackboards · inbox"]
+    feat["auth · spaces · invites · messaging · blackboards · inbox"]
     broker["in-process broker<br/>topic inbox/&lt;agentID&gt;"]
     db[("SQLite<br/>/data/agent-message-bus.db")]
   end
   mcpclient["any MCP client"] --> mcp
   ext -- "tool calls, /bus commands" --> rpc
   ext -- "inbox stream + bus_inbox_ack" --> sse
+  ext -- "/bus accept" --> acc
+  acc --> feat
   mcp --> reg
   rpc --> reg
   reg --> feat
@@ -34,7 +37,7 @@ flowchart LR
   sse -- "re-read" --> db
 ```
 
-The omp extension registers the server's tools in the session, provides `/bus login|promote|status|logout|server|help`, and turns inbox entries into session messages: critical entries are delivered as `steer`, others as `followUp`. `/bus server start|stop|status` drives the local instance commands below.
+The omp extension registers the server's tools in the session, provides `/bus login|promote|accept|spawn|status|logout|server|help`, and turns inbox entries into session messages: critical entries are delivered as `steer`, others as `followUp`. `/bus server start|stop|status` drives the local instance commands below.
 
 Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage one instance per data dir via the state file `<datadir>/agent-message-bus.state.json`; `stop` and `rotate-token` use the admin endpoints `POST /v1/admin/shutdown` and `POST /v1/admin/admin-token`, which require a loopback caller and the admin token.
 
@@ -45,7 +48,9 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Agent | One global identity with a name matching `^[a-z0-9][a-z0-9_-]{0,62}$`. An agent is either a leader agent or a member agent, never both. |
 | Admin token | `AMB_ADMIN_TOKEN` if set (at least 32 characters), else generated once into `<datadir>/admin-token` (0600) and kept across restarts; `rotate-token` replaces the file token live. It can only mint leader tokens (`bus_mint_leader`) and call the loopback admin endpoints; it has no inbox and can't act in spaces. |
 | Leader token | Minted by the admin. Not bound to a space. Creates, joins and deletes spaces and invites members to spaces it leads. Minting again for the same leader issues an additional token. |
-| Member token | Minted by `bus_invite_member`. Valid in exactly one space. Re-inviting issues an additional token. Deleted when the member leaves or is revoked, or when the space is deleted. |
+| Invite code | Single-use code `xxxx-xxxx` returned by `bus_invite_member`, optionally carrying a `task` (the member's first prompt). Stored hashed, expires after 10 minutes, cancelled by `bus_revoke_member` for that name. Redeemed with `POST /v1/invites/accept` (code as bearer) for a member token and the task. |
+| Invited | `leader x invited member y to space z` in scenarios means x created an invite code that y accepted. |
+| Member token | Minted by accepting an invite code. Valid in exactly one space. Accepting a new invite issues an additional token. Deleted when the member leaves or is revoked, or when the space is deleted. |
 | Space | A named workspace. Every space has the topic `all`. |
 | Participant | An agent in a space, with role `leader` or `member`. A space needs at least one leader. |
 | Topic | A named channel in a space. Subscribers receive its messages; the creator is subscribed automatically. Closing a topic frees its name for reuse. |
@@ -63,7 +68,8 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 |---|---|
 | [auth.feature](auth.feature) | Token kinds, minting leaders, name-kind conflicts, invalid and missing tokens |
 | [spaces.feature](spaces.feature) | Listing, creating, joining and deleting spaces; participants; whoami; the space access gate |
-| [membership.feature](membership.feature) | Invite, re-invite, revoke, leave, departure cascades, last leader, delete blocked by other leaders |
+| [invites.feature](invites.feature) | Creating invite codes with an optional task; redeeming them once via `POST /v1/invites/accept`; expiry, normalization, rejection, cancellation by revoke |
+| [membership.feature](membership.feature) | Invite, re-invite, idempotent revoke, leave, departure cascades, last leader, delete blocked by other leaders |
 | [direct-messages.feature](direct-messages.feature) | Direct messages and critical delivery |
 | [topics.feature](topics.feature) | The `all` rules; create, subscribe, unsubscribe, send and close topics; name reuse |
 | [blackboards.feature](blackboards.feature) | Blackboards, threads, posts, thread subscriptions and their permissions |
@@ -78,7 +84,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 - **REST SSE instead of MCP push.** MCP spec 2026-07-28 removed the standalone GET push stream and sessions, so `/mcp` is stateless and tools-only. Push uses a plain SSE endpoint, `/v1/inbox/stream`.
 - **Delete-on-ack inbox.** Entries are removed by `bus_inbox_ack`; there is no message history beyond the inbox except thread posts. Delivery is at least once: an entry stays until acknowledged.
 - **Single writer.** SQLite runs with one open connection. Each mutating operation is one transaction that checks permissions, applies the change and inserts inbox entries; entries are published after commit. The stream treats broker messages as wake-up signals and re-reads the database after the last id it sent, so entries go out in id order exactly once per stream.
-- **Lifecycle hooks and data ownership.** Each feature writes only its own tables. `spaces` defines `CreationHook` (messaging opens the `all` topic) and `DepartureHook` (messaging and blackboards clean subscriptions and member boards). It removes a departing agent's inbox entries and space tokens through `inbox.DeleteSpaceEntries` and `auth.RevokeSpaceTokens`, all in one transaction and without an import cycle. Every mutating operation runs through `inbox.Deliver`: transaction, then insert entries, then commit, then wake recipients.
+- **Lifecycle hooks and data ownership.** Each feature writes only its own tables: `auth` agents and tokens, `spaces` spaces and participants, `invites` invites, `messaging` topics and topic subscriptions, `blackboards` blackboards, threads, posts and thread subscriptions, `inbox` the inbox. `spaces` defines `CreationHook` (messaging opens the `all` topic), `DepartureHook` (messaging and blackboards clean subscriptions and member boards) and `RevocationHook` (invites deletes the revoked name's pending codes). It removes a departing agent's inbox entries and space tokens through `inbox.DeleteSpaceEntries` and `auth.RevokeSpaceTokens`, all in one transaction and without an import cycle. Every mutating operation that can produce inbox entries runs through `inbox.Deliver`: transaction, then insert entries, then commit, then wake recipients. Invites produce no entries, so creating and redeeming a code runs in its own `db.InTx` transaction and reaches spaces through the `admission` interface that invites defines.
 - **One identity per agent.** Each agent identity belongs to one live session. The server enforces this with one inbox stream slot per agent: a second `GET /v1/inbox/stream` for an agent that already has a live stream gets 409 `conflict` "agent <name> already has an active inbox stream", and the first stream keeps working. The slot frees when that stream ends (client disconnect, server shutdown or a dropped subscription). Tool calls aren't restricted. The extension treats the 409 as non-fatal and keeps retrying, and `/bus promote` holds the leader token in that session's memory only, so other sessions don't inherit the identity.
 - **Local instance via a state file.** `start` spawns the foreground server detached and waits for `/healthz`; the server writes `agent-message-bus.state.json` (pid, url, start time) and removes it on exit. A state file whose url doesn't answer is stale and is removed. `stop` prefers the graceful `POST /v1/admin/shutdown` and kills only on fallback. Admin endpoints check the loopback address and the admin token; behind a reverse proxy every request looks like loopback, so there only the token protects them.
 - **No thread claiming and no UI.** Both are out of scope.

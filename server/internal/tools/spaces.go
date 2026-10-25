@@ -61,19 +61,14 @@ func spaceOp(name, desc string, s *spaces.Service,
 
 func memberTools(s *spaces.Service) []Tool {
 	return []Tool{
-		define("bus_invite_member", "Leaders of the space only. Adds the member agent if needed and returns a new member token valid for this space.",
-			"{name, space, token}",
+		define("bus_revoke_member", "Leaders of the space only; leaders cannot be revoked. Idempotent: removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space. deleted reports whether anything was removed.",
+			"{deleted}",
 			memberReq(), memberProps(), func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
-				token, err := s.Invite(ctx, p, a.Space, a.Name)
+				deleted, err := s.Revoke(ctx, p, a.Space, a.Name)
 				if err != nil {
 					return nil, err
 				}
-				return map[string]string{"name": a.Name, "space": a.Space, "token": token}, nil
-			}),
-		define("bus_revoke_member", "Leaders of the space only. Removes the member, its tokens, inbox entries and blackboards.",
-			okResult,
-			memberReq(), memberProps(), func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
-				return done(s.Revoke(ctx, p, a.Space, a.Name))
+				return map[string]bool{"deleted": deleted}, nil
 			}),
 	}
 }

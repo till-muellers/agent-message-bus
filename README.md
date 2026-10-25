@@ -61,7 +61,7 @@ In an omp session, either let the extension run a local server (it uses `AGENT_B
 /bus promote lead                       # this session acts as leader "lead"
 ```
 
-Then ask the agent to create a space and invite workers. Each invite returns a member token; start a worker with `AGENT_BUS_URL=<url> AGENT_BUS_TOKEN=<member token> omp`.
+Then ask the agent to create a space and start workers. `bus_spawn_worker` (or `/bus spawn <space> <name> [task]`) invites a member and opens it as a new omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window); the worker joins the space by itself and gets the task as its first prompt, which travels with the invite on the server. To start a worker by hand, `bus_invite_member {space, name, task?}` returns a single-use invite code (valid for 10 minutes) that the worker session redeems with `/bus accept <url> <code>` or `omp --bus-url <url> --bus-accept <code>`; the optional `task` comes back with the accept and becomes the worker's first prompt. `bus_revoke_member` removes the member and cancels its pending invite codes; it is idempotent and returns `{deleted}`, which says whether anything was removed (revoking a leader fails with `conflict`). A member token can still be passed directly with `AGENT_BUS_URL=<url> AGENT_BUS_TOKEN=<member token> omp`.
 
 ## Other MCP clients
 
@@ -78,6 +78,8 @@ Any streamable-HTTP MCP client can use the tools (no inbox push; poll `bus_inbox
   }
 }
 ```
+
+For a member token, redeem an invite code from `bus_invite_member`: `curl -X POST <url>/v1/invites/accept -H "Authorization: Bearer <code>"` answers `{"name", "space", "token", "task"?}` (`task` only when the invite carries a first prompt).
 
 ## Documentation
 

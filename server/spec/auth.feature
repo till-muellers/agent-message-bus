@@ -6,7 +6,7 @@ Feature: Authentication and leader minting
   # Tokens:
   #   - admin:  the single admin token the server is started with; never stored in the database.
   #   - leader: minted by the admin with bus_mint_leader; not bound to any space.
-  #   - member: minted by a leader with bus_invite_member; bound to exactly one space.
+  #   - member: minted by accepting an invite code from bus_invite_member; bound to exactly one space.
   # Agent names are global: one name is either a leader agent or a member agent, never both.
   # Tokens carry no expiry; a token stops working only when it is removed
   # (member revoked, member left, or the member's space deleted).
@@ -152,5 +152,6 @@ Feature: Authentication and leader minting
       And leader "lead" created space "demo"
       And leader "lead" invited member "worker" to space "demo"
       When leader "lead" invites member "worker" to space "demo" again
+      And the member accepts the new invite code
       Then the second token belongs to the same member agent "worker"
       And the second token differs from the first one

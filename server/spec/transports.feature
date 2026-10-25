@@ -78,7 +78,7 @@ Feature: Transports
     Scenario: End-to-end happy path over the web API
       Given the admin called bus_mint_leader with {"name":"boss"} and got a leader token
       And leader "boss" called bus_create_space with {"space":"proj"}
-      And leader "boss" called bus_invite_member with {"space":"proj","name":"worker"} and got a member token
+      And leader "boss" called bus_invite_member with {"space":"proj","name":"worker"} and the member accepted the code with POST /v1/invites/accept
       And leader "boss" called bus_create_topic with {"space":"proj","topic":"news"}
       When member "worker" calls bus_send_topic with {"space":"proj","topic":"news","body":"hi"}
       And leader "boss" calls bus_inbox_read with {}

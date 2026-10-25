@@ -155,14 +155,14 @@ func TestDelete(t *testing.T) {
 	apperrtest.WantKind(t, err, apperr.Unauthenticated, "")
 }
 
-func TestInvite(t *testing.T) {
+func TestAuthorizeInvite(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, nil, nil)
 	ctx := context.Background()
 	lead := leader(t, e, 1, "lead")
 	leader(t, e, 2, "boss")
 	mustCreate(t, e, lead, "alpha")
-	member, tok1 := inviteMember(t, e, lead, "alpha", "work")
+	member, _ := inviteMember(t, e, lead, "alpha", "work")
 	tests := []struct {
 		name     string
 		p        auth.Principal
@@ -175,54 +175,60 @@ func TestInvite(t *testing.T) {
 		{name: "admin", p: admin, space: "alpha", invitee: "x", wantKind: apperr.Forbidden},
 		{name: "leader name", p: lead, space: "alpha", invitee: "boss", wantKind: apperr.Conflict,
 			wantMsg: "agent boss is a leader agent"},
+		{name: "invalid name", p: lead, space: "alpha", invitee: "Bad Name", wantKind: apperr.Invalid},
 		{name: "unknown space", p: lead, space: "nope", invitee: "x", wantKind: apperr.NotFound},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := e.svc.Invite(ctx, tc.p, tc.space, tc.invitee)
+			err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
+				_, err := e.svc.AuthorizeInvite(ctx, tx, tc.p, tc.space, tc.invitee)
+				return err
+			})
 			apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
 		})
 	}
-	t.Run("re-invite", func(t *testing.T) {
-		again, tok2 := inviteMember(t, e, lead, "alpha", "work")
-		if tok2 == tok1 || again != member {
-			t.Fatalf("second token %q (%+v), first %q (%+v)", tok2, again, tok1, member)
-		}
-		if _, err := e.auth.Authenticate(ctx, tok1); err != nil {
-			t.Fatalf("first token: %v", err)
-		}
-		if n := countRows(t, e.db, `SELECT COUNT(*) FROM participants WHERE agent_id = ?`, member.AgentID); n != 1 {
-			t.Fatalf("participant rows = %d", n)
+	t.Run("authorized", func(t *testing.T) {
+		err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
+			_, err := e.svc.AuthorizeInvite(ctx, tx, lead, "alpha", "fresh")
+			return err
+		})
+		if err != nil {
+			t.Fatalf("authorize: %v", err)
 		}
 	})
 }
 
-func TestRevoke(t *testing.T) {
+func TestAdmitMember(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, nil, nil)
 	ctx := context.Background()
 	lead := leader(t, e, 1, "lead")
-	other := leader(t, e, 2, "other")
 	mustCreate(t, e, lead, "alpha")
-	if err := e.svc.Join(ctx, other, "alpha"); err != nil {
-		t.Fatalf("join: %v", err)
+	member, tok1 := inviteMember(t, e, lead, "alpha", "work")
+	if n := countRows(t, e.db, `SELECT COUNT(*) FROM participants WHERE agent_id = ? AND role = 'member'`, member.AgentID); n != 1 {
+		t.Fatalf("participant rows = %d", n)
 	}
-	member, tok := inviteMember(t, e, lead, "alpha", "work")
-	peer, _ := inviteMember(t, e, lead, "alpha", "peer")
-	seedInbox(t, e, member)
-	apperrtest.WantKind(t, e.svc.Revoke(ctx, peer, "alpha", "work"), apperr.Forbidden, "")
-	apperrtest.WantKind(t, e.svc.Revoke(ctx, lead, "alpha", "other"), apperr.NotFound, "member other not in space alpha")
-	apperrtest.WantKind(t, e.svc.Revoke(ctx, lead, "alpha", "ghost"), apperr.NotFound, "member ghost not in space alpha")
-	if err := e.svc.Revoke(ctx, lead, "alpha", "work"); err != nil {
-		t.Fatalf("revoke: %v", err)
+	var space, tok2 string
+	err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
+		var err error
+		space, tok2, err = e.svc.AdmitMember(ctx, tx, member.SpaceID, "work")
+		return err
+	})
+	if err != nil {
+		t.Fatalf("re-admit: %v", err)
 	}
-	_, err := e.auth.Authenticate(ctx, tok)
-	apperrtest.WantKind(t, err, apperr.Unauthenticated, "")
-	wantNoInbox(t, e, member)
-	ps, _ := e.svc.Participants(ctx, lead, "alpha")
-	want := []Participant{{"lead", RoleLeader}, {"other", RoleLeader}, {"peer", RoleMember}}
-	if !reflect.DeepEqual(ps, want) {
-		t.Fatalf("participants = %+v", ps)
+	if space != "alpha" || tok2 == tok1 {
+		t.Fatalf("re-admit = %q, %q (first token %q)", space, tok2, tok1)
+	}
+	again, err := e.auth.Authenticate(ctx, tok2)
+	if err != nil || again != member {
+		t.Fatalf("second token = %+v, %v; want %+v", again, err, member)
+	}
+	if _, err := e.auth.Authenticate(ctx, tok1); err != nil {
+		t.Fatalf("first token: %v", err)
+	}
+	if n := countRows(t, e.db, `SELECT COUNT(*) FROM participants WHERE agent_id = ?`, member.AgentID); n != 1 {
+		t.Fatalf("participant rows = %d", n)
 	}
 }
 

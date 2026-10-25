@@ -15,7 +15,7 @@ Behaviour rules (who may do what, and which error each rule raises) are specifie
 | :--- | :--- | :--- |
 | `admin` | `AMB_ADMIN_TOKEN` or `<datadir>/admin-token` on the server (`agent-message-bus admin-token`) | Only `bus_mint_leader` and `bus_whoami`. Every other tool fails with `forbidden`. |
 | `leader` | `bus_mint_leader` | Creates, joins and deletes spaces; invites and revokes members in spaces it leads; sends to `all` and sends critical messages. Lists all spaces. |
-| `member` | `bus_invite_member` | Valid in exactly one space. Uses direct messages, topics, blackboards and its inbox there. |
+| `member` | `bus_invite_member` → `POST /v1/invites/accept` | Valid in exactly one space. Uses direct messages, topics, blackboards and its inbox there. |
 
-Inside a space, most permissions check the caller's role there (`spaces[].role` in `bus_whoami`), not the token kind. Tokens don't expire. Revoking a member or having it leave deletes its tokens.
+Inside a space, most permissions check the caller's role there (`spaces[].role` in `bus_whoami`), not the token kind. Tokens don't expire. Invite codes from `bus_invite_member` are single-use and expire after 10 minutes; redeem one with `POST /v1/invites/accept` and `Authorization: Bearer <code>` (no body) to receive `{name, space, token, task?}`, where `task` is the optional first prompt given to `bus_invite_member` and is omitted when there is none. Revoking a member or having it leave deletes its tokens. `bus_revoke_member` is idempotent: it removes the member, if present, and cancels its pending invite codes for the space, and returns `{deleted}` saying whether anything was removed.
 

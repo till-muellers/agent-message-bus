@@ -30,25 +30,32 @@ type reply struct {
 	} `json:"error"`
 }
 
-func call(t *testing.T, srv *httptest.Server, token, tool, args string) (int, reply) {
+// post sends body to path with an optional bearer and decodes the JSON response into out.
+func post(t *testing.T, srv *httptest.Server, path, bearer, body string, out any) int {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/tools/"+tool, bytes.NewBufferString(args))
+	req, err := http.NewRequest(http.MethodPost, srv.URL+path, bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
 	res, err := srv.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	var out reply
-	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
 		t.Fatal(err)
 	}
-	return res.StatusCode, out
+	return res.StatusCode
+}
+
+func call(t *testing.T, srv *httptest.Server, token, tool, args string) (int, reply) {
+	t.Helper()
+	var out reply
+	status := post(t, srv, "/v1/tools/"+tool, token, args, &out)
+	return status, out
 }
 
 func mustCall(t *testing.T, srv *httptest.Server, token, tool, args string, into any) {
@@ -66,18 +73,48 @@ func mustCall(t *testing.T, srv *httptest.Server, token, tool, args string, into
 
 func TestHappyPath(t *testing.T) {
 	srv := newServer(t)
-	var lead struct{ Token string }
-	mustCall(t, srv, adminToken, "bus_mint_leader", `{"name":"boss"}`, &lead)
-	mustCall(t, srv, lead.Token, "bus_create_space", `{"space":"proj"}`, nil)
-	var mem struct{ Name, Space, Token string }
-	mustCall(t, srv, lead.Token, "bus_invite_member", `{"space":"proj","name":"worker"}`, &mem)
-	mustCall(t, srv, lead.Token, "bus_create_topic", `{"space":"proj","topic":"news"}`, nil)
+	lead := setUpSpace(t, srv)
+	var inv struct{ Name, Space, Code, ExpiresAt string }
+	mustCall(t, srv, lead, "bus_invite_member", `{"space":"proj","name":"worker","task":"say hi"}`, &inv)
+	var mem struct{ Name, Space, Token, Task string }
+	if status := post(t, srv, "/v1/invites/accept", inv.Code, "", &mem); status != http.StatusOK ||
+		mem.Name != "worker" || mem.Space != "proj" || mem.Task != "say hi" {
+		t.Fatalf("accept: status %d %+v", status, mem)
+	}
+	mustCall(t, srv, lead, "bus_create_topic", `{"space":"proj","topic":"news"}`, nil)
 	mustCall(t, srv, mem.Token, "bus_send_topic", `{"space":"proj","topic":"news","body":"hi"}`, nil)
 	var entries []inbox.Entry
-	mustCall(t, srv, lead.Token, "bus_inbox_read", `{}`, &entries)
+	mustCall(t, srv, lead, "bus_inbox_read", `{}`, &entries)
 	if len(entries) != 1 || entries[0].Body != "hi" || entries[0].From != "worker" || entries[0].Topic != "news" {
 		t.Fatalf("got %+v", entries)
 	}
+}
+
+func TestRevokeCancelsInvite(t *testing.T) {
+	srv := newServer(t)
+	lead := setUpSpace(t, srv)
+	var inv struct{ Code string }
+	mustCall(t, srv, lead, "bus_invite_member", `{"space":"proj","name":"worker"}`, &inv)
+	for _, want := range []bool{true, false} {
+		var got struct{ Deleted bool }
+		mustCall(t, srv, lead, "bus_revoke_member", `{"space":"proj","name":"worker"}`, &got)
+		if got.Deleted != want {
+			t.Fatalf("deleted = %v, want %v", got.Deleted, want)
+		}
+	}
+	var out reply
+	if status := post(t, srv, "/v1/invites/accept", inv.Code, "", &out); status != http.StatusUnauthorized {
+		t.Fatalf("accept after revoke: status %d", status)
+	}
+}
+
+// setUpSpace mints leader boss, creates space proj and returns the leader token.
+func setUpSpace(t *testing.T, srv *httptest.Server) string {
+	t.Helper()
+	var lead struct{ Token string }
+	mustCall(t, srv, adminToken, "bus_mint_leader", `{"name":"boss"}`, &lead)
+	mustCall(t, srv, lead.Token, "bus_create_space", `{"space":"proj"}`, nil)
+	return lead.Token
 }
 
 func TestErrors(t *testing.T) {
