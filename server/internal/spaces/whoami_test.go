@@ -10,8 +10,8 @@ import (
 
 func TestWhoami(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
-	lead := seedLeader(t, e.db, "lead")
+	e := newEnv(t, nil, nil)
+	lead := leader(t, e, 1, "lead")
 	mustCreate(t, e, lead, "beta")
 	mustCreate(t, e, lead, "alpha")
 	member, _ := inviteMember(t, e, lead, "alpha", "work")

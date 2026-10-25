@@ -2,12 +2,15 @@ package spaces
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"reflect"
 	"testing"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
@@ -15,8 +18,8 @@ var admin = auth.Principal{Kind: auth.Admin}
 
 func TestCreate(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
-	lead := seedLeader(t, e.db, "lead")
+	e := newEnv(t, nil, nil)
+	lead := leader(t, e, 1, "lead")
 	mustCreate(t, e, lead, "alpha")
 	member, _ := inviteMember(t, e, lead, "alpha", "work")
 	tests := []struct {
@@ -36,15 +39,11 @@ func TestCreate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := e.svc.Create(context.Background(), tc.p, tc.space)
 			if tc.wantKind != "" {
-				assertErr(t, err, tc.wantKind, tc.wantMsg)
+				apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
 				return
 			}
 			if err != nil {
 				t.Fatalf("create: %v", err)
-			}
-			if n := countRows(t, e.db, `SELECT COUNT(*) FROM topics t JOIN spaces s ON s.id = t.space_id
-				WHERE s.name = ? AND t.name = 'all' AND t.closed_at IS NULL AND t.created_by = ?`, tc.space, tc.p.AgentID); n != 1 {
-				t.Fatalf("all topics = %d, want 1", n)
 			}
 			ps, _ := e.svc.Participants(context.Background(), tc.p, tc.space)
 			if want := []Participant{{"lead", RoleLeader}}; !reflect.DeepEqual(ps, want) {
@@ -56,9 +55,9 @@ func TestCreate(t *testing.T) {
 
 func TestJoin(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
-	lead := seedLeader(t, e.db, "lead")
-	other := seedLeader(t, e.db, "other")
+	e := newEnv(t, nil, nil)
+	lead := leader(t, e, 1, "lead")
+	other := leader(t, e, 2, "other")
 	mustCreate(t, e, lead, "alpha")
 	member, _ := inviteMember(t, e, lead, "alpha", "work")
 	tests := []struct {
@@ -79,7 +78,7 @@ func TestJoin(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := e.svc.Join(context.Background(), tc.p, tc.space)
 			if tc.wantKind != "" {
-				assertErr(t, err, tc.wantKind, tc.wantMsg)
+				apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
 				return
 			}
 			if err != nil {
@@ -96,9 +95,9 @@ func TestJoin(t *testing.T) {
 
 func TestList(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
-	lead := seedLeader(t, e.db, "lead")
-	other := seedLeader(t, e.db, "other")
+	e := newEnv(t, nil, nil)
+	lead := leader(t, e, 1, "lead")
+	other := leader(t, e, 2, "other")
 	mustCreate(t, e, other, "beta")
 	mustCreate(t, e, lead, "alpha")
 	member, _ := inviteMember(t, e, lead, "alpha", "work")
@@ -119,7 +118,7 @@ func TestList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := e.svc.List(context.Background(), tc.p)
 			if tc.wantKind != "" {
-				assertErr(t, err, tc.wantKind, "")
+				apperrtest.WantKind(t, err, tc.wantKind, "")
 				return
 			}
 			if err != nil || !reflect.DeepEqual(got, tc.want) {
@@ -131,19 +130,19 @@ func TestList(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
+	e := newEnv(t, nil, nil)
 	ctx := context.Background()
-	lead := seedLeader(t, e.db, "lead")
-	other := seedLeader(t, e.db, "other")
-	stranger := seedLeader(t, e.db, "stranger")
+	lead := leader(t, e, 1, "lead")
+	other := leader(t, e, 2, "other")
+	stranger := leader(t, e, 3, "stranger")
 	mustCreate(t, e, lead, "alpha")
 	member, tok := inviteMember(t, e, lead, "alpha", "work")
 	if err := e.svc.Join(ctx, other, "alpha"); err != nil {
 		t.Fatalf("join: %v", err)
 	}
-	assertErr(t, e.svc.Delete(ctx, member, "alpha"), apperr.Forbidden, "")
-	assertErr(t, e.svc.Delete(ctx, stranger, "alpha"), apperr.Forbidden, "not a participant of space alpha")
-	assertErr(t, e.svc.Delete(ctx, lead, "alpha"), apperr.Conflict,
+	apperrtest.WantKind(t, e.svc.Delete(ctx, member, "alpha"), apperr.Forbidden, "")
+	apperrtest.WantKind(t, e.svc.Delete(ctx, stranger, "alpha"), apperr.Forbidden, "not a participant of space alpha")
+	apperrtest.WantKind(t, e.svc.Delete(ctx, lead, "alpha"), apperr.Conflict,
 		"space alpha has other leaders; they must leave first")
 	if err := e.svc.Leave(ctx, other, "alpha"); err != nil {
 		t.Fatalf("leave: %v", err)
@@ -151,17 +150,17 @@ func TestDelete(t *testing.T) {
 	if err := e.svc.Delete(ctx, lead, "alpha"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	assertErr(t, e.svc.Delete(ctx, lead, "alpha"), apperr.NotFound, "space alpha not found")
+	apperrtest.WantKind(t, e.svc.Delete(ctx, lead, "alpha"), apperr.NotFound, "space alpha not found")
 	_, err := e.auth.Authenticate(ctx, tok)
-	assertErr(t, err, apperr.Unauthenticated, "")
+	apperrtest.WantKind(t, err, apperr.Unauthenticated, "")
 }
 
 func TestInvite(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
+	e := newEnv(t, nil, nil)
 	ctx := context.Background()
-	lead := seedLeader(t, e.db, "lead")
-	seedLeader(t, e.db, "boss")
+	lead := leader(t, e, 1, "lead")
+	leader(t, e, 2, "boss")
 	mustCreate(t, e, lead, "alpha")
 	member, tok1 := inviteMember(t, e, lead, "alpha", "work")
 	tests := []struct {
@@ -181,7 +180,7 @@ func TestInvite(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := e.svc.Invite(ctx, tc.p, tc.space, tc.invitee)
-			assertErr(t, err, tc.wantKind, tc.wantMsg)
+			apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
 		})
 	}
 	t.Run("re-invite", func(t *testing.T) {
@@ -200,29 +199,26 @@ func TestInvite(t *testing.T) {
 
 func TestRevoke(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
+	e := newEnv(t, nil, nil)
 	ctx := context.Background()
-	lead := seedLeader(t, e.db, "lead")
-	other := seedLeader(t, e.db, "other")
+	lead := leader(t, e, 1, "lead")
+	other := leader(t, e, 2, "other")
 	mustCreate(t, e, lead, "alpha")
 	if err := e.svc.Join(ctx, other, "alpha"); err != nil {
 		t.Fatalf("join: %v", err)
 	}
 	member, tok := inviteMember(t, e, lead, "alpha", "work")
 	peer, _ := inviteMember(t, e, lead, "alpha", "peer")
-	mustExec(t, e.db, `INSERT INTO inbox (agent_id, space_id, type, from_name, created_at) VALUES (?, ?, 'direct_message', 'lead', ?)`,
-		member.AgentID, member.SpaceID, fixtureTS)
-	assertErr(t, e.svc.Revoke(ctx, peer, "alpha", "work"), apperr.Forbidden, "")
-	assertErr(t, e.svc.Revoke(ctx, lead, "alpha", "other"), apperr.NotFound, "member other not in space alpha")
-	assertErr(t, e.svc.Revoke(ctx, lead, "alpha", "ghost"), apperr.NotFound, "member ghost not in space alpha")
+	seedInbox(t, e, member)
+	apperrtest.WantKind(t, e.svc.Revoke(ctx, peer, "alpha", "work"), apperr.Forbidden, "")
+	apperrtest.WantKind(t, e.svc.Revoke(ctx, lead, "alpha", "other"), apperr.NotFound, "member other not in space alpha")
+	apperrtest.WantKind(t, e.svc.Revoke(ctx, lead, "alpha", "ghost"), apperr.NotFound, "member ghost not in space alpha")
 	if err := e.svc.Revoke(ctx, lead, "alpha", "work"); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 	_, err := e.auth.Authenticate(ctx, tok)
-	assertErr(t, err, apperr.Unauthenticated, "")
-	if n := countRows(t, e.db, `SELECT COUNT(*) FROM inbox WHERE agent_id = ?`, member.AgentID); n != 0 {
-		t.Fatalf("inbox rows = %d", n)
-	}
+	apperrtest.WantKind(t, err, apperr.Unauthenticated, "")
+	wantNoInbox(t, e, member)
 	ps, _ := e.svc.Participants(ctx, lead, "alpha")
 	want := []Participant{{"lead", RoleLeader}, {"other", RoleLeader}, {"peer", RoleMember}}
 	if !reflect.DeepEqual(ps, want) {
@@ -232,26 +228,28 @@ func TestRevoke(t *testing.T) {
 
 func TestLeave(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
+	e := newEnv(t, nil, nil)
 	ctx := context.Background()
-	lead := seedLeader(t, e.db, "lead")
+	lead := leader(t, e, 1, "lead")
 	mustCreate(t, e, lead, "alpha")
 	member, tok := inviteMember(t, e, lead, "alpha", "work")
-	assertErr(t, e.svc.Leave(ctx, lead, "alpha"), apperr.Conflict, "last leader cannot leave; delete the space instead")
-	assertErr(t, e.svc.Leave(ctx, admin, "alpha"), apperr.Forbidden, "")
+	apperrtest.WantKind(t, e.svc.Leave(ctx, lead, "alpha"), apperr.Conflict, "last leader cannot leave; delete the space instead")
+	apperrtest.WantKind(t, e.svc.Leave(ctx, admin, "alpha"), apperr.Forbidden, "")
+	seedInbox(t, e, member)
 	if err := e.svc.Leave(ctx, member, "alpha"); err != nil {
 		t.Fatalf("member leave: %v", err)
 	}
 	_, err := e.auth.Authenticate(ctx, tok)
-	assertErr(t, err, apperr.Unauthenticated, "")
+	apperrtest.WantKind(t, err, apperr.Unauthenticated, "")
+	wantNoInbox(t, e, member)
 }
 
 func TestParticipants(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
+	e := newEnv(t, nil, nil)
 	ctx := context.Background()
-	lead := seedLeader(t, e.db, "zed")
-	other := seedLeader(t, e.db, "amy")
+	lead := leader(t, e, 1, "zed")
+	other := leader(t, e, 2, "amy")
 	mustCreate(t, e, lead, "alpha")
 	if err := e.svc.Join(ctx, other, "alpha"); err != nil {
 		t.Fatalf("join: %v", err)
@@ -264,7 +262,7 @@ func TestParticipants(t *testing.T) {
 		t.Fatalf("got %+v, %v; want %+v", got, err, want)
 	}
 	_, err = e.svc.Participants(ctx, admin, "alpha")
-	assertErr(t, err, apperr.Forbidden, "")
+	apperrtest.WantKind(t, err, apperr.Forbidden, "")
 }
 
 // recordingHook records departures and notifies a fixed recipient.
@@ -282,9 +280,9 @@ func (h *recordingHook) OnDeparture(_ context.Context, _ db.DBTX, m Membership) 
 func TestDepartureHook(t *testing.T) {
 	t.Parallel()
 	hook := &recordingHook{}
-	e := newEnv(t, hook)
+	e := newEnv(t, []DepartureHook{hook}, nil)
 	ctx := context.Background()
-	lead := seedLeader(t, e.db, "lead")
+	lead := leader(t, e, 1, "lead")
 	mustCreate(t, e, lead, "alpha")
 	member, _ := inviteMember(t, e, lead, "alpha", "work")
 	hook.recipient = lead.AgentID
@@ -299,5 +297,74 @@ func TestDepartureHook(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0].Type != inbox.BlackboardRemoved || got[0].From != "work" ||
 		got[0].Space != "alpha" || got[0].Blackboard != "notes" {
 		t.Fatalf("inbox = %+v, %v", got, err)
+	}
+}
+
+// seedInbox delivers one direct message to member through the real inbox service.
+func seedInbox(t *testing.T, e env, member auth.Principal) {
+	t.Helper()
+	err := e.inbox.Deliver(context.Background(), func(*sql.Tx) ([]inbox.Entry, error) {
+		return []inbox.Entry{{AgentID: member.AgentID, SpaceID: member.SpaceID, Space: "alpha",
+			Type: inbox.DirectMessage, From: "lead", Body: "hi"}}, nil
+	})
+	if err != nil {
+		t.Fatalf("delivering: %v", err)
+	}
+	if got, err := e.inbox.Read(context.Background(), member, 0, 0); err != nil || len(got) != 1 {
+		t.Fatalf("seeded inbox = %+v, %v", got, err)
+	}
+}
+
+// wantNoInbox asserts member's space inbox rows are gone.
+func wantNoInbox(t *testing.T, e env, member auth.Principal) {
+	t.Helper()
+	if n := countRows(t, e.db, `SELECT COUNT(*) FROM inbox WHERE agent_id = ? AND space_id = ?`,
+		member.AgentID, member.SpaceID); n != 0 {
+		t.Fatalf("inbox rows = %d, want 0", n)
+	}
+}
+
+// creationHook records creations, checking each runs inside the creating tx.
+type creationHook struct {
+	calls   []Membership
+	visible bool
+	err     error
+}
+
+func (h *creationHook) OnSpaceCreated(ctx context.Context, tx db.DBTX, m Membership) error {
+	h.calls = append(h.calls, m)
+	_, found, err := spaceIDByName(ctx, tx, m.SpaceName)
+	h.visible = err == nil && found
+	return h.err
+}
+
+func TestCreationHook(t *testing.T) {
+	t.Parallel()
+	boom := errors.New("boom")
+	tests := []struct {
+		name    string
+		hookErr error
+		want    bool
+	}{{"ok", nil, true}, {"error rolls back", boom, false}}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hook := &creationHook{err: tc.hookErr}
+			e := newEnv(t, nil, []CreationHook{hook})
+			lead := leader(t, e, 1, "lead")
+			err := e.svc.Create(context.Background(), lead, "alpha")
+			if !errors.Is(err, tc.hookErr) || (tc.hookErr == nil && err != nil) {
+				t.Fatalf("create err = %v, want %v", err, tc.hookErr)
+			}
+			if len(hook.calls) != 1 || !hook.visible {
+				t.Fatalf("calls = %+v, visible in tx = %v", hook.calls, hook.visible)
+			}
+			wantM := Membership{SpaceID: hook.calls[0].SpaceID, SpaceName: "alpha", AgentID: 1, AgentName: "lead", Role: RoleLeader}
+			if hook.calls[0] != wantM || wantM.SpaceID == 0 {
+				t.Fatalf("membership = %+v, want %+v", hook.calls[0], wantM)
+			}
+			if n := countRows(t, e.db, `SELECT COUNT(*) FROM spaces WHERE name = 'alpha'`); (n == 1) != tc.want {
+				t.Fatalf("spaces = %d, want exists %v", n, tc.want)
+			}
+		})
 	}
 }

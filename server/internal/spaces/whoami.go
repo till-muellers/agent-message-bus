@@ -2,7 +2,6 @@ package spaces
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 )
@@ -29,10 +28,11 @@ func (s *Service) Whoami(ctx context.Context, p auth.Principal) (WhoamiResult, e
 	}
 	res.Name = p.AgentName
 	if p.Kind == auth.Member {
-		err := s.db.QueryRowContext(ctx, `SELECT name FROM spaces WHERE id = ?`, p.SpaceID).Scan(&res.Space)
+		name, err := spaceName(ctx, s.db, p.SpaceID)
 		if err != nil {
-			return WhoamiResult{}, fmt.Errorf("looking up member space: %w", err)
+			return WhoamiResult{}, err
 		}
+		res.Space = name
 	}
 	spaces, err := agentSpaces(ctx, s.db, p.AgentID)
 	if err != nil {

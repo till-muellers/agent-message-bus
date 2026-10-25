@@ -45,27 +45,35 @@ func spaceExists(ctx context.Context, q db.DBTX, name string) (bool, error) {
 	return n > 0, nil
 }
 
+// spaceIDByName returns the id of space name, or found=false.
+func spaceIDByName(ctx context.Context, q db.DBTX, name string) (int64, bool, error) {
+	var id int64
+	err := q.QueryRowContext(ctx, `SELECT id FROM spaces WHERE name = ?`, name).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("looking up space %s: %w", name, err)
+	}
+	return id, true, nil
+}
+
+// spaceName returns the name of space id.
+func spaceName(ctx context.Context, q db.DBTX, id int64) (string, error) {
+	var name string
+	if err := q.QueryRowContext(ctx, `SELECT name FROM spaces WHERE id = ?`, id).Scan(&name); err != nil {
+		return "", fmt.Errorf("looking up space %d: %w", id, err)
+	}
+	return name, nil
+}
+
 // insertSpace creates a space and returns its id.
 func insertSpace(ctx context.Context, q db.DBTX, name string, creator int64, ts string) (int64, error) {
-	res, err := q.ExecContext(ctx,
-		`INSERT INTO spaces (name, created_by, created_at) VALUES (?, ?, ?)`, name, creator, ts)
+	id, err := db.InsertID(ctx, q, `INSERT INTO spaces (name, created_by, created_at) VALUES (?, ?, ?)`, name, creator, ts)
 	if err != nil {
 		return 0, fmt.Errorf("inserting space %s: %w", name, err)
 	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("reading space id: %w", err)
-	}
 	return id, nil
-}
-
-func insertAllTopic(ctx context.Context, q db.DBTX, spaceID, creator int64, ts string) error {
-	_, err := q.ExecContext(ctx,
-		`INSERT INTO topics (space_id, name, created_by, created_at) VALUES (?, 'all', ?, ?)`, spaceID, creator, ts)
-	if err != nil {
-		return fmt.Errorf("inserting all topic: %w", err)
-	}
-	return nil
 }
 
 func insertParticipant(ctx context.Context, q db.DBTX, spaceID, agentID int64, role Role, ts string) error {
@@ -124,17 +132,10 @@ func deleteSpace(ctx context.Context, q db.DBTX, spaceID int64) error {
 	return nil
 }
 
-// deleteParticipantData removes inbox rows, space tokens and the participant row.
-func deleteParticipantData(ctx context.Context, q db.DBTX, spaceID, agentID int64) error {
-	stmts := []string{
-		`DELETE FROM inbox WHERE agent_id = ? AND space_id = ?`,
-		`DELETE FROM tokens WHERE agent_id = ? AND space_id = ?`,
-		`DELETE FROM participants WHERE agent_id = ? AND space_id = ?`,
-	}
-	for _, st := range stmts {
-		if _, err := q.ExecContext(ctx, st, agentID, spaceID); err != nil {
-			return fmt.Errorf("removing participant data: %w", err)
-		}
+func deleteParticipant(ctx context.Context, q db.DBTX, spaceID, agentID int64) error {
+	_, err := q.ExecContext(ctx, `DELETE FROM participants WHERE agent_id = ? AND space_id = ?`, agentID, spaceID)
+	if err != nil {
+		return fmt.Errorf("deleting participant: %w", err)
 	}
 	return nil
 }
@@ -162,6 +163,15 @@ func listParticipants(ctx context.Context, q db.DBTX, spaceID int64) ([]Particip
 }
 
 // agentSpaces lists the spaces agentID participates in, ordered by name.
+// participantIDs returns the agent ids of every participant of spaceID, ascending.
+func participantIDs(ctx context.Context, q db.DBTX, spaceID int64) ([]int64, error) {
+	ids, err := db.QueryIDs(ctx, q, `SELECT agent_id FROM participants WHERE space_id = ? ORDER BY agent_id`, spaceID)
+	if err != nil {
+		return nil, fmt.Errorf("listing participants of space %d: %w", spaceID, err)
+	}
+	return ids, nil
+}
+
 func agentSpaces(ctx context.Context, q db.DBTX, agentID int64) ([]SpaceRole, error) {
 	rows, err := q.QueryContext(ctx, `SELECT s.name, p.role FROM participants p JOIN spaces s ON s.id = p.space_id
 		WHERE p.agent_id = ? ORDER BY s.name`, agentID)

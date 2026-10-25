@@ -13,13 +13,14 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-type tokenMinter interface {
+type tokenStore interface {
 	MintMember(ctx context.Context, tx db.DBTX, name string, spaceID int64) (agentID int64, token string, err error)
+	RevokeSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
 }
 
-type inboxWriter interface {
-	Insert(ctx context.Context, tx db.DBTX, es []inbox.Entry) ([]inbox.Entry, error)
-	Publish(es []inbox.Entry)
+type inboxStore interface {
+	Deliver(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) error
+	DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
 }
 
 // SpaceInfo summarises a space for listing.
@@ -38,47 +39,28 @@ type Participant struct {
 
 // Service manages spaces and their participants.
 type Service struct {
-	db     *sql.DB
-	r      *Resolver
-	tokens tokenMinter
-	ib     inboxWriter
-	now    func() time.Time
-	hooks  []DepartureHook
+	db        *sql.DB
+	r         *Resolver
+	tokens    tokenStore
+	ib        inboxStore
+	now       func() time.Time
+	departure []DepartureHook
+	creation  []CreationHook
 }
 
-// NewService returns a spaces Service; hooks run when a participant departs.
-func NewService(db *sql.DB, r *Resolver, tokens tokenMinter, ib inboxWriter, now func() time.Time, hooks ...DepartureHook) *Service {
-	return &Service{db: db, r: r, tokens: tokens, ib: ib, now: now, hooks: hooks}
+// NewService returns a spaces Service; departure hooks run when a participant
+// departs, creation hooks when a space is created.
+func NewService(conn *sql.DB, r *Resolver, a tokenStore, ib inboxStore, now func() time.Time,
+	departure []DepartureHook, creation []CreationHook) *Service {
+	return &Service{db: conn, r: r, tokens: a, ib: ib, now: now, departure: departure, creation: creation}
 }
 
-// inTx runs fn in one transaction, inserts its entries, commits and publishes.
-func (s *Service) inTx(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("beginning tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	entries, err := fn(tx)
-	if err != nil {
-		return err
-	}
-	inserted, err := s.ib.Insert(ctx, tx, entries)
-	if err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("committing: %w", err)
-	}
-	s.ib.Publish(inserted)
-	return nil
-}
-
-func (s *Service) stamp() string { return s.now().UTC().Format(time.RFC3339Nano) }
+func (s *Service) stamp() string { return db.Timestamp(s.now()) }
 
 // List returns the spaces visible to p: all for leaders, its own for members.
 func (s *Service) List(ctx context.Context, p auth.Principal) ([]SpaceInfo, error) {
-	if p.Kind == auth.Admin {
-		return nil, apperr.New(apperr.Forbidden, "admin token cannot act in spaces; mint a leader with bus_mint_leader")
+	if err := requireAgent(p); err != nil {
+		return nil, err
 	}
 	rows, err := listSpaces(ctx, s.db, p.SpaceID)
 	if err != nil {
@@ -110,13 +92,6 @@ func summarize(name string, ps []Participant, caller string) SpaceInfo {
 	return info
 }
 
-func requireLeaderPrincipal(p auth.Principal, action string) error {
-	if p.Kind != auth.Leader {
-		return apperr.New(apperr.Forbidden, "only leaders may %s", action)
-	}
-	return nil
-}
-
 func requireLeaderRole(m Membership, action string) error {
 	if m.Role != RoleLeader {
 		return apperr.New(apperr.Forbidden, "only leaders may %s", action)
@@ -124,7 +99,7 @@ func requireLeaderRole(m Membership, action string) error {
 	return nil
 }
 
-// Create makes a new space led by p, with the open topic all.
+// Create makes a new space led by p and runs the creation hooks.
 func (s *Service) Create(ctx context.Context, p auth.Principal, name string) error {
 	if err := requireLeaderPrincipal(p, "create spaces"); err != nil {
 		return err
@@ -132,24 +107,34 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, name string) err
 	if err := domain.ValidName("space", name); err != nil {
 		return err
 	}
-	return s.inTx(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
-		exists, err := spaceExists(ctx, tx, name)
-		if err != nil {
-			return nil, err
-		}
-		if exists {
-			return nil, apperr.New(apperr.Conflict, "space %s already exists", name)
-		}
-		ts := s.stamp()
-		id, err := insertSpace(ctx, tx, name, p.AgentID, ts)
-		if err != nil {
-			return nil, err
-		}
-		if err := insertParticipant(ctx, tx, id, p.AgentID, RoleLeader, ts); err != nil {
-			return nil, err
-		}
-		return nil, insertAllTopic(ctx, tx, id, p.AgentID, ts)
+	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+		return nil, s.createInTx(ctx, tx, p, name)
 	})
+}
+
+func (s *Service) createInTx(ctx context.Context, tx *sql.Tx, p auth.Principal, name string) error {
+	exists, err := spaceExists(ctx, tx, name)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return apperr.New(apperr.Conflict, "space %s already exists", name)
+	}
+	ts := s.stamp()
+	id, err := insertSpace(ctx, tx, name, p.AgentID, ts)
+	if err != nil {
+		return err
+	}
+	if err := insertParticipant(ctx, tx, id, p.AgentID, RoleLeader, ts); err != nil {
+		return err
+	}
+	m := Membership{SpaceID: id, SpaceName: name, AgentID: p.AgentID, AgentName: p.AgentName, Role: RoleLeader}
+	for _, h := range s.creation {
+		if err := h.OnSpaceCreated(ctx, tx, m); err != nil {
+			return fmt.Errorf("running creation hook: %w", err)
+		}
+	}
+	return nil
 }
 
 // Join adds leader p to an existing space as a leader.
@@ -157,7 +142,7 @@ func (s *Service) Join(ctx context.Context, p auth.Principal, name string) error
 	if err := requireLeaderPrincipal(p, "join spaces"); err != nil {
 		return err
 	}
-	return s.inTx(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		_, err := s.r.ResolveTx(ctx, tx, p, name)
 		if err == nil {
 			return nil, apperr.New(apperr.Conflict, "already a participant of %s", name)
@@ -165,9 +150,9 @@ func (s *Service) Join(ctx context.Context, p auth.Principal, name string) error
 		if kind, _ := apperr.KindOf(err); kind != apperr.Forbidden {
 			return nil, err
 		}
-		var id int64
-		if err := tx.QueryRowContext(ctx, `SELECT id FROM spaces WHERE name = ?`, name).Scan(&id); err != nil {
-			return nil, fmt.Errorf("looking up space %s: %w", name, err)
+		id, _, err := spaceIDByName(ctx, tx, name)
+		if err != nil {
+			return nil, err
 		}
 		return nil, insertParticipant(ctx, tx, id, p.AgentID, RoleLeader, s.stamp())
 	})
@@ -175,7 +160,7 @@ func (s *Service) Join(ctx context.Context, p auth.Principal, name string) error
 
 // Delete removes a space; only its sole remaining leader may do so.
 func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) error {
-	return s.inTx(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.r.ResolveTx(ctx, tx, p, name)
 		if err != nil {
 			return nil, err
@@ -197,7 +182,7 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) err
 // Invite mints a member token for name in space, adding the participant if new.
 func (s *Service) Invite(ctx context.Context, p auth.Principal, space, name string) (string, error) {
 	var token string
-	err := s.inTx(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	err := s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.r.ResolveTx(ctx, tx, p, space)
 		if err != nil {
 			return nil, err
@@ -224,7 +209,7 @@ func (s *Service) Invite(ctx context.Context, p auth.Principal, space, name stri
 
 // Revoke removes member name from space.
 func (s *Service) Revoke(ctx context.Context, p auth.Principal, space, name string) error {
-	return s.inTx(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.r.ResolveTx(ctx, tx, p, space)
 		if err != nil {
 			return nil, err
@@ -246,7 +231,7 @@ func (s *Service) Revoke(ctx context.Context, p auth.Principal, space, name stri
 
 // Leave removes p from space; the last leader cannot leave.
 func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) error {
-	return s.inTx(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.r.ResolveTx(ctx, tx, p, space)
 		if err != nil {
 			return nil, err
@@ -264,20 +249,23 @@ func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) err
 	})
 }
 
-// removeParticipant runs hooks, then deletes inbox rows, space tokens and the participant.
+// removeParticipant runs departure hooks, then deletes inbox rows, space tokens and the participant.
 func (s *Service) removeParticipant(ctx context.Context, tx *sql.Tx, m Membership) ([]inbox.Entry, error) {
 	var entries []inbox.Entry
-	for _, h := range s.hooks {
+	for _, h := range s.departure {
 		es, err := h.OnDeparture(ctx, tx, m)
 		if err != nil {
 			return nil, fmt.Errorf("running departure hook: %w", err)
 		}
 		entries = append(entries, es...)
 	}
-	if err := deleteParticipantData(ctx, tx, m.SpaceID, m.AgentID); err != nil {
+	if err := s.ib.DeleteSpaceEntries(ctx, tx, m.AgentID, m.SpaceID); err != nil {
 		return nil, err
 	}
-	return entries, nil
+	if err := s.tokens.RevokeSpaceTokens(ctx, tx, m.AgentID, m.SpaceID); err != nil {
+		return nil, err
+	}
+	return entries, deleteParticipant(ctx, tx, m.SpaceID, m.AgentID)
 }
 
 // Participants lists the participants of space, leaders first.

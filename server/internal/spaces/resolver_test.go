@@ -2,31 +2,26 @@ package spaces
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 )
 
-func mustExec(t *testing.T, db *sql.DB, q string, args ...any) {
-	t.Helper()
-	if _, err := db.ExecContext(context.Background(), q, args...); err != nil {
-		t.Fatalf("exec %q: %v", q, err)
-	}
-}
-
 func TestResolve(t *testing.T) {
 	t.Parallel()
-	db := dbtest.Open(t)
-	const ts = "2026-01-01T00:00:00Z"
-	mustExec(t, db, `INSERT INTO agents (id, name, kind, created_at) VALUES
-		(1,'lead','leader',?),(2,'work','member',?),(3,'other','leader',?)`, ts, ts, ts)
-	mustExec(t, db, `INSERT INTO spaces (id, name, created_by, created_at) VALUES (10,'alpha',1,?),(20,'beta',1,?)`, ts, ts)
-	mustExec(t, db, `INSERT INTO participants (space_id, agent_id, role, joined_at) VALUES
-		(10,1,'leader',?),(10,2,'member',?),(20,1,'leader',?)`, ts, ts, ts)
-	r := NewResolver(db)
+	conn := dbtest.Open(t)
+	dbtest.SeedAgent(t, conn, 1, "lead", "leader")
+	dbtest.SeedAgent(t, conn, 2, "work", "member")
+	dbtest.SeedAgent(t, conn, 3, "other", "leader")
+	dbtest.SeedSpace(t, conn, 10, "alpha", 1)
+	dbtest.SeedSpace(t, conn, 20, "beta", 1)
+	dbtest.SeedParticipant(t, conn, 10, 1, "leader")
+	dbtest.SeedParticipant(t, conn, 10, 2, "member")
+	dbtest.SeedParticipant(t, conn, 20, 1, "leader")
+	r := NewResolver(conn)
 	lead := auth.Principal{Kind: auth.Leader, AgentID: 1, AgentName: "lead"}
 	work := auth.Principal{Kind: auth.Member, AgentID: 2, AgentName: "work", SpaceID: 10}
 	tests := []struct {
@@ -51,10 +46,7 @@ func TestResolve(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := r.Resolve(context.Background(), tc.p, tc.space)
 			if tc.wantKind != "" {
-				kind, _ := apperr.KindOf(err)
-				if kind != tc.wantKind || err.Error() != tc.wantMsg {
-					t.Fatalf("err = %v (%s), want %s %q", err, kind, tc.wantKind, tc.wantMsg)
-				}
+				apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
 				return
 			}
 			if err != nil || got != tc.want {
