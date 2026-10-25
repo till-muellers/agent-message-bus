@@ -6,17 +6,21 @@
 import { type CommandResult, parseArgs } from "../../_shared/command.ts";
 import { BusError, type BusClient } from "./client.ts";
 import { type CredentialStore, resolveActive, type SessionCredentials, trimUrl } from "./credentials.ts";
+import { type ServerCli, serverCommand } from "./server.ts";
 
 export interface CommandDeps {
 	store: CredentialStore;
 	client: BusClient;
-	env: NodeJS.ProcessEnv;
-	/** In-memory credentials of this session; `/bus promote` sets the override, login (agent token) and logout clear it. */
+	/** In-memory credentials of this session: `/bus promote` sets the override, login (agent token) clears it, logout clears it and the env credentials. */
 	session: SessionCredentials;
+	/** Runs the local agent-message-bus CLI for `/bus server`. */
+	server: ServerCli;
 	/** Re-resolves credentials, registers tools and restarts the inbox loop. */
 	restart(): Promise<void>;
-	/** Stops the inbox loop and drops the active credentials. */
-	stop(): void;
+	/** Re-activates the bus tools after a logout. */
+	activate(): Promise<void>;
+	/** Stops the inbox loop, drops the active credentials and deactivates every `bus_*` tool. */
+	stop(): Promise<void>;
 }
 
 interface Whoami {
@@ -28,16 +32,19 @@ interface Whoami {
 
 export const USAGE = [
 	"Agent message bus:",
-	"  /bus login <url> <token>     store a bus token (admin, leader or member)",
+	"  /bus login <url> <token>     store a bus token (admin, leader or member) and activate the bus tools",
 	"  /bus promote <leader-name>   mint a leader token with the stored admin token; this session only, never stored",
 	"  /bus status                  show who this session is on the bus",
-	"  /bus logout                  forget the stored and session credentials and stop the inbox stream",
+	"  /bus logout                  forget the stored, session and env credentials, stop the inbox stream and deactivate the bus tools",
+	"  /bus server start            start a local agent-message-bus (AGENT_BUS_BIN, PATH or download) and store its admin token",
+	"  /bus server stop             stop the local agent-message-bus and log out",
+	"  /bus server status           show whether the local agent-message-bus is running",
 	"  /bus help                    show this help",
 ].join("\n");
 
 async function status(deps: CommandDeps): Promise<CommandResult> {
 	const stored = await deps.store.load();
-	const active = resolveActive(deps.session, deps.env, stored);
+	const active = resolveActive(deps.session, stored);
 	const url = active?.url ?? (stored ? trimUrl(stored.url) : undefined);
 	const token = active?.token ?? stored?.adminToken;
 	if (!url || !token) return { message: `Not logged in.\n${USAGE}`, level: "info" };
@@ -53,11 +60,13 @@ async function login(deps: CommandDeps, rawUrl: string | undefined, token: strin
 	const stored = await deps.store.load().catch(() => undefined);
 	if (me.kind === "admin") {
 		await deps.store.save({ url, adminToken: token, token: stored?.url === url ? stored.token : undefined });
+		await deps.activate();
 		return { message: "Admin token stored. Run /bus promote <leader-name> to act as a leader.", level: "info" };
 	}
 	await deps.store.save({ url, adminToken: stored?.url === url ? stored.adminToken : undefined, token });
 	deps.session.override = undefined;
 	await deps.restart();
+	await deps.activate();
 	return { message: `Logged in as ${me.kind} ${me.name}`, level: "info" };
 }
 
@@ -73,16 +82,13 @@ async function promote(deps: CommandDeps, name: string | undefined): Promise<Com
 	return { message: `This session now acts as leader ${minted.name} (until it ends; run /bus promote again after a restart).`, level: "info" };
 }
 
-/** Clears the stored file and the session override; env credentials, when set, keep the session active. */
+/** Clears the stored file, the session override and the env credentials; no fallback remains, so the bus tools are deactivated. */
 async function logout(deps: CommandDeps): Promise<CommandResult> {
 	await deps.store.clear();
 	deps.session.override = undefined;
-	if (!resolveActive(deps.session, deps.env, undefined)) {
-		deps.stop();
-		return { message: "Logged out.", level: "info" };
-	}
-	await deps.restart();
-	return { message: "Logged out; session still uses AGENT_BUS_URL/AGENT_BUS_TOKEN from the environment.", level: "info" };
+	deps.session.env = undefined;
+	await deps.stop();
+	return { message: "Logged out; bus tools deactivated.", level: "info" };
 }
 
 export async function runCommand(rawArgs: string | string[] | undefined, deps: CommandDeps): Promise<CommandResult> {
@@ -97,6 +103,8 @@ export async function runCommand(rawArgs: string | string[] | undefined, deps: C
 				return await promote(deps, rest[0]);
 			case "logout":
 				return await logout(deps);
+			case "server":
+				return await serverCommand(rest[0], { cli: deps.server, store: deps.store, activate: deps.activate, logout: () => logout(deps) });
 			case "help":
 				return { message: USAGE, level: "info" };
 			default:

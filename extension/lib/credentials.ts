@@ -5,10 +5,11 @@
  * active omp agent directory (`PI_CODING_AGENT_DIR`, default `~/.omp/agent`)
  * under `agent-message-bus/credentials.json`, owner-only (0600; Windows ignores
  * the mode and relies on the user-profile ACL). `OMP_AGENT_BUS_DIR` overrides
- * the directory. `AGENT_BUS_URL` + `AGENT_BUS_TOKEN` in the environment override
- * the stored url/token, so spawned agents can run on member tokens. A leader
- * token from `/bus promote` lives only in the session (`SessionCredentials`) and
- * overrides both; it is never written to the file.
+ * the directory. `AGENT_BUS_URL` + `AGENT_BUS_TOKEN` are read once at load
+ * (`lib/env.ts`) into the session and override the stored url/token, so
+ * spawned agents can run on member tokens. A leader token from `/bus promote`
+ * lives only in the session (`SessionCredentials`) and overrides both; it is
+ * never written to the file. `/bus logout` clears all three.
  */
 import { join } from "node:path";
 import { agentConfigDir, createJsonFileStore, type JsonFileStore } from "../../_shared/credential-store.ts";
@@ -25,9 +26,10 @@ export interface ActiveCredentials {
 	token: string;
 }
 
-/** Per-session credentials held in memory only: the leader token minted by `/bus promote`. */
+/** Credentials held in memory only: the leader token minted by `/bus promote` and the env credentials read at load. */
 export interface SessionCredentials {
 	override?: ActiveCredentials;
+	env?: ActiveCredentials;
 }
 
 export type CredentialStore = JsonFileStore<StoredCredentials>;
@@ -64,14 +66,10 @@ export function createCredentialStore(env: NodeJS.ProcessEnv = process.env, dir:
 	});
 }
 
-/** Precedence: session override (promote) > env `AGENT_BUS_URL` + `AGENT_BUS_TOKEN` (both set) > stored agent token. Admin-only → undefined. */
-export function resolveActive(
-	session: SessionCredentials,
-	env: NodeJS.ProcessEnv,
-	stored: StoredCredentials | undefined,
-): ActiveCredentials | undefined {
+/** Precedence: session override (promote) > env credentials (read at load) > stored agent token. Admin-only → undefined. */
+export function resolveActive(session: SessionCredentials, stored: StoredCredentials | undefined): ActiveCredentials | undefined {
 	if (session.override) return session.override;
-	if (env.AGENT_BUS_URL && env.AGENT_BUS_TOKEN) return { url: trimUrl(env.AGENT_BUS_URL), token: env.AGENT_BUS_TOKEN };
+	if (session.env) return session.env;
 	if (stored?.token) return { url: trimUrl(stored.url), token: stored.token };
 	return undefined;
 }
