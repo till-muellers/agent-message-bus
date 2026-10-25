@@ -1,38 +1,25 @@
-package rpc
+package rpc_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/till-muellers/agent-message-bus/server/internal/auth"
-	"github.com/till-muellers/agent-message-bus/server/internal/blackboards"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
-	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
-	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
-	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
-	"github.com/till-muellers/agent-message-bus/server/internal/tools"
+	"github.com/till-muellers/agent-message-bus/server/internal/server"
 )
 
 const adminToken = "admin-token-0123456789-0123456789-abcdef"
 
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	db := dbtest.Open(t)
-	now := time.Now
-	a := auth.NewService(db, adminToken, now)
-	ib := inbox.NewService(db, broker.NewMemory(16), now)
-	r := spaces.NewResolver(db)
-	msg := messaging.NewService(db, r, ib, now)
-	bb := blackboards.NewService(db, r, ib, now)
-	sp := spaces.NewService(db, r, a, ib, now, msg, bb)
-	reg := tools.New(tools.Deps{Auth: a, Spaces: sp, Messaging: msg, Blackboards: bb, Inbox: ib})
-	srv := httptest.NewServer(a.Middleware(NewHandler(reg)))
-	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	srv := httptest.NewServer(server.Build(ctx, dbtest.Open(t), adminToken))
+	t.Cleanup(func() { cancel(); srv.Close() })
 	return srv
 }
 
