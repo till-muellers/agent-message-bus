@@ -2,7 +2,6 @@ package inbox
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"slices"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 )
@@ -39,13 +39,13 @@ func newWorld(t *testing.T) *world {
 	db := dbtest.Open(t)
 	pub := broker.NewMemory(16)
 	w := &world{svc: NewService(db, pub, testNow), pub: pub, db: db, entries: map[string]Entry{}}
-	lead := seedRow(t, db, `INSERT INTO agents (name, kind, created_at) VALUES ('lead', 'leader', '')`)
-	worker := seedRow(t, db, `INSERT INTO agents (name, kind, created_at) VALUES ('worker', 'member', '')`)
+	const lead, worker, alpha, beta = 1, 2, 1, 2
+	dbtest.SeedAgent(t, db, lead, "lead", "leader")
+	dbtest.SeedAgent(t, db, worker, "worker", "member")
+	dbtest.SeedSpace(t, db, alpha, "alpha", lead)
+	dbtest.SeedSpace(t, db, beta, "beta", lead)
 	w.agents = map[string]int64{"lead": lead, "worker": worker}
-	w.spaces = map[string]int64{
-		"alpha": seedRow(t, db, `INSERT INTO spaces (name, created_by, created_at) VALUES ('alpha', ?, '')`, lead),
-		"beta":  seedRow(t, db, `INSERT INTO spaces (name, created_by, created_at) VALUES ('beta', ?, '')`, lead),
-	}
+	w.spaces = map[string]int64{"alpha": alpha, "beta": beta}
 	w.principals = map[string]auth.Principal{
 		"admin":   {Kind: auth.Admin},
 		"leader":  {Kind: auth.Leader, AgentID: lead, AgentName: "lead"},
@@ -59,19 +59,6 @@ func newWorld(t *testing.T) *world {
 		w.insert(t, s[0], s[1], s[2])
 	}
 	return w
-}
-
-func seedRow(t *testing.T, db *sql.DB, query string, args ...any) int64 {
-	t.Helper()
-	res, err := db.ExecContext(t.Context(), query, args...)
-	if err != nil {
-		t.Fatalf("seeding %q: %v", query, err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		t.Fatalf("seeding %q: %v", query, err)
-	}
-	return id
 }
 
 // entry builds an unsaved direct message for agent in space.
@@ -119,13 +106,6 @@ func bodies(es []Entry) []string {
 		out = append(out, e.Body)
 	}
 	return out
-}
-
-func wantKind(t *testing.T, err error, want apperr.Kind) {
-	t.Helper()
-	if got, ok := apperr.KindOf(err); !ok || got != want {
-		t.Fatalf("err = %v, want kind %q", err, want)
-	}
 }
 
 func TestInsert(t *testing.T) {
@@ -194,7 +174,7 @@ func TestRead(t *testing.T) {
 			t.Parallel()
 			got, err := w.svc.Read(t.Context(), w.principals[tc.who], w.entries[tc.after].ID, tc.limit)
 			if tc.wantErr != "" {
-				wantKind(t, err, tc.wantErr)
+				apperrtest.WantKind(t, err, tc.wantErr, "")
 				return
 			}
 			if err != nil {
@@ -285,32 +265,56 @@ func TestAckAdminForbidden(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	_, err := w.svc.Ack(t.Context(), w.principals["admin"], w.entries["l2"].ID)
-	wantKind(t, err, apperr.Forbidden)
+	apperrtest.WantKind(t, err, apperr.Forbidden, "admin token has no inbox; mint a leader with bus_mint_leader")
 }
 
-func TestPublishRoutesToAgentTopic(t *testing.T) {
+func TestPublishSignalsEachAgentOnce(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	live, cancel := w.pub.Subscribe(fmt.Sprintf("inbox/%d", w.agents["worker"]))
-	t.Cleanup(cancel)
-	e := w.entries["b1"]
-	w.svc.Publish([]Entry{e})
-	select {
-	case payload := <-live:
-		var got Entry
-		if err := json.Unmarshal(payload, &got); err != nil {
-			t.Fatalf("decoding payload: %v", err)
+	worker, cancelW := w.pub.Subscribe(topic(w.agents["worker"]))
+	t.Cleanup(cancelW)
+	lead, cancelL := w.pub.Subscribe(topic(w.agents["lead"]))
+	t.Cleanup(cancelL)
+	w.svc.Publish([]Entry{w.entries["a1"], w.entries["b1"], w.entries["l1"], w.entries["a2"]})
+	for name, live := range map[string]<-chan []byte{"worker": worker, "lead": lead} {
+		if got := signals(t, live); got != 1 {
+			t.Fatalf("%s got %d signals, want 1", name, got)
 		}
-		if want := withoutIDs(e); !reflect.DeepEqual(got, want) {
-			t.Fatalf("payload = %+v, want %+v", got, want)
-		}
-	case <-time.After(waitTimeout):
-		t.Fatal("timed out waiting for published entry")
 	}
 }
 
-// withoutIDs drops the fields Entry's JSON omits.
-func withoutIDs(e Entry) Entry {
-	e.AgentID, e.SpaceID = 0, 0
-	return e
+// signals waits for one empty wake-up on live, then counts any extra queued ones.
+func signals(t *testing.T, live <-chan []byte) int {
+	t.Helper()
+	select {
+	case payload := <-live:
+		if payload != nil {
+			t.Fatalf("payload = %q, want nil", payload)
+		}
+	case <-time.After(waitTimeout):
+		t.Fatal("timed out waiting for wake-up signal")
+	}
+	n := 1
+	for {
+		select {
+		case <-live:
+			n++
+		case <-time.After(50 * time.Millisecond):
+			return n
+		}
+	}
+}
+
+func TestDeleteSpaceEntries(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	if err := w.svc.DeleteSpaceEntries(t.Context(), w.db, w.agents["worker"], w.spaces["alpha"]); err != nil {
+		t.Fatalf("DeleteSpaceEntries: %v", err)
+	}
+	want := map[string][]string{"memberA": nil, "memberB": {"b1"}, "leader": {"l1", "l2"}}
+	for who, bodies := range want {
+		if got := w.read(t, who); !slices.Equal(got, bodies) {
+			t.Fatalf("%s inbox = %v, want %v", who, got, bodies)
+		}
+	}
 }
