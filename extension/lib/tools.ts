@@ -4,10 +4,15 @@ import { BusError, type BusClient, type RemoteTool } from "./client.ts";
 import type { ActiveCredentials } from "./credentials.ts";
 import { toZod } from "./schema.ts";
 
-/** Per-session flag: tools are fetched and registered once; logout does not reset it. */
+/** Per-session registration: tools are fetched and registered once; logout does not reset it. */
 export interface RegistrationState {
 	registered: boolean;
+	/** Names of the tools registered so far, re-activated by login after a logout. */
+	names: string[];
 }
+
+/** Inbox tools a subagent does not get: its parent session owns the inbox. */
+export const INBOX_TOOLS: readonly string[] = ["bus_inbox_read", "bus_inbox_ack"];
 
 export interface RemoteToolsOptions {
 	client: BusClient;
@@ -16,6 +21,8 @@ export interface RemoteToolsOptions {
 	state: RegistrationState;
 	/** Reports a tool that could not be registered; the other tools still register. */
 	warn: (message: string) => void;
+	/** Server tools not to register. */
+	exclude?: readonly string[];
 }
 
 function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, { client, getActive }: RemoteToolsOptions): Parameters<ExtensionAPI["registerTool"]>[0] {
@@ -38,22 +45,22 @@ function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, { client, getActive 
 	};
 }
 
-/** Registers every server tool once per session. Returns the count registered by this call. */
+/** Registers every server tool (minus `exclude`) once per session. Returns the count registered by this call. */
 export async function registerRemoteTools(pi: ExtensionAPI, options: RemoteToolsOptions): Promise<number> {
-	const { client, getActive, state, warn } = options;
+	const { client, getActive, state, warn, exclude } = options;
 	if (state.registered) return 0;
 	const active = getActive();
 	if (!active) return 0;
 	const tools = await client.listTools(active.url, active.token);
 	state.registered = true;
-	let count = 0;
 	for (const tool of tools) {
+		if (exclude?.includes(tool.name)) continue;
 		try {
 			pi.registerTool(toolDefinition(pi, tool, options));
-			count++;
+			state.names.push(tool.name);
 		} catch (error) {
 			warn(`tool ${tool.name} not registered: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
-	return count;
+	return state.names.length;
 }
