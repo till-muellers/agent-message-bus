@@ -1,0 +1,39 @@
+name: agent-message-bus release
+
+on:
+  push:
+    tags: ['amb-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/agent-message-bus/go.mod
+          cache-dependency-path: apps/agent-message-bus/go.sum
+
+      - name: Test
+        working-directory: apps/agent-message-bus
+        run: go test ./...
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Build release binaries
+        run: python scripts/build_amb.py --version "${GITHUB_REF_NAME#amb-v}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#amb-v}"
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "agent-message-bus ${version}" \
+            --notes "Raw agent-message-bus ${version} binaries for windows/linux/darwin (amd64, arm64) plus SHA256SUMS. Download the binary for your platform, verify it with \`sha256sum -c SHA256SUMS --ignore-missing\`, then follow the deployment guide: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/apps/agent-message-bus/DEPLOYMENT.md"
