@@ -31,7 +31,9 @@ function convert(schema: JsonSchema, z: Zod): ZodNode {
 				const field = convert(child, z);
 				shape[key] = required.has(key) ? field : field.optional();
 			}
-			node = schema.additionalProperties === false ? z.strictObject(shape) : z.object(shape);
+			// omp's `pi.zod` shim has no `z.strictObject`; `.strict()` on the object is the portable form.
+			const object = z.object(shape);
+			node = schema.additionalProperties === false ? object.strict() : object;
 			break;
 		}
 		default:

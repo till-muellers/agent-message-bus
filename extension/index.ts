@@ -34,6 +34,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		const registration = { registered: false };
 		let active: ActiveCredentials | undefined;
 		let loop: AbortController | undefined;
+		let mode: string | undefined;
 		const getActive = () => active;
 
 		function stop(): void {
@@ -57,7 +58,8 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 				deliver: async entry => {
 					pi.sendMessage(
 						{ customType: "agent-bus", content: formatEntry(entry), display: true },
-						{ deliverAs: entry.critical ? "steer" : "followUp", triggerTurn: true },
+						// Only interactive modes (tui, rpc) may start a turn; one-shot CLI prompts (print, json) run their own prompt right after session_start and would fail with AgentBusyError. Unknown mode → no turn.
+						{ deliverAs: entry.critical ? "steer" : "followUp", triggerTurn: mode === "tui" || mode === "rpc" },
 					);
 				},
 			}).catch(error => pi.logger.warn(`agent-bus: ${describe(error)}`));
@@ -66,6 +68,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		pi.registerCommand("bus", {
 			description: "Agent message bus: login <url> <token> | promote <leader-name> | status | logout",
 			handler: async (args: string | string[] | undefined, ctx) => {
+				mode = ctx.mode;
 				const { message, level } = await runCommand(args, {
 					store,
 					client,
@@ -80,7 +83,8 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 			},
 		});
 
-		pi.on("session_start", async () => {
+		pi.on("session_start", async (_event, ctx) => {
+			mode = ctx.mode;
 			try {
 				if (resolveActive(env, await store.load())) await restart();
 			} catch (error) {

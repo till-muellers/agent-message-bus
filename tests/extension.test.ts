@@ -17,16 +17,20 @@ import { type Entry, formatEntry, runInboxLoop } from "../extensions/omp/agent-m
 import { parseSse } from "../extensions/omp/agent-message-bus/lib/sse.ts";
 import { registerRemoteTools } from "../extensions/omp/agent-message-bus/lib/tools.ts";
 
-/** Recording stand-in for `pi.zod` (no zod package in this repo): nodes keep enough state to rebuild JSON schema. */
+/**
+ * Recording stand-in for `pi.zod` (no zod package in this repo): nodes keep enough state to rebuild JSON schema.
+ * Mirrors omp's omptype-backed shim surface: no `z.strictObject` (regression), objects use `.strict()`.
+ */
 interface FakeNode {
 	type: string;
 	description?: string;
 	isOptional?: boolean;
 	shape?: Record<string, FakeNode>;
-	strict?: boolean;
+	isStrict?: boolean;
 	int(): FakeNode;
 	optional(): FakeNode;
 	describe(text: string): FakeNode;
+	strict(): FakeNode;
 }
 function fakeNode(fields: Partial<FakeNode> & { type: string }): FakeNode {
 	const node: FakeNode = {
@@ -34,6 +38,7 @@ function fakeNode(fields: Partial<FakeNode> & { type: string }): FakeNode {
 		int: () => fakeNode({ ...fields, type: "integer" }),
 		optional: () => fakeNode({ ...fields, isOptional: true }),
 		describe: description => fakeNode({ ...fields, description }),
+		strict: () => fakeNode({ ...fields, isStrict: true }),
 	} as FakeNode;
 	return node;
 }
@@ -42,7 +47,6 @@ const fakeZ = {
 	number: () => fakeNode({ type: "number" }),
 	boolean: () => fakeNode({ type: "boolean" }),
 	object: (shape: Record<string, FakeNode>) => fakeNode({ type: "object", shape }),
-	strictObject: (shape: Record<string, FakeNode>) => fakeNode({ type: "object", shape, strict: true }),
 };
 const z = fakeZ as unknown as Zod;
 
@@ -52,7 +56,7 @@ function toJson(node: FakeNode): JsonSchema {
 	if (node.shape) {
 		out.properties = Object.fromEntries(Object.entries(node.shape).map(([k, v]) => [k, toJson(v)]));
 		out.required = Object.entries(node.shape).filter(([, v]) => v.isOptional !== true).map(([k]) => k);
-		if (node.strict) out.additionalProperties = false;
+		if (node.isStrict) out.additionalProperties = false;
 	}
 	return out;
 }
@@ -128,13 +132,15 @@ describe("toZod", () => {
 	};
 
 	test("round-trips the server subset", () => {
+		// Regression: omp's shim has no `z.strictObject`; the stand-in lacks it too, so calling it would throw here.
+		expect("strictObject" in fakeZ).toBe(false);
 		expect(toJson(toZod(schema, z) as unknown as FakeNode)).toEqual(schema);
 	});
 
 	test("optional fields keep their description", () => {
 		const node = toZod({ type: "object", properties: { a: { type: "string", description: "d" } } }, z) as unknown as FakeNode;
 		expect(node.shape?.a).toMatchObject({ type: "string", description: "d", isOptional: true });
-		expect(node.strict).toBeUndefined();
+		expect(node.isStrict).toBeUndefined();
 	});
 
 	test("rejects array", () => {
@@ -398,20 +404,21 @@ describe("index wiring", () => {
 		for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 	});
 
-	test("session_start streams the inbox: critical → steer, others → followUp", async () => {
+	/** Boots the extension against a fake bus serving entries 1 and 2 (critical), runs session_start in `mode`, and returns what was sent. */
+	async function runSession(mode: string) {
 		const dir = await mkdtemp(join(tmpdir(), "amb-"));
 		dirs.push(dir);
 		const bus = fakeBus([() => new Response(streamOf([frame(entry(1)), frame(entry(2, { critical: true }))]))]);
 		const sent: { message: { customType: string; content: string; display: boolean }; options: unknown }[] = [];
 		const warnings: string[] = [];
 		const { promise: warned, resolve: onWarn } = Promise.withResolvers<void>();
-		const handlers: Record<string, (() => unknown)[]> = {};
+		const handlers: Record<string, ((event: unknown, ctx: { mode: string }) => unknown)[]> = {};
 		const commands: string[] = [];
 		const pi = {
 			zod: z,
 			registerTool: () => {},
 			registerCommand: (name: string) => void commands.push(name),
-			on: (event: string, handler: () => unknown) => void (handlers[event] ??= []).push(handler),
+			on: (event: string, handler: (event: unknown, ctx: { mode: string }) => unknown) => void (handlers[event] ??= []).push(handler),
 			sendMessage: (message: (typeof sent)[number]["message"], options: unknown) => void sent.push({ message, options }),
 			logger: {
 				warn: (msg: string) => {
@@ -429,9 +436,15 @@ describe("index wiring", () => {
 			sleep: noSleep,
 		});
 		await extension(pi);
-		expect(commands).toEqual(["bus"]);
-		for (const handler of handlers.session_start ?? []) await handler();
+		for (const handler of handlers.session_start ?? []) await handler({}, { mode });
 		await warned;
+		for (const handler of handlers.session_shutdown ?? []) await handler({}, { mode });
+		return { sent, warnings, commands };
+	}
+
+	test("session_start streams the inbox: critical → steer, others → followUp", async () => {
+		const { sent, warnings, commands } = await runSession("tui");
+		expect(commands).toEqual(["bus"]);
 		expect(sent).toEqual([
 			{ message: { customType: "agent-bus", content: formatEntry(entry(1)), display: true }, options: { deliverAs: "followUp", triggerTurn: true } },
 			{
@@ -440,6 +453,23 @@ describe("index wiring", () => {
 			},
 		]);
 		expect(warnings).toEqual(["agent-bus: invalid token"]);
-		for (const handler of handlers.session_shutdown ?? []) await handler();
+	});
+
+	test("only interactive modes (tui, rpc) trigger a turn; one-shot modes (print, json) do not", async () => {
+		for (const [mode, triggerTurn] of [
+			["print", false],
+			["json", false],
+			["tui", true],
+			["rpc", true],
+		] as const) {
+			const { sent } = await runSession(mode);
+			expect({ mode, options: sent.map(s => s.options) }).toEqual({
+				mode,
+				options: [
+					{ deliverAs: "followUp", triggerTurn },
+					{ deliverAs: "steer", triggerTurn },
+				],
+			});
+		}
 	});
 });
