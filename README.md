@@ -100,6 +100,7 @@ Any streamable-HTTP MCP client can use the tools (no inbox push; poll `bus_inbox
 |`tests/`|Extension tests (`bun test`) and build script tests (`pytest`).|
 |`scripts/build.py`|Cross-compiles release binaries and `SHA256SUMS`.|
 |`.github/workflows/release.yml`|Builds and publishes a release for every `v*` tag.|
+|`.omp/`|Project guide (`AGENTS.md`) and hard rules (`RULES.md`) for contributors and coding agents.|
 
 ## Development
 
@@ -111,7 +112,7 @@ bun run typecheck            # tsc --noEmit
 pytest tests                 # build script tests
 ```
 
-Contributor conventions and the definition of done are in [`AGENTS.md`](AGENTS.md).
+Contributor conventions, working method and the definition of done are in [`.omp/AGENTS.md`](.omp/AGENTS.md); hard rules in [`.omp/RULES.md`](.omp/RULES.md).
 
 ## Releasing
 

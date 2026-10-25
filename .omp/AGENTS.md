@@ -1,12 +1,23 @@
 # Project guide — agent-message-bus
 
-Layout, feature ownership, Go/TypeScript conventions, generated files and the full definition-of-done commands are in the root [`AGENTS.md`](../AGENTS.md); omp loads it as well. This file adds the working method.
+Conventions and working method for contributors and coding agents in this repo.
 
 ## Stack
 - Server: Go (`server/`), SQLite embedded via pure-Go `modernc.org/sqlite`, MCP via `github.com/modelcontextprotocol/go-sdk`. One static binary, `CGO_ENABLED=0`.
 - omp plugin: TypeScript on Bun (`extension/`, `skills/`), typechecked with `tsc --noEmit`.
 - Python: release tooling only (`scripts/build.py`).
 - CI: GitHub Actions (`.github/workflows/ci.yml`, `release.yml`).
+
+## Layout
+
+|Path|Contents|
+|---|---|
+|`server/`|Go server. `main.go`, `cmd/tooldoc/`, `internal/`, `migrations/`, `spec/`.|
+|`extension/`|omp extension (TypeScript). `index.ts` wires `lib/*.ts`; `lib/shared/` holds helpers that are not tied to the bus.|
+|`skills/agent-message-bus/`|Agent-facing skill.|
+|`tests/`|`extension.test.ts` (bun) and `test_build.py` (pytest).|
+|`scripts/build.py`|Release build: cross-compiles the server and writes `SHA256SUMS`.|
+|`.omp/`|This guide and the hard rules (`RULES.md`).|
 
 ## Commands
 - Go test: `cd server && go test ./...` (single pkg: `go test ./internal/<feature>/...`, single test: `go test -run TestName ./path`)
@@ -17,16 +28,17 @@ Layout, feature ownership, Go/TypeScript conventions, generated files and the fu
 - Tool ledger: `cd server && go run ./cmd/tooldoc > TOOLS.md`
 
 ## Architecture
-- `server/main.go`: wiring and CLI dispatch only, no logic.
+- `server/main.go`: wiring and CLI dispatch only, no logic: config, CLI dispatch, DB, migrations, `server.Build`, `httpserver.Serve`.
 - `server/internal/<feature>/`: one folder per feature (`auth`, `inbox`, `spaces`, `messaging`, `blackboards`).
   - `service.go`: business logic
   - `repository.go`: all SQL of the feature (interfaces defined where they are used)
   - `*_test.go`: table-driven tests next to the code, real SQLite via `internal/platform/db/dbtest`
+- **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`) and service methods, inside the caller's transaction.
 - Transports are thin: `internal/tools` (the handler layer: one registry of `bus_*` tools), `internal/rpc`, `internal/mcpserver`, `internal/admin`; `internal/server` composes everything (`Build`, routes).
 - `internal/domain/`: business rules shared by features (names, body and title limits).
 - `internal/platform/`: shared infra (apperr, db, broker, httpx, httpserver, config, instance, detach); only for things used by 2+ packages.
 - `server/migrations/`: numbered SQL files; schema never inline in Go code.
-- Dependencies point inward: transport → service → repository/platform. Never the reverse. Features never write another feature's tables; use hooks or service methods.
+- Dependencies point inward: transport → service → repository/platform. Never the reverse.
 - Behaviour is specified in `server/spec/*.feature`; keep it in sync.
 
 ## Workflow
@@ -44,14 +56,14 @@ Layout, feature ownership, Go/TypeScript conventions, generated files and the fu
 
 ### Turn specs into plan
 - Plan first: restate the task, list the files you'll touch, write a todo list.
-- One feature or behaviour per change: small, reviewable diffs on a branch, merged by pull request.
+- One feature or behaviour per change: small, reviewable diffs on a branch, merged by pull request (`main` is protected).
 - Every functionality gets its own file. Don't grow existing files into catch-alls.
 - Add logical steps. Aim for small commits.
 
 ### Start to code!
 - REFACTOR until the change fits into the existing code easily.
 - TDD, strictly:
-	- RED: write a failing test (and the Gherkin scenario for behaviour changes), run it, confirm it fails for the right reason.
+	- RED: write a failing test (and the Gherkin scenario in `server/spec/` for behaviour changes), run it, confirm it fails for the right reason. Bug fixes start with a test that reproduces the bug.
 	- GREEN: write the minimum code to pass. Run the tests.
 	- REFACTOR: clean up with tests green. Run the tests again.
 		- Find and clean code smells (Refactoring, Martin Fowler).
@@ -61,6 +73,7 @@ Layout, feature ownership, Go/TypeScript conventions, generated files and the fu
 	- Names explain intent without needing a comment.
 	- No dead code, debug prints or leftover TODOs.
 	- Prefer deleting code over adding it. Refactor duplication with tests green.
+- Behaviour changes update `server/spec/`, the affected README and, for tool changes, `server/TOOLS.md`.
 
 ### Review checklist (run through before finishing)
 - Does every new behaviour have a test that failed first, and a spec scenario?
@@ -70,20 +83,44 @@ Layout, feature ownership, Go/TypeScript conventions, generated files and the fu
 - Any new dependency? It needs approval first.
 - Tool changed? `server/TOOLS.md` regenerated, extension README and skill still accurate.
 
-## Definition of done
-Tests pass, lint and typecheck are clean (root `AGENTS.md` lists the commands), the diff is reviewed, no unrelated changes, and the pull request's CI (`go`, `typescript`, `python`) is green.
-
-## Code conventions (in addition to the root AGENTS.md)
+## Code conventions
 
 ### Go
 - Accept interfaces, return structs. Keep interfaces small and define them at the consumer.
-- Never ignore an error. No `panic` for control flow.
-- `t.Parallel()` where safe; no sleeping in tests (wait on channels or poll with a deadline).
+- Wrap errors with context: `fmt.Errorf("create space %s: %w", name, err)`. Never ignore an error. Return `apperr` kinds for client-visible failures.
+- `ctx context.Context` is the first parameter of anything that does I/O.
+- No package-level mutable state; pass dependencies explicitly. No `panic` for control flow.
+- Table-driven tests, `t.Parallel()` where safe; no sleeping in tests (wait on channels or poll with a deadline).
 
 ### SQL
 - Every schema change is a new numbered migration in `server/migrations/`. Never edit an applied one.
 - Migrations must be reversible (`.down.sql`), or explicitly marked as not.
 
-### Python / TypeScript
-- Python: type hints on all signatures, formatted with ruff.
-- TypeScript: strict mode, no `any`, no untyped function signatures.
+### TypeScript
+- `strict` mode, no `any`; use `unknown` and narrow. No untyped function signatures.
+- Import with explicit `.ts` extensions.
+
+### Python
+- Type hints on all signatures, formatted with ruff.
+
+## Generated files
+`server/TOOLS.md` is generated from the tool registry and the templates `server/internal/tools/ledger_*.md.tmpl`; never edit it by hand. A golden test fails when it is stale:
+
+```sh
+cd server && go run ./cmd/tooldoc > TOOLS.md
+```
+
+## Definition of done
+Tests pass, lint and typecheck are clean, the diff is reviewed, no unrelated changes, and the pull request's CI (`go`, `typescript`, `python`) is green. Locally:
+
+```sh
+cd server
+gofmt -l .                     # prints nothing
+go vet ./...
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...
+go test -race ./...            # needs CGO; or: docker run --rm -v "$PWD:/src" -w /src golang:1.27 go test -race ./...
+cd ..
+bun test
+bun run typecheck
+pytest tests
+```
