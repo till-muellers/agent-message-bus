@@ -4,7 +4,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,13 +19,12 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/config"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/httpserver"
 	"github.com/till-muellers/agent-message-bus/server/internal/server"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 	"github.com/till-muellers/agent-message-bus/server/migrations"
 )
-
-const shutdownTimeout = 10 * time.Second
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
@@ -55,7 +53,7 @@ func run(ctx context.Context) error {
 	defer cancelStreams()
 	h := build(streamRoot, conn, cfg.AdminToken)
 	srv := &http.Server{Addr: cfg.Addr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
-	return serve(ctx, srv, cancelStreams)
+	return httpserver.Serve(ctx, srv, cancelStreams)
 }
 
 func build(streamRoot context.Context, conn *sql.DB, adminToken string) http.Handler {
@@ -69,26 +67,4 @@ func build(streamRoot context.Context, conn *sql.DB, adminToken string) http.Han
 		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc,
 	})
 	return server.Routes(streamRoot, authSvc, inboxSvc, reg)
-}
-
-func serve(ctx context.Context, srv *http.Server, cancelStreams context.CancelFunc) error {
-	errc := make(chan error, 1)
-	go func() { errc <- srv.ListenAndServe() }()
-	slog.Info("listening", "addr", srv.Addr)
-	select {
-	case err := <-errc:
-		return fmt.Errorf("serve: %w", err)
-	case <-ctx.Done():
-	}
-	slog.Info("shutting down")
-	cancelStreams()
-	sctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-	if err := srv.Shutdown(sctx); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
-	}
-	if err := <-errc; err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("serve: %w", err)
-	}
-	return nil
 }
