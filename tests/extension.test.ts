@@ -297,7 +297,23 @@ describe("runInboxLoop", () => {
 		expect(errors).toEqual(["ack failed", "invalid token"]);
 	});
 
-	test("a 409 conflict is reported once per streak, retried with backoff, and a frame resets the streak", async () => {
+	test("a stream that opens without frames still ends the conflict streak", async () => {
+		const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
+		const bus = fakeBus([conflict, () => new Response(streamOf([": ping\n\n"])), conflict]);
+		const conflicts: string[] = [];
+		await runInboxLoop({
+			client: createClient(bus.fetchFn),
+			getActive: () => ({ url: URL_, token: "tok" }),
+			signal: new AbortController().signal,
+			deliver: async () => {},
+			onError: () => {},
+			onConflict: error => void conflicts.push(error.code),
+			sleep: noSleep,
+		});
+		expect(conflicts).toEqual(["conflict", "conflict"]);
+	});
+
+	test("a 409 conflict is reported once per streak, retried with backoff, and a successful open resets the streak", async () => {
 		const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
 		const bus = fakeBus([conflict, conflict, () => new Response(streamOf([frame(entry(1))])), conflict]);
 		const delivered: number[] = [];

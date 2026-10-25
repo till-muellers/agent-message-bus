@@ -65,7 +65,7 @@ In one-shot `print`/`json` modes (and when the mode is unknown), entries are add
 
 ## One identity per agent
 
-The server allows one live inbox stream per agent, so each agent identity belongs to exactly one session. When another session already streams this agent's inbox, the server answers `409 conflict`. The extension then logs once, `agent-bus: another session is already connected as <name>; inbox not delivered here` (the name comes from `bus_whoami`; if that fails, `as this agent`), and keeps retrying with the normal backoff. The inbox is delivered here once the other stream ends, for example when its session exits or crashes (the server notices a dead connection at its next heartbeat, within about 20 s). The next refusal after a received frame logs again. Tool calls are not restricted. Give every agent its own identity: `/bus promote` is session-scoped, and each worker gets its own member token via env.
+The server allows one live inbox stream per agent, so each agent identity belongs to exactly one session. When another session already streams this agent's inbox, the server answers `409 conflict`. The extension then logs once, `agent-bus: another session is already connected as <name>; inbox not delivered here` (the name comes from `bus_whoami`; if that fails, `as this agent`), and keeps retrying with the normal backoff. The inbox is delivered here once the other stream ends, for example when its session exits or crashes (the server notices a dead connection at its next heartbeat, within about 20 s). Once this session's stream has opened, a later refusal logs again. Tool calls are not restricted. Give every agent its own identity: `/bus promote` is session-scoped, and each worker gets its own member token via env.
 
 ## Deploy
 

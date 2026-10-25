@@ -65,10 +65,9 @@ async function ack(client: BusClient, active: ActiveCredentials, id: number, onE
 	}
 }
 
-/** Delivers and acks each entry of an open stream; any frame ends a conflict streak. */
+/** Delivers and acks each entry of an open stream. */
 async function consume(options: InboxLoopOptions, active: ActiveCredentials, state: LoopState, body: ReadableStream<Uint8Array>): Promise<void> {
 	for await (const frame of parseSse(body)) {
-		state.conflicted = false;
 		if (frame.event !== "inbox") continue;
 		const entry = JSON.parse(frame.data) as Entry;
 		await options.deliver(entry);
@@ -98,6 +97,7 @@ export async function runInboxLoop(options: InboxLoopOptions): Promise<void> {
 		try {
 			const response = await client.openStream(active.url, active.token, signal);
 			if (!response.body) throw new Error("inbox stream has no body");
+			state.conflicted = false;
 			await consume(options, active, state, response.body);
 		} catch (error) {
 			if (signal.aborted || (await report(error, options, state))) return;
