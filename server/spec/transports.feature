@@ -9,6 +9,7 @@ Feature: Transports
   #   POST /v1/tools/{name}     bearer auth
   #   GET  /v1/inbox/stream     bearer auth (see inbox.feature)
   #   /mcp                      MCP streamable HTTP, bearer auth
+  #   POST /v1/admin/*          loopback + admin token (see "Admin endpoints")
   # Error body: {"error":{"code":"<code>","message":"<message>"}}
 
   Background:
@@ -227,6 +228,49 @@ Feature: Transports
     Scenario: MCP tokens are the same tokens as the web API
       When a client connects to /mcp with the admin token or a leader or member token
       Then its tool calls run as that admin, leader or member
+
+  Rule: Admin endpoints are loopback-only and need the admin token
+
+    # POST /v1/admin/shutdown and POST /v1/admin/admin-token serve the local CLI (stop, rotate-token).
+    # Behind a reverse proxy every request arrives from loopback, so there the admin token alone protects them.
+
+    Scenario Outline: Guard on <route> from <remote> with the <token> token
+      When a client from <remote> calls POST <route> with the <token> token
+      Then the response status is 403
+      And the error is forbidden "<message>"
+
+      Examples:
+        | route                 | remote      | token  | message                                         |
+        | /v1/admin/shutdown    | 10.0.0.2    | admin  | admin endpoints are only available from localhost |
+        | /v1/admin/admin-token | 192.168.1.1 | admin  | admin endpoints are only available from localhost |
+        | /v1/admin/shutdown    | 127.0.0.1   | leader | admin token required                            |
+
+    Scenario Outline: Shutdown from <remote>
+      When a client from <remote> calls POST /v1/admin/shutdown with the admin token
+      Then the response status is 200 with body {"ok":true}
+      And the server shuts down gracefully
+
+      Examples:
+        | remote    |
+        | 127.0.0.1 |
+        | ::1       |
+
+    Scenario: Swapping the admin token
+      Given a new token of at least 32 characters
+      When a loopback client calls POST /v1/admin/admin-token with the admin token and body {"token":"<new token>"}
+      Then the response status is 200 with body {"ok":true}
+      And the old admin token gets 401 unauthenticated
+      And the new admin token is accepted
+
+    Scenario Outline: Invalid token swap: <case>
+      When a loopback client calls POST /v1/admin/admin-token with the admin token and body <body>
+      Then the response status is 400
+      And the error is invalid with a message starting with "<message>"
+
+      Examples:
+        | case      | body          | message                                    |
+        | too short | {"token":"x"} | admin token must be at least 32 characters |
+        | bad JSON  | {             | invalid JSON body                          |
 
   Rule: Graceful shutdown
 

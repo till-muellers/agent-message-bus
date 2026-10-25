@@ -34,14 +34,16 @@ flowchart LR
   sse -- "re-read" --> db
 ```
 
-The omp extension registers the server's tools in the session, provides `/bus login|promote|status|logout|help`, and turns inbox entries into session messages: critical entries are delivered as `steer`, others as `followUp`.
+The omp extension registers the server's tools in the session, provides `/bus login|promote|status|logout|server|help`, and turns inbox entries into session messages: critical entries are delivered as `steer`, others as `followUp`. `/bus server start|stop|status` drives the local instance commands below.
+
+Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage one instance per data dir via the state file `<datadir>/agent-message-bus.state.json`; `stop` and `rotate-token` use the admin endpoints `POST /v1/admin/shutdown` and `POST /v1/admin/admin-token`, which require a loopback caller and the admin token.
 
 ## Glossary
 
 | Term | Meaning |
 |---|---|
 | Agent | One global identity with a name matching `^[a-z0-9][a-z0-9_-]{0,62}$`. An agent is either a leader agent or a member agent, never both. |
-| Admin token | `AMB_ADMIN_TOKEN` (at least 32 characters). It can only mint leader tokens (`bus_mint_leader`); it has no inbox and can't act in spaces. |
+| Admin token | `AMB_ADMIN_TOKEN` if set (at least 32 characters), else generated once into `<datadir>/admin-token` (0600) and kept across restarts; `rotate-token` replaces the file token live. It can only mint leader tokens (`bus_mint_leader`) and call the loopback admin endpoints; it has no inbox and can't act in spaces. |
 | Leader token | Minted by the admin. Not bound to a space. Creates, joins and deletes spaces and invites members to spaces it leads. Minting again for the same leader issues an additional token. |
 | Member token | Minted by `bus_invite_member`. Valid in exactly one space. Re-inviting issues an additional token. Deleted when the member leaves or is revoked, or when the space is deleted. |
 | Space | A named workspace. Every space has the topic `all`. |
@@ -66,7 +68,8 @@ The omp extension registers the server's tools in the session, provides `/bus lo
 | [topics.feature](topics.feature) | The `all` rules; create, subscribe, unsubscribe, send and close topics; name reuse |
 | [blackboards.feature](blackboards.feature) | Blackboards, threads, posts, thread subscriptions and their permissions |
 | [inbox.feature](inbox.feature) | Reading and acknowledging the inbox; the SSE stream |
-| [transports.feature](transports.feature) | RPC routes, error bodies and status codes, argument validation, MCP |
+| [local-instance.feature](local-instance.feature) | `start`, `stop`, `status`, `admin-token`, `rotate-token`; the state file; single instance per data dir |
+| [transports.feature](transports.feature) | RPC routes, error bodies and status codes, argument validation, MCP, admin endpoints |
 
 ## Design decisions
 
@@ -77,10 +80,11 @@ The omp extension registers the server's tools in the session, provides `/bus lo
 - **Single writer.** SQLite runs with one open connection. Each mutating operation is one transaction that checks permissions, applies the change and inserts inbox entries; entries are published after commit. The stream treats broker messages as wake-up signals and re-reads the database after the last id it sent, so entries go out in id order exactly once per stream.
 - **Lifecycle hooks and data ownership.** Each feature writes only its own tables. `spaces` defines `CreationHook` (messaging opens the `all` topic) and `DepartureHook` (messaging and blackboards clean subscriptions and member boards). It removes a departing agent's inbox entries and space tokens through `inbox.DeleteSpaceEntries` and `auth.RevokeSpaceTokens`, all in one transaction and without an import cycle. Every mutating operation runs through `inbox.Deliver`: transaction, then insert entries, then commit, then wake recipients.
 - **One identity per agent.** Each agent identity belongs to one live session. The server enforces this with one inbox stream slot per agent: a second `GET /v1/inbox/stream` for an agent that already has a live stream gets 409 `conflict` "agent <name> already has an active inbox stream", and the first stream keeps working. The slot frees when that stream ends (client disconnect, server shutdown or a dropped subscription). Tool calls aren't restricted. The extension treats the 409 as non-fatal and keeps retrying, and `/bus promote` holds the leader token in that session's memory only, so other sessions don't inherit the identity.
+- **Local instance via a state file.** `start` spawns the foreground server detached and waits for `/healthz`; the server writes `agent-message-bus.state.json` (pid, url, start time) and removes it on exit. A state file whose url doesn't answer is stale and is removed. `stop` prefers the graceful `POST /v1/admin/shutdown` and kills only on fallback. Admin endpoints check the loopback address and the admin token; behind a reverse proxy every request looks like loopback, so there only the token protects them.
 - **No thread claiming and no UI.** Both are out of scope.
 
 ## Known limitations
 
 - **Single-writer throughput.** All writes are serialized through one SQLite connection.
-- **No token expiry or rotation.** Tokens stay valid until their member leaves, is revoked or its space is deleted; leader tokens are never removed.
+- **No token expiry.** Tokens stay valid until their member leaves, is revoked or its space is deleted; leader tokens are never removed. Only the admin token can be rotated (`rotate-token`).
 - **No thread claiming.** Agents can't claim a thread as a unit of work.

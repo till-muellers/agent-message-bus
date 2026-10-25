@@ -5,7 +5,7 @@
 |Part|Where|Purpose|
 |---|---|---|
 |Server binary|`agent-message-bus[.exe]` (GitHub Releases or `scripts/build_amb.py`)|Hosts spaces, messages, blackboards and inboxes in one SQLite file. Serves MCP at `/mcp`, RPC at `/v1/tools`, SSE at `/v1/inbox/stream` and `/healthz`.|
-|omp extension|`extensions/omp/agent-message-bus`|Adds `/bus login\|promote\|status\|logout\|help`, registers the `bus_*` tools in omp and streams the inbox into the session.|
+|omp extension|`extensions/omp/agent-message-bus`|Adds `/bus login\|promote\|status\|logout\|server\|help`, registers the `bus_*` tools in omp and streams the inbox into the session. `/bus server start` can fetch and run the server for you.|
 |Skill|`skills/agent-message-bus/SKILL.md`|Tells agents how to use the bus (leader and member workflows).|
 |Other MCP clients|any streamable-HTTP MCP client|Use the `bus_*` tools without omp (no inbox push).|
 
@@ -35,64 +35,45 @@ Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` 
 
 |Env|Default|Meaning|
 |---|---|---|
-|`AMB_ADMIN_TOKEN`|— (required, ≥32 chars)|Admin token; it can only mint leader tokens.|
-|`AMB_ADDR`|`:8080`|Listen address.|
+|`AMB_ADMIN_TOKEN`|— (optional, ≥32 chars)|Admin token override. Without it the token is generated once into `<datadir>/admin-token` (0600) and persists across restarts.|
+|`AMB_ADDR`|`127.0.0.1:8080`|Listen address (the Docker image sets `:8080`).|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its parent directory is created if missing.|
 
-`<datadir>`:
+`<datadir>` is the directory of `AMB_DB_PATH`; by default:
 
 - Windows: `%LOCALAPPDATA%\agent-message-bus`
 - macOS: `~/Library/Application Support/agent-message-bus`
 - Linux/others: `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`
 
-Generate an admin token:
-
-```powershell
-[guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
-```
-
-```sh
-openssl rand -hex 32
-```
-
-Keep it secret: it can mint leaders.
+The admin token can only mint leaders and call the admin endpoints. Keep it (and `<datadir>/admin-token`) secret.
 
 ## 4. Run
 
-Foreground (Ctrl+C or SIGTERM shuts down gracefully):
-
-```powershell
-$env:AMB_ADMIN_TOKEN = "<token>"; agent-message-bus
-```
+Quick start:
 
 ```sh
-AMB_ADMIN_TOKEN=<token> agent-message-bus
+agent-message-bus start         # background; waits until healthy; no-op when already running
+agent-message-bus admin-token   # prints the admin token for /bus login
 ```
 
-Background, detached from the terminal:
+Other commands:
 
-```sh
-agent-message-bus --detached
-# agent-message-bus started (pid 1234); log: <dir>/agent-message-bus.log; pid file: <dir>/agent-message-bus.pid
-```
+|Command|Effect|
+|---|---|
+|`agent-message-bus`|Foreground; Ctrl+C or SIGTERM shuts down gracefully. Fails with `agent-message-bus already running (pid N) at <url>` while an instance is live.|
+|`status [--json]`|`running (pid N) at <url>` or `not running`; JSON `{"running","pid","url"}`.|
+|`stop`|Graceful shutdown via `POST /v1/admin/shutdown`; kills the process on fallback.|
+|`rotate-token`|New admin token, applied to the running instance live and saved; refused when `AMB_ADMIN_TOKEN` is set.|
 
-`<dir>` is the directory of `AMB_DB_PATH`. The log is appended to. Stop it with the OS:
+One instance runs per data dir. While it runs, `<datadir>/agent-message-bus.state.json` holds its pid and url; a stale state file is removed. `start` appends output to `<datadir>/agent-message-bus.log`.
 
-```sh
-kill $(cat ~/.local/share/agent-message-bus/agent-message-bus.pid)
-```
-
-```powershell
-Stop-Process -Id (Get-Content "$env:LOCALAPPDATA\agent-message-bus\agent-message-bus.pid")
-```
-
-Health check: `curl http://localhost:8080/healthz` → `ok`. `agent-message-bus --help` prints usage.
+Health check: `curl http://127.0.0.1:8080/healthz` → `ok`. `agent-message-bus --help` prints usage.
 
 ## 5. Run permanently
 
-Use the foreground mode under a service manager (not `--detached`).
+Use the foreground mode (`agent-message-bus` without a command) under a service manager. The token setting is optional: without `AMB_ADMIN_TOKEN` the server uses the persisted `<datadir>/admin-token` of the service user (read it with `agent-message-bus admin-token` as that user, with the same `AMB_DB_PATH`). Set `AMB_ADMIN_TOKEN` only to pin a token yourself.
 
-**systemd** (Linux) — `/etc/agent-message-bus.env` holds `AMB_ADMIN_TOKEN=<token>` (`chmod 600`):
+**systemd** (Linux):
 
 ```ini
 # /etc/systemd/system/agent-message-bus.service
@@ -101,7 +82,7 @@ Description=agent-message-bus
 After=network.target
 
 [Service]
-EnvironmentFile=/etc/agent-message-bus.env
+# optional: EnvironmentFile=/etc/agent-message-bus.env  (AMB_ADMIN_TOKEN=<token>, chmod 600)
 Environment=AMB_ADDR=127.0.0.1:8080
 Environment=AMB_DB_PATH=/var/lib/agent-message-bus/agent-message-bus.db
 StateDirectory=agent-message-bus
@@ -115,6 +96,7 @@ WantedBy=multi-user.target
 
 ```sh
 sudo systemctl daemon-reload && sudo systemctl enable --now agent-message-bus
+sudo cat /var/lib/agent-message-bus/admin-token   # the generated admin token
 ```
 
 **launchd** (macOS) — `~/Library/LaunchAgents/dev.agent-message-bus.plist`, then `launchctl load ~/Library/LaunchAgents/dev.agent-message-bus.plist`:
@@ -126,7 +108,7 @@ sudo systemctl daemon-reload && sudo systemctl enable --now agent-message-bus
   <key>Label</key><string>dev.agent-message-bus</string>
   <key>ProgramArguments</key><array><string>/usr/local/bin/agent-message-bus</string></array>
   <key>EnvironmentVariables</key><dict>
-    <key>AMB_ADMIN_TOKEN</key><string>TOKEN</string>
+    <!-- optional: <key>AMB_ADMIN_TOKEN</key><string>TOKEN</string> -->
     <key>AMB_ADDR</key><string>127.0.0.1:8080</string>
   </dict>
   <key>RunAtLoad</key><true/>
@@ -135,13 +117,13 @@ sudo systemctl daemon-reload && sudo systemctl enable --now agent-message-bus
 </dict></plist>
 ```
 
-`chmod 600` the plist since it contains the token.
+If you add `AMB_ADMIN_TOKEN`, `chmod 600` the plist.
 
-**Windows Task Scheduler** — a wrapper `C:\amb\run-amb.cmd` (restrict its ACL to your user):
+**Windows Task Scheduler** — a wrapper `C:\amb\run-amb.cmd`:
 
 ```bat
 @echo off
-set AMB_ADMIN_TOKEN=<token>
+rem optional: set AMB_ADMIN_TOKEN=<token>  (then restrict the file's ACL to your user)
 set AMB_ADDR=127.0.0.1:8080
 "C:\amb\agent-message-bus.exe" >> "%LOCALAPPDATA%\agent-message-bus\agent-message-bus.log" 2>&1
 ```
@@ -154,7 +136,7 @@ Register-ScheduledTask -TaskName agent-message-bus -Action $action -Trigger $tri
 Start-ScheduledTask agent-message-bus
 ```
 
-Alternatively set the token as a user env var (`[Environment]::SetEnvironmentVariable('AMB_ADMIN_TOKEN','<token>','User')`) and point the action at the exe directly. `%LOCALAPPDATA%` resolves to the task user's profile.
+Without a wrapper, point the action at the exe directly (output then isn't logged). `%LOCALAPPDATA%` resolves to the task user's profile, so `agent-message-bus admin-token` run as that user prints the token.
 
 ## 6. Docker (optional)
 
@@ -162,14 +144,15 @@ No registry needed; build locally:
 
 ```sh
 docker build -t agent-message-bus apps/agent-message-bus
-docker run -d --name amb -p 8080:8080 -e AMB_ADMIN_TOKEN=<token> -v amb-data:/data agent-message-bus
+docker run -d --name amb -p 8080:8080 -v amb-data:/data agent-message-bus
+docker exec amb /agent-message-bus admin-token
 ```
 
-The image sets `AMB_DB_PATH=/data/agent-message-bus.db`; keep `/data` on a volume.
+The image sets `AMB_ADDR=:8080` and `AMB_DB_PATH=/data/agent-message-bus.db`; keep `/data` on a volume (it also holds `admin-token`). Pass `-e AMB_ADMIN_TOKEN=<token>` to pin a token instead. Admin endpoints aren't reachable from the host (the bridge address isn't loopback); use `docker stop`.
 
 ## 7. Connect agents
 
-**omp.** Deploy the extension and skill from the repo root:
+**omp.** Deploy the extension and skill from the repo root. Or skip server setup: `/bus server start` in omp takes the binary from `AGENT_BUS_BIN`, then `PATH`, else downloads the latest release of `till-muellers/agent-message-bus` (verified against `SHA256SUMS`), starts it and logs in as admin; `/bus server stop` stops it and logs out. The download needs that repo's public releases, which don't exist yet; until then set `AGENT_BUS_BIN` or put the binary on `PATH`.
 
 ```sh
 python scripts/seed.py --dry-run   # review
@@ -179,7 +162,7 @@ python scripts/seed.py
 In an omp session:
 
 ```text
-/bus login http://localhost:8080 <admin-token>
+/bus login http://127.0.0.1:8080 <admin-token>   # from agent-message-bus admin-token
 /bus promote lead          # session-scoped leader; repeat after restarts
 /bus status
 ```
@@ -214,7 +197,7 @@ References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../../sk
 
 ## 8. Operations
 
-- **Security.** No TLS is built in. Bind to localhost (`AMB_ADDR=127.0.0.1:8080`) or put it behind a TLS reverse proxy (keep SSE unbuffered). Tokens don't expire; remove a member with `bus_revoke_member`. Rotating the admin token only needs a restart with the new value.
+- **Security.** No TLS is built in. The default binds to localhost (`127.0.0.1:8080`); for remote access put it behind a TLS reverse proxy (keep SSE unbuffered). Admin endpoints (`/v1/admin/*`) require a loopback caller and the admin token; behind a reverse proxy every request looks like loopback, so there the token alone protects them — block `/v1/admin/` at the proxy if you can. Tokens don't expire; remove a member with `bus_revoke_member`. Rotate the admin token with `agent-message-bus rotate-token` (live, no restart), or change `AMB_ADMIN_TOKEN` and restart.
 - **Backup.** Stop the server and copy the DB together with its `-wal` and `-shm` files, or back up live: `sqlite3 agent-message-bus.db ".backup amb-backup.db"`.
 - **Upgrade.** Replace the binary and restart; schema migrations apply automatically on start.
 - **One identity per agent.** Only one inbox stream per agent may be open; a second session on the same token gets `409 conflict`. Give each session its own token.
@@ -226,5 +209,9 @@ References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../../sk
 |`401 unauthenticated` / invalid token|Wrong token, or the member was revoked, left, or its space was deleted. Get a new token and `/bus login` again.|
 |`409 conflict`, log `agent-bus: another session is already connected as <name>`|Another session streams this agent's inbox. Close it or use a different identity; delivery resumes within ~20 s after it dies.|
 |Server exits with "address already in use"|Another process holds the port. Stop it or set `AMB_ADDR=127.0.0.1:8081`.|
-|`AMB_ADMIN_TOKEN is required`|Set the env var (≥32 chars) in the shell, service unit, plist or wrapper.|
-|`bus_*` tools missing in omp|Run `/bus status`; with only an admin token there are no tools — run `/bus promote`. Check the omp log for `agent-bus:` lines (unreachable server, unregistered tools). Re-run `scripts/seed.py` if `/bus` is unknown.|
+|`agent-message-bus already running (pid N) at <url>`|An instance already serves this data dir. Use it, run `agent-message-bus stop`, or set a different `AMB_DB_PATH`.|
+|`agent-message-bus did not become healthy within 10s`|`start` prints the log tail; fix the cause shown there (port, DB path, invalid `AMB_ADMIN_TOKEN`).|
+|`admin token must be at least 32 characters`|`AMB_ADMIN_TOKEN` is too short; unset it to use the generated token file.|
+|`AMB_ADMIN_TOKEN is set in the environment; rotate it there`|`rotate-token` only rotates the file token; change the env var and restart.|
+|`403 admin endpoints are only available from localhost`|`stop`/`rotate-token` must run on the server host.|
+|`bus_*` tools missing in omp|Run `/bus status`; with only an admin token there are no tools — run `/bus promote`. After `/bus logout` all `bus_*` tools stay off until `/bus login` or `/bus server start`. Check the omp log for `agent-bus:` lines (unreachable server, unregistered tools). Re-run `scripts/seed.py` if `/bus` is unknown.|

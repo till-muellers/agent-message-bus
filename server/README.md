@@ -16,38 +16,36 @@ Deploying it (binaries, config, services, connecting agents): see [`DEPLOYMENT.m
 
 Download the binary for your OS from the GitHub Release (`agent-message-bus_<version>_<os>_<arch>[.exe]`, checksums in `SHA256SUMS`), or `go build .` here.
 
-```powershell
-$env:AMB_ADMIN_TOKEN = '<32+ chars>'
-.\agent-message-bus.exe              # foreground; Ctrl+C stops gracefully
-.\agent-message-bus.exe --detached   # background; prints pid, log and pid file paths
-Stop-Process -Id (Get-Content "$env:LOCALAPPDATA\agent-message-bus\agent-message-bus.pid")
-```
-
 ```sh
-AMB_ADMIN_TOKEN='<32+ chars>' ./agent-message-bus --detached
-kill "$(cat ~/.local/share/agent-message-bus/agent-message-bus.pid)"   # macOS: ~/Library/Application Support/agent-message-bus
+agent-message-bus                # foreground; Ctrl+C or SIGTERM stops gracefully
+agent-message-bus start          # background; waits until healthy, no-op when already running
+agent-message-bus status [--json]
+agent-message-bus admin-token    # prints the admin token (generated on first use)
+agent-message-bus rotate-token   # new admin token, applied live and saved
+agent-message-bus stop           # graceful via POST /v1/admin/shutdown, kill on fallback
 ```
 
-`--detached` validates the config first, then re-launches itself detached from the terminal with the same environment. Output is appended to `agent-message-bus.log` and the pid written to `agent-message-bus.pid`, both next to the DB file. `--help` prints usage.
+One instance runs per data dir. While it runs, `<datadir>/agent-message-bus.state.json` holds its pid and url; `start` appends output to `<datadir>/agent-message-bus.log`. A foreground run fails with `agent-message-bus already running (pid N) at <url>` while an instance is live; a stale state file is removed. `--help` prints usage.
 
 |Env|Default|Meaning|
 |---|---|---|
-|`AMB_ADMIN_TOKEN`|— (required, ≥32 chars)|Can only mint leader tokens (`bus_mint_leader`).|
-|`AMB_ADDR`|`:8080`|Listen address.|
+|`AMB_ADMIN_TOKEN`|— (optional, ≥32 chars)|Admin token override. Without it the token is generated once into `<datadir>/admin-token` (0600) and persists across restarts.|
+|`AMB_ADDR`|`127.0.0.1:8080`|Listen address.|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its directory is created if missing. `<datadir>`: Windows `%LOCALAPPDATA%\agent-message-bus`; macOS `~/Library/Application Support/agent-message-bus`; others `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`.|
 
 Optional Docker (local build, no registry; the image sets `AMB_DB_PATH=/data/agent-message-bus.db`):
 
 ```powershell
 docker build -t agent-message-bus .
-docker run -d --name amb -p 8080:8080 -e AMB_ADMIN_TOKEN=<32+ chars> -v amb-data:/data agent-message-bus
+docker run -d --name amb -p 8080:8080 -v amb-data:/data agent-message-bus   # image sets AMB_ADDR=:8080
+docker exec amb /agent-message-bus admin-token
 ```
 
 ## Tokens
 
 There are three kinds of token, used as `Authorization: Bearer <token>`:
 
-- **Admin** (`AMB_ADMIN_TOKEN`): mints leader tokens and does nothing else.
+- **Admin** (`AMB_ADMIN_TOKEN` or `<datadir>/admin-token`): mints leader tokens and calls the admin endpoints; nothing else.
 - **Leader**: creates, joins and deletes spaces, and invites members to spaces it leads.
 - **Member**: valid in exactly one space.
 
@@ -62,6 +60,10 @@ Tokens don't expire. When a member is revoked or leaves, its token and blackboar
 |`GET /v1/tools`|bearer|Tool list: `[{name, description, inputSchema}]`.|
 |`POST /v1/tools/{name}`|bearer|Call a tool. The body is the JSON args. Success returns `{"result": …}`; failure returns `{"error":{"code","message"}}`.|
 |`GET /v1/inbox/stream`|bearer|SSE: the backlog, then live `event: inbox` frames. Ack with `bus_inbox_ack {upTo}`.|
+|`POST /v1/admin/shutdown`|admin, loopback only|Graceful shutdown (used by `stop`).|
+|`POST /v1/admin/admin-token`|admin, loopback only|Swap the admin token live; body `{"token"}` (used by `rotate-token`).|
+
+Admin endpoints answer 403 to non-loopback callers and to non-admin tokens. Behind a reverse proxy every request arrives from loopback, so there the admin token alone protects them.
 
 MCP and RPC serve the same 29 `bus_*` tools from one registry (`internal/tools`). The omp client is `extensions/omp/agent-message-bus/`.
 
@@ -80,6 +82,7 @@ Every tool's arguments, result shape, example call and error codes are listed in
   - A subscriber that falls behind is disconnected and replays from the database when it reconnects.
 - **At-least-once delivery.** Clients ack after handling an entry. If an ack fails, the entry is redelivered.
 - **One consumer per agent.** One identity per agent is an enforced invariant: the inbox service holds one stream slot per agent, so a second concurrent `GET /v1/inbox/stream` for the same agent gets 409 `conflict` while the first keeps streaming. The slot frees when that stream ends for any reason (disconnect, server shutdown, dropped subscription). Tool calls aren't restricted.
+- **Admin token swap.** `SetAdminToken` replaces the admin credential atomically; requests after the swap see only the new token.
 
 ## Develop
 
@@ -94,12 +97,14 @@ Layout:
 
 |Path|Role|
 |---|---|
-|`main.go`|Wiring only: config, DB, migrations, then `server.Build` and `httpserver.Serve`.|
+|`main.go`|Wiring only: config, CLI commands (`start`, `stop`, `status`, `admin-token`, `rotate-token`), DB, migrations, then `server.Build` and `httpserver.Serve`.|
 |`cmd/tooldoc/`|Prints the generated tool ledger `TOOLS.md` from the registry (no DB needed).|
 |`internal/server/`|Composition root (`Build`) and routes.|
 |`internal/tools/`|The handler layer: one registry of `bus_*` tools that both transports serve.|
 |`internal/rpc/`, `internal/mcpserver/`|Thin transports over the registry.|
+|`internal/admin/`|Loopback-only admin endpoints (`/v1/admin/shutdown`, `/v1/admin/admin-token`) behind the admin-token guard.|
 |`internal/{auth,inbox,spaces,messaging,blackboards}/`|Features. `service.go` holds the logic and `repository.go` holds all SQL. Each feature writes only its own tables; cross-feature effects go through hooks and service methods.|
 |`internal/domain/`|Business rules shared by features (name pattern, body and title limits).|
-|`internal/platform/`|Shared infrastructure: `db` (`DBTX`, `InTx`, `InsertID`, `QueryIDs`, `Timestamp`, migrations), `broker`, `httpx`, `httpserver`, `config`, `apperr`, plus the test helpers `dbtest` and `apperrtest`.|
+|`internal/platform/`|Shared infrastructure: `db` (`DBTX`, `InTx`, `InsertID`, `QueryIDs`, `Timestamp`, migrations), `broker`, `httpx`, `httpserver`, `config`, `apperr`, `instance`, plus the test helpers `dbtest` and `apperrtest`.|
+|`internal/platform/instance/`|Local instance management: state file, start/stop/status, admin token file and rotation.|
 |`migrations/`|Numbered SQL files; never edit an applied one.|
