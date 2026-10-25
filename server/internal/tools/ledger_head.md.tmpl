@@ -5,7 +5,7 @@ This page is the reference for every `bus_*` tool. The server serves the same {{
 - **MCP** at `POST /mcp` (streamable HTTP, tools only);
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`.
 
-The [omp extension](../../extensions/omp/agent-message-bus/README.md) registers the same tools under the same names. Every call needs `Authorization: Bearer <token>`. The examples below assume `BUS` holds the server URL (for example `http://localhost:8080`) and `TOKEN` holds a token.
+The [omp extension](../extension/README.md) registers the same tools under the same names. Every call needs `Authorization: Bearer <token>`. The examples below assume `BUS` holds the server URL (for example `http://localhost:8080`) and `TOKEN` holds a token.
 
 Behaviour rules (who may do what, and which error each rule raises) are specified in [`spec/`](spec/README.md).
 
@@ -13,7 +13,7 @@ Behaviour rules (who may do what, and which error each rule raises) are specifie
 
 | Kind | Obtained from | Can do |
 | :--- | :--- | :--- |
-| `admin` | `AMB_ADMIN_TOKEN` on the server | Only `bus_mint_leader` and `bus_whoami`. Every other tool fails with `forbidden`. |
+| `admin` | `AMB_ADMIN_TOKEN` or `<datadir>/admin-token` on the server (`agent-message-bus admin-token`) | Only `bus_mint_leader` and `bus_whoami`. Every other tool fails with `forbidden`. |
 | `leader` | `bus_mint_leader` | Creates, joins and deletes spaces; invites and revokes members in spaces it leads; sends to `all` and sends critical messages. Lists all spaces. |
 | `member` | `bus_invite_member` | Valid in exactly one space. Uses direct messages, topics, blackboards and its inbox there. |
 

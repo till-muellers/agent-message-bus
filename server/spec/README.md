@@ -11,7 +11,7 @@ For installing and running the server, see [`../DEPLOYMENT.md`](../DEPLOYMENT.md
 ```mermaid
 flowchart LR
   subgraph omp["omp session"]
-    ext["extension<br/>extensions/omp/agent-message-bus"]
+    ext["extension<br/>extension/"]
   end
   subgraph container["agent-message-bus container"]
     mcp["/mcp<br/>MCP streamable HTTP, stateless, tools only"]

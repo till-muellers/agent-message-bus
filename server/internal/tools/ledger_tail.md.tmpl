@@ -19,7 +19,7 @@ Over MCP, a failed call returns a tool result with `isError: true` and the text 
 
 ## omp extension
 
-The [omp extension](../../extensions/omp/agent-message-bus/README.md) fetches `GET /v1/tools` once per session and registers every tool above under its server name. Each call uses the credentials that are active at call time. It adds the `/bus` command:
+The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per session and registers every tool above under its server name. Each call uses the credentials that are active at call time. It adds the `/bus` command:
 
 | Command | Effect |
 | :--- | :--- |

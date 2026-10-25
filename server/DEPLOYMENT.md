@@ -4,14 +4,14 @@
 
 |Part|Where|Purpose|
 |---|---|---|
-|Server binary|`agent-message-bus[.exe]` (GitHub Releases or `scripts/build_amb.py`)|Hosts spaces, messages, blackboards and inboxes in one SQLite file. Serves MCP at `/mcp`, RPC at `/v1/tools`, SSE at `/v1/inbox/stream` and `/healthz`.|
-|omp extension|`extensions/omp/agent-message-bus`|Adds `/bus login\|promote\|status\|logout\|server\|help`, registers the `bus_*` tools in omp and streams the inbox into the session. `/bus server start` can fetch and run the server for you.|
+|Server binary|`agent-message-bus[.exe]` (GitHub releases or `scripts/build.py`)|Hosts spaces, messages, blackboards and inboxes in one SQLite file. Serves MCP at `/mcp`, RPC at `/v1/tools`, SSE at `/v1/inbox/stream` and `/healthz`.|
+|omp extension|`extension/` (installed as an omp plugin)|Adds `/bus login\|promote\|status\|logout\|server\|help`, registers the `bus_*` tools in omp and streams the inbox into the session. `/bus server start` can fetch and run the server for you.|
 |Skill|`skills/agent-message-bus/SKILL.md`|Tells agents how to use the bus (leader and member workflows).|
 |Other MCP clients|any streamable-HTTP MCP client|Use the `bus_*` tools without omp (no inbox push).|
 
 ## 2. Get the server
 
-**Download** the binary for your OS/arch from the GitHub Release tagged `amb-v<version>`: `agent-message-bus_<version>_<os>_<arch>[.exe]`, plus `SHA256SUMS`. Verify it:
+**Download** the binary for your OS/arch from the [GitHub release](https://github.com/till-muellers/agent-message-bus/releases) tagged `v<version>`: `agent-message-bus_<version>_<os>_<arch>[.exe]`, plus `SHA256SUMS`. Verify it:
 
 ```powershell
 (Get-FileHash .\agent-message-bus_1.0.0_windows_amd64.exe -Algorithm SHA256).Hash.ToLower()
@@ -26,7 +26,7 @@ chmod +x agent-message-bus_1.0.0_linux_amd64
 **Or build locally** (needs Go 1.27) from the repo root:
 
 ```sh
-python scripts/build_amb.py --version 1.0.0 --out dist   # all OS × amd64/arm64 + dist/SHA256SUMS
+python scripts/build.py --version 1.0.0 --out dist   # all OS × amd64/arm64 + dist/SHA256SUMS
 ```
 
 Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` (the examples below assume that).
@@ -140,10 +140,10 @@ Without a wrapper, point the action at the exe directly (output then isn't logge
 
 ## 6. Docker (optional)
 
-No registry needed; build locally:
+No registry needed; build locally from the repo root:
 
 ```sh
-docker build -t agent-message-bus apps/agent-message-bus
+docker build -t agent-message-bus server
 docker run -d --name amb -p 8080:8080 -v amb-data:/data agent-message-bus
 docker exec amb /agent-message-bus admin-token
 ```
@@ -152,12 +152,13 @@ The image sets `AMB_ADDR=:8080` and `AMB_DB_PATH=/data/agent-message-bus.db`; ke
 
 ## 7. Connect agents
 
-**omp.** Deploy the extension and skill from the repo root. Or skip server setup: `/bus server start` in omp takes the binary from `AGENT_BUS_BIN`, then `PATH`, else downloads the latest release of `till-muellers/agent-message-bus` (verified against `SHA256SUMS`), starts it and logs in as admin; `/bus server stop` stops it and logs out. The download needs that repo's public releases, which don't exist yet; until then set `AGENT_BUS_BIN` or put the binary on `PATH`.
+**omp.** Install the plugin (extension and skill); update it later with `omp plugin upgrade`:
 
 ```sh
-python scripts/seed.py --dry-run   # review
-python scripts/seed.py
+omp plugin install github:till-muellers/agent-message-bus
 ```
+
+Or skip server setup: `/bus server start` in omp takes the binary from `AGENT_BUS_BIN`, then `PATH`, else downloads the latest release of `till-muellers/agent-message-bus` (verified against `SHA256SUMS`), starts it and logs in as admin; `/bus server stop` stops it and logs out.
 
 In an omp session:
 
@@ -193,7 +194,7 @@ AGENT_BUS_URL=http://localhost:8080 AGENT_BUS_TOKEN=<member token> omp
 
 The MCP endpoint is stateless and tools only: no push. Get inbox entries via the SSE endpoint `GET /v1/inbox/stream` or by polling `bus_inbox_read` (then `bus_inbox_ack`).
 
-References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../../skills/agent-message-bus/SKILL.md), the [extension README](../../extensions/omp/agent-message-bus/README.md).
+References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../skills/agent-message-bus/SKILL.md), the [extension README](../extension/README.md).
 
 ## 8. Operations
 
@@ -214,4 +215,4 @@ References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../../sk
 |`admin token must be at least 32 characters`|`AMB_ADMIN_TOKEN` is too short; unset it to use the generated token file.|
 |`AMB_ADMIN_TOKEN is set in the environment; rotate it there`|`rotate-token` only rotates the file token; change the env var and restart.|
 |`403 admin endpoints are only available from localhost`|`stop`/`rotate-token` must run on the server host.|
-|`bus_*` tools missing in omp|Run `/bus status`; with only an admin token there are no tools — run `/bus promote`. After `/bus logout` all `bus_*` tools stay off until `/bus login` or `/bus server start`. Check the omp log for `agent-bus:` lines (unreachable server, unregistered tools). Re-run `scripts/seed.py` if `/bus` is unknown.|
+|`bus_*` tools missing in omp|Run `/bus status`; with only an admin token there are no tools — run `/bus promote`. After `/bus logout` all `bus_*` tools stay off until `/bus login` or `/bus server start`. Check the omp log for `agent-bus:` lines (unreachable server, unregistered tools). If `/bus` is unknown, the plugin isn't installed: run `omp plugin install github:till-muellers/agent-message-bus`.|

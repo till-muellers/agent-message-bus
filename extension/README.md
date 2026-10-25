@@ -1,14 +1,23 @@
 # agent-message-bus (omp extension)
 
-Connects an omp session to an [agent-message-bus](../../../apps/agent-message-bus/README.md) server. The extension:
+Connects an omp session to an [agent-message-bus](../server/README.md) server. The extension:
 
 - registers the server's 29 `bus_*` tools in the session;
 - streams the agent's inbox into the session as `[agent-bus]` messages, then acknowledges each one;
 - adds the `/bus` command to manage credentials and a local server.
 
-Server behaviour (spaces, topics, blackboards, permissions) is specified in [`apps/agent-message-bus/spec/README.md`](../../../apps/agent-message-bus/spec/README.md). Agent-facing usage guidance is in [`skills/agent-message-bus/SKILL.md`](../../../skills/agent-message-bus/SKILL.md).
+Server behaviour (spaces, topics, blackboards, permissions) is specified in [`server/spec/README.md`](../server/spec/README.md). Agent-facing usage guidance is in [`skills/agent-message-bus/SKILL.md`](../skills/agent-message-bus/SKILL.md).
 
-Every tool's arguments, result shape and error codes are listed in [`apps/agent-message-bus/TOOLS.md`](../../../apps/agent-message-bus/TOOLS.md).
+Every tool's arguments, result shape and error codes are listed in [`server/TOOLS.md`](../server/TOOLS.md).
+
+## Install
+
+The repo root is an omp plugin that ships this extension and the skill:
+
+```sh
+omp plugin install github:till-muellers/agent-message-bus
+omp plugin upgrade   # later, to update
+```
 
 ## Commands
 
@@ -86,15 +95,4 @@ The server allows one live inbox stream per agent, so each agent identity belong
 2. `agent-message-bus` (`.exe` on Windows) on `PATH`;
 3. a download of the latest GitHub release of `till-muellers/agent-message-bus` for this platform, verified against the release's `SHA256SUMS` and cached under `<PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus/bin/<version>/`.
 
-The download needs the public `till-muellers/agent-message-bus` releases, which are not published yet; until then set `AGENT_BUS_BIN` or put the binary on `PATH`. Server behaviour (single instance per data dir, admin token file) is described in [`apps/agent-message-bus/README.md`](../../../apps/agent-message-bus/README.md).
-
-## Deploy
-
-From the repo root, preview first, then seed:
-
-```powershell
-python scripts/seed.py --dry-run
-python scripts/seed.py
-```
-
-The default `--scope user` copies the package to `~/.omp/agent/extensions/agent-message-bus/` and the skill to the user skills directory. Use `--scope project --project <path>` to seed into `<project>/.omp/` instead. `--only extensions` or `--only skills` limits what is seeded. Existing files are only overwritten with `--force`.
+Server behaviour (single instance per data dir, admin token file) is described in [`server/README.md`](../server/README.md).
