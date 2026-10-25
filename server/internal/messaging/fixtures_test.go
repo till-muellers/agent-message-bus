@@ -9,6 +9,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
@@ -25,23 +26,31 @@ type world struct {
 
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	db := dbtest.Open(t)
-	ib := inbox.NewService(db, broker.NewMemory(64), time.Now)
-	w := &world{svc: NewService(db, spaces.NewResolver(db), ib, time.Now), ib: ib, db: db, p: map[string]auth.Principal{}}
-	lead := seed(t, db, `INSERT INTO agents (name, kind, created_at) VALUES ('lead', 'leader', '')`)
-	sp := seed(t, db, `INSERT INTO spaces (name, created_by, created_at) VALUES (?, ?, '')`, space, lead)
-	seed(t, db, `INSERT INTO topics (space_id, name, created_by, created_at) VALUES (?, 'all', ?, '')`, sp, lead)
-	w.addParticipant(t, sp, lead, "lead", spaces.RoleLeader)
-	for _, n := range []string{"ann", "bob"} {
-		id := seed(t, db, `INSERT INTO agents (name, kind, created_at) VALUES (?, 'member', '')`, n)
+	conn := dbtest.Open(t)
+	ib := inbox.NewService(conn, broker.NewMemory(64), time.Now)
+	w := &world{svc: NewService(conn, spaces.NewResolver(conn), ib, time.Now), ib: ib, db: conn, p: map[string]auth.Principal{}}
+	const sp = 1
+	dbtest.SeedAgent(t, conn, 1, "lead", "leader")
+	dbtest.SeedSpace(t, conn, sp, space, 1)
+	w.addParticipant(t, sp, 1, "lead", spaces.RoleLeader)
+	for i, n := range []string{"ann", "bob"} {
+		id := int64(i + 2)
+		dbtest.SeedAgent(t, conn, id, n, "member")
 		w.addParticipant(t, sp, id, n, spaces.RoleMember)
+	}
+	creator := spaces.Membership{SpaceID: sp, SpaceName: space, AgentID: 1, AgentName: "lead", Role: spaces.RoleLeader}
+	err := db.InTx(context.Background(), conn, func(tx *sql.Tx) error {
+		return w.svc.OnSpaceCreated(context.Background(), tx, creator)
+	})
+	if err != nil {
+		t.Fatalf("creating all topic: %v", err)
 	}
 	return w
 }
 
 func (w *world) addParticipant(t *testing.T, sp, id int64, name string, role spaces.Role) {
 	t.Helper()
-	seed(t, w.db, `INSERT INTO participants (space_id, agent_id, role, joined_at) VALUES (?, ?, ?, '')`, sp, id, role)
+	dbtest.SeedParticipant(t, w.db, sp, id, string(role))
 	kind := auth.Leader
 	if role == spaces.RoleMember {
 		kind = auth.Member
@@ -50,19 +59,6 @@ func (w *world) addParticipant(t *testing.T, sp, id int64, name string, role spa
 	if kind == auth.Leader {
 		w.p[name] = auth.Principal{Kind: kind, AgentID: id, AgentName: name}
 	}
-}
-
-func seed(t *testing.T, db *sql.DB, q string, args ...any) int64 {
-	t.Helper()
-	res, err := db.Exec(q, args...)
-	if err != nil {
-		t.Fatalf("seeding %q: %v", q, err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		t.Fatalf("seeding id: %v", err)
-	}
-	return id
 }
 
 // inbox returns the entries of agent name as "type:from:topic:body" strings.

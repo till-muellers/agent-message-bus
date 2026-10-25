@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,17 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/till-muellers/agent-message-bus/server/internal/auth"
-	"github.com/till-muellers/agent-message-bus/server/internal/blackboards"
-	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
-	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
-	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/config"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/httpserver"
 	"github.com/till-muellers/agent-message-bus/server/internal/server"
-	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
-	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 	"github.com/till-muellers/agent-message-bus/server/migrations"
 )
 
@@ -51,20 +43,7 @@ func run(ctx context.Context) error {
 	}
 	streamRoot, cancelStreams := context.WithCancel(context.Background())
 	defer cancelStreams()
-	h := build(streamRoot, conn, cfg.AdminToken)
+	h := server.Build(streamRoot, conn, cfg.AdminToken)
 	srv := &http.Server{Addr: cfg.Addr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
 	return httpserver.Serve(ctx, srv, cancelStreams)
-}
-
-func build(streamRoot context.Context, conn *sql.DB, adminToken string) http.Handler {
-	authSvc := auth.NewService(conn, adminToken, time.Now)
-	inboxSvc := inbox.NewService(conn, broker.NewMemory(256), time.Now)
-	resolver := spaces.NewResolver(conn)
-	msgSvc := messaging.NewService(conn, resolver, inboxSvc, time.Now)
-	bbSvc := blackboards.NewService(conn, resolver, inboxSvc, time.Now)
-	spaceSvc := spaces.NewService(conn, resolver, authSvc, inboxSvc, time.Now, msgSvc, bbSvc)
-	reg := tools.New(tools.Deps{
-		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc,
-	})
-	return server.Routes(streamRoot, authSvc, inboxSvc, reg)
 }
