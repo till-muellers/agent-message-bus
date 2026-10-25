@@ -68,4 +68,15 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...
 docker run --rm -v "$PWD:/src" -w /src golang:1.27 go test -race ./...   # race needs CGO
 ```
 
-Layout: `main.go` contains only wiring. Each feature lives in `internal/<feature>/`, shared infrastructure in `internal/platform/`, and numbered SQL migrations in `migrations/`.
+Layout:
+
+|Path|Role|
+|---|---|
+|`main.go`|Wiring only: config, DB, migrations, then `server.Build` and `httpserver.Serve`.|
+|`internal/server/`|Composition root (`Build`) and routes.|
+|`internal/tools/`|The handler layer: one registry of `bus_*` tools that both transports serve.|
+|`internal/rpc/`, `internal/mcpserver/`|Thin transports over the registry.|
+|`internal/{auth,inbox,spaces,messaging,blackboards}/`|Features. `service.go` holds the logic and `repository.go` holds all SQL. Each feature writes only its own tables; cross-feature effects go through hooks and service methods.|
+|`internal/domain/`|Business rules shared by features (name pattern, body and title limits).|
+|`internal/platform/`|Shared infrastructure: `db` (`DBTX`, `InTx`, `InsertID`, `QueryIDs`, `Timestamp`, migrations), `broker`, `httpx`, `httpserver`, `config`, `apperr`, plus the test helpers `dbtest` and `apperrtest`.|
+|`migrations/`|Numbered SQL files; never edit an applied one.|

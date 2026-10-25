@@ -149,12 +149,18 @@ Feature: Agent inbox
       When the admin acknowledges its inbox up to the id of entry "l2"
       Then the call fails with forbidden "admin token has no inbox; mint a leader with bus_mint_leader"
 
-  Rule: New entries are published live after they are stored
+  Rule: Stored entries wake their recipients only after the transaction commits
 
-    Scenario: Publishing routes an entry to its recipient's live channel
+    Scenario: Delivering entries wakes each recipient once
+      Given listeners on the live channels of "worker" and "lead"
+      When an operation stores two entries for "worker" and one for "lead" and commits
+      Then each listener receives exactly one empty wake-up signal
+
+    Scenario: A failed operation stores and wakes nothing
       Given a listener on the live channel of "worker"
-      When entry "b1" is published
-      Then the listener receives entry "b1" as JSON with its public fields only
+      When an operation produces an entry for "worker" and then fails
+      Then "worker" has no new inbox entry
+      And the listener receives no signal
 
   Rule: The inbox stream (GET /v1/inbox/stream) sends the backlog, then live entries
 
@@ -258,7 +264,7 @@ Feature: Agent inbox
     Scenario: The stream handler without an authenticated caller
       # Unreachable through the server routes, which authenticate first.
       When the inbox stream handler runs without an authenticated caller
-      Then the call fails with unauthenticated "missing bearer token"
+      Then the call fails with unauthenticated "bearer token required"
 
   Rule: The live channel fans out per recipient and drops slow listeners
 

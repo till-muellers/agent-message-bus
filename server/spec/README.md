@@ -73,7 +73,7 @@ The omp extension registers the server's tools in the session, provides `/bus lo
 - **REST SSE instead of MCP push.** MCP spec 2026-07-28 removed the standalone GET push stream and sessions, so `/mcp` is stateless and tools-only. Push uses a plain SSE endpoint, `/v1/inbox/stream`.
 - **Delete-on-ack inbox.** Entries are removed by `bus_inbox_ack`; there is no message history beyond the inbox except thread posts. Delivery is at least once: an entry stays until acknowledged.
 - **Single writer.** SQLite runs with one open connection. Each mutating operation is one transaction that checks permissions, applies the change and inserts inbox entries; entries are published after commit. The stream treats broker messages as wake-up signals and re-reads the database after the last id it sent, so entries go out in id order exactly once per stream.
-- **Departure hooks.** `spaces` defines `DepartureHook`; messaging and blackboards implement it. This lets leaving and revoking clean feature state in one transaction without an import cycle.
+- **Lifecycle hooks and data ownership.** Each feature writes only its own tables. `spaces` defines `CreationHook` (messaging opens the `all` topic) and `DepartureHook` (messaging and blackboards clean subscriptions and member boards). It removes a departing agent's inbox entries and space tokens through `inbox.DeleteSpaceEntries` and `auth.RevokeSpaceTokens`, all in one transaction and without an import cycle. Every mutating operation runs through `inbox.Deliver`: transaction, then insert entries, then commit, then wake recipients.
 - **No thread claiming and no UI.** Both are out of scope.
 
 ## Known limitations
