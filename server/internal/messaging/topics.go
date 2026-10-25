@@ -5,8 +5,10 @@ import (
 	"database/sql"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
@@ -30,7 +32,7 @@ func (s *Service) ListTopics(ctx context.Context, p auth.Principal, space string
 
 // CreateTopic opens topic name in space and subscribes the creator.
 func (s *Service) CreateTopic(ctx context.Context, p auth.Principal, space, name string) error {
-	if err := auth.ValidName("topic", name); err != nil {
+	if err := domain.ValidName("topic", name); err != nil {
 		return err
 	}
 	if name == allTopic {
@@ -90,7 +92,7 @@ func (s *Service) Unsubscribe(ctx context.Context, p auth.Principal, space, topi
 	return s.changeSubscription(ctx, p, space, topic, unsubscribe)
 }
 
-type subscriptionOp func(ctx context.Context, q auth.DBTX, topicID, agentID int64) error
+type subscriptionOp func(ctx context.Context, q db.DBTX, topicID, agentID int64) error
 
 func (s *Service) changeSubscription(ctx context.Context, p auth.Principal, space, topic string, op subscriptionOp) error {
 	if topic == allTopic {
@@ -129,7 +131,7 @@ func (s *Service) CloseTopic(ctx context.Context, p auth.Principal, space, topic
 	})
 }
 
-func requireTopic(ctx context.Context, q auth.DBTX, m spaces.Membership, name string) (topicRow, error) {
+func requireTopic(ctx context.Context, q db.DBTX, m spaces.Membership, name string) (topicRow, error) {
 	t, found, err := openTopic(ctx, q, m.SpaceID, name)
 	if err != nil {
 		return topicRow{}, err

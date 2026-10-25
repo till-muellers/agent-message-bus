@@ -46,7 +46,7 @@ func (r *Resolver) Resolve(ctx context.Context, p auth.Principal, space string) 
 }
 
 // ResolveTx is Resolve inside the caller's transaction q.
-func (r *Resolver) ResolveTx(ctx context.Context, q auth.DBTX, p auth.Principal, space string) (Membership, error) {
+func (r *Resolver) ResolveTx(ctx context.Context, q db.DBTX, p auth.Principal, space string) (Membership, error) {
 	if p.Kind == auth.Admin {
 		return Membership{}, apperr.New(apperr.Forbidden, "admin token cannot act in spaces; mint a leader with bus_mint_leader")
 	}

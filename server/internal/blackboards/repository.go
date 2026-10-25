@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 type board struct {
@@ -23,7 +23,7 @@ type thread struct {
 	createdBy   string
 }
 
-func findBoard(ctx context.Context, q auth.DBTX, spaceID int64, name string) (board, bool, error) {
+func findBoard(ctx context.Context, q db.DBTX, spaceID int64, name string) (board, bool, error) {
 	b := board{name: name}
 	err := q.QueryRowContext(ctx, `SELECT id, owner_id FROM blackboards WHERE space_id = ? AND name = ?`,
 		spaceID, name).Scan(&b.id, &b.ownerID)
@@ -36,7 +36,7 @@ func findBoard(ctx context.Context, q auth.DBTX, spaceID int64, name string) (bo
 	return b, true, nil
 }
 
-func insertBoard(ctx context.Context, q auth.DBTX, spaceID int64, name string, ownerID int64, at string) error {
+func insertBoard(ctx context.Context, q db.DBTX, spaceID int64, name string, ownerID int64, at string) error {
 	_, err := q.ExecContext(ctx, `INSERT INTO blackboards (space_id, name, owner_id, created_at) VALUES (?, ?, ?, ?)`,
 		spaceID, name, ownerID, at)
 	if err != nil {
@@ -45,14 +45,14 @@ func insertBoard(ctx context.Context, q auth.DBTX, spaceID int64, name string, o
 	return nil
 }
 
-func deleteBoard(ctx context.Context, q auth.DBTX, id int64) error {
+func deleteBoard(ctx context.Context, q db.DBTX, id int64) error {
 	if _, err := q.ExecContext(ctx, `DELETE FROM blackboards WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("deleting blackboard %d: %w", id, err)
 	}
 	return nil
 }
 
-func listBoards(ctx context.Context, q auth.DBTX, spaceID int64) ([]BoardInfo, error) {
+func listBoards(ctx context.Context, q db.DBTX, spaceID int64) ([]BoardInfo, error) {
 	rows, err := q.QueryContext(ctx, `SELECT b.name, a.name, (SELECT COUNT(*) FROM threads t WHERE t.blackboard_id = b.id)
 		FROM blackboards b JOIN agents a ON a.id = b.owner_id WHERE b.space_id = ? ORDER BY b.name`, spaceID)
 	if err != nil {
@@ -70,7 +70,7 @@ func listBoards(ctx context.Context, q auth.DBTX, spaceID int64) ([]BoardInfo, e
 	return out, rows.Err()
 }
 
-func ownedBoards(ctx context.Context, q auth.DBTX, spaceID, ownerID int64) ([]board, error) {
+func ownedBoards(ctx context.Context, q db.DBTX, spaceID, ownerID int64) ([]board, error) {
 	rows, err := q.QueryContext(ctx, `SELECT id, name FROM blackboards WHERE space_id = ? AND owner_id = ? ORDER BY id`,
 		spaceID, ownerID)
 	if err != nil {
@@ -88,7 +88,7 @@ func ownedBoards(ctx context.Context, q auth.DBTX, spaceID, ownerID int64) ([]bo
 	return out, rows.Err()
 }
 
-func findThread(ctx context.Context, q auth.DBTX, spaceID, id int64) (thread, bool, error) {
+func findThread(ctx context.Context, q db.DBTX, spaceID, id int64) (thread, bool, error) {
 	t := thread{id: id}
 	err := q.QueryRowContext(ctx, `SELECT b.name, t.title, t.created_by, a.name FROM threads t
 		JOIN blackboards b ON b.id = t.blackboard_id JOIN agents a ON a.id = t.created_by
@@ -102,17 +102,17 @@ func findThread(ctx context.Context, q auth.DBTX, spaceID, id int64) (thread, bo
 	return t, true, nil
 }
 
-func insertThread(ctx context.Context, q auth.DBTX, boardID int64, title string, by int64, at string) (int64, error) {
+func insertThread(ctx context.Context, q db.DBTX, boardID int64, title string, by int64, at string) (int64, error) {
 	return insertID(ctx, q, "thread", `INSERT INTO threads (blackboard_id, title, created_by, created_at) VALUES (?, ?, ?, ?)`,
 		boardID, title, by, at)
 }
 
-func insertPost(ctx context.Context, q auth.DBTX, threadID, author int64, body, at string) (int64, error) {
+func insertPost(ctx context.Context, q db.DBTX, threadID, author int64, body, at string) (int64, error) {
 	return insertID(ctx, q, "post", `INSERT INTO posts (thread_id, author_id, body, created_at) VALUES (?, ?, ?, ?)`,
 		threadID, author, body, at)
 }
 
-func insertID(ctx context.Context, q auth.DBTX, what, query string, args ...any) (int64, error) {
+func insertID(ctx context.Context, q db.DBTX, what, query string, args ...any) (int64, error) {
 	res, err := q.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("inserting %s: %w", what, err)
@@ -124,14 +124,14 @@ func insertID(ctx context.Context, q auth.DBTX, what, query string, args ...any)
 	return id, nil
 }
 
-func deleteThread(ctx context.Context, q auth.DBTX, id int64) error {
+func deleteThread(ctx context.Context, q db.DBTX, id int64) error {
 	if _, err := q.ExecContext(ctx, `DELETE FROM threads WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("deleting thread %d: %w", id, err)
 	}
 	return nil
 }
 
-func listThreads(ctx context.Context, q auth.DBTX, boardID int64) ([]ThreadInfo, error) {
+func listThreads(ctx context.Context, q db.DBTX, boardID int64) ([]ThreadInfo, error) {
 	rows, err := q.QueryContext(ctx, `SELECT t.id, t.title, a.name, COUNT(p.id), COALESCE(MAX(p.created_at), t.created_at) AS last
 		FROM threads t JOIN agents a ON a.id = t.created_by LEFT JOIN posts p ON p.thread_id = t.id
 		WHERE t.blackboard_id = ? GROUP BY t.id ORDER BY last DESC, MAX(p.id) DESC`, boardID)
@@ -150,7 +150,7 @@ func listThreads(ctx context.Context, q auth.DBTX, boardID int64) ([]ThreadInfo,
 	return out, rows.Err()
 }
 
-func listPosts(ctx context.Context, q auth.DBTX, threadID int64) ([]Post, error) {
+func listPosts(ctx context.Context, q db.DBTX, threadID int64) ([]Post, error) {
 	rows, err := q.QueryContext(ctx, `SELECT p.id, a.name, p.body, p.created_at FROM posts p
 		JOIN agents a ON a.id = p.author_id WHERE p.thread_id = ? ORDER BY p.id`, threadID)
 	if err != nil {
@@ -168,7 +168,7 @@ func listPosts(ctx context.Context, q auth.DBTX, threadID int64) ([]Post, error)
 	return out, rows.Err()
 }
 
-func subscribe(ctx context.Context, q auth.DBTX, threadID, agentID int64) error {
+func subscribe(ctx context.Context, q db.DBTX, threadID, agentID int64) error {
 	_, err := q.ExecContext(ctx, `INSERT OR IGNORE INTO thread_subscriptions (thread_id, agent_id) VALUES (?, ?)`,
 		threadID, agentID)
 	if err != nil {
@@ -177,7 +177,7 @@ func subscribe(ctx context.Context, q auth.DBTX, threadID, agentID int64) error 
 	return nil
 }
 
-func unsubscribe(ctx context.Context, q auth.DBTX, threadID, agentID int64) error {
+func unsubscribe(ctx context.Context, q db.DBTX, threadID, agentID int64) error {
 	_, err := q.ExecContext(ctx, `DELETE FROM thread_subscriptions WHERE thread_id = ? AND agent_id = ?`,
 		threadID, agentID)
 	if err != nil {
@@ -186,7 +186,7 @@ func unsubscribe(ctx context.Context, q auth.DBTX, threadID, agentID int64) erro
 	return nil
 }
 
-func isSubscribed(ctx context.Context, q auth.DBTX, threadID, agentID int64) (bool, error) {
+func isSubscribed(ctx context.Context, q db.DBTX, threadID, agentID int64) (bool, error) {
 	var n int
 	err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM thread_subscriptions WHERE thread_id = ? AND agent_id = ?`,
 		threadID, agentID).Scan(&n)
@@ -196,17 +196,17 @@ func isSubscribed(ctx context.Context, q auth.DBTX, threadID, agentID int64) (bo
 	return n > 0, nil
 }
 
-func threadSubscribers(ctx context.Context, q auth.DBTX, threadID, exclude int64) ([]int64, error) {
+func threadSubscribers(ctx context.Context, q db.DBTX, threadID, exclude int64) ([]int64, error) {
 	return ids(ctx, q, `SELECT agent_id FROM thread_subscriptions WHERE thread_id = ? AND agent_id <> ? ORDER BY agent_id`,
 		threadID, exclude)
 }
 
-func boardSubscribers(ctx context.Context, q auth.DBTX, boardID, exclude int64) ([]int64, error) {
+func boardSubscribers(ctx context.Context, q db.DBTX, boardID, exclude int64) ([]int64, error) {
 	return ids(ctx, q, `SELECT DISTINCT s.agent_id FROM thread_subscriptions s JOIN threads t ON t.id = s.thread_id
 		WHERE t.blackboard_id = ? AND s.agent_id <> ? ORDER BY s.agent_id`, boardID, exclude)
 }
 
-func ids(ctx context.Context, q auth.DBTX, query string, args ...any) ([]int64, error) {
+func ids(ctx context.Context, q db.DBTX, query string, args ...any) ([]int64, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing subscribers: %w", err)
@@ -223,7 +223,7 @@ func ids(ctx context.Context, q auth.DBTX, query string, args ...any) ([]int64, 
 	return out, rows.Err()
 }
 
-func deleteSpaceSubscriptions(ctx context.Context, q auth.DBTX, spaceID, agentID int64) error {
+func deleteSpaceSubscriptions(ctx context.Context, q db.DBTX, spaceID, agentID int64) error {
 	_, err := q.ExecContext(ctx, `DELETE FROM thread_subscriptions WHERE agent_id = ? AND thread_id IN
 		(SELECT t.id FROM threads t JOIN blackboards b ON b.id = t.blackboard_id WHERE b.space_id = ?)`, agentID, spaceID)
 	if err != nil {

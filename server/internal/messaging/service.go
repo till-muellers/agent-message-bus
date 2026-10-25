@@ -10,6 +10,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
@@ -17,11 +18,11 @@ const maxBody = 65536
 
 type membershipResolver interface {
 	Resolve(ctx context.Context, p auth.Principal, space string) (spaces.Membership, error)
-	ResolveTx(ctx context.Context, q auth.DBTX, p auth.Principal, space string) (spaces.Membership, error)
+	ResolveTx(ctx context.Context, q db.DBTX, p auth.Principal, space string) (spaces.Membership, error)
 }
 
 type inboxWriter interface {
-	Insert(ctx context.Context, tx auth.DBTX, es []inbox.Entry) ([]inbox.Entry, error)
+	Insert(ctx context.Context, tx db.DBTX, es []inbox.Entry) ([]inbox.Entry, error)
 	Publish(es []inbox.Entry)
 }
 

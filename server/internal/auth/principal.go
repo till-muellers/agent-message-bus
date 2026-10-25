@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
@@ -22,13 +21,6 @@ type Principal struct {
 	AgentID   int64
 	AgentName string
 	SpaceID   int64
-}
-
-// DBTX is satisfied by both *sql.DB and *sql.Tx.
-type DBTX interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 type principalKey struct{}

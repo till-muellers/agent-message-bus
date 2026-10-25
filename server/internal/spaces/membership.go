@@ -3,7 +3,6 @@ package spaces
 import (
 	"context"
 
-	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
@@ -29,7 +28,7 @@ type Membership struct {
 // It runs inside the departure transaction; returned entries are inserted there
 // and published after commit.
 type DepartureHook interface {
-	OnDeparture(ctx context.Context, tx auth.DBTX, m Membership) ([]inbox.Entry, error)
+	OnDeparture(ctx context.Context, tx db.DBTX, m Membership) ([]inbox.Entry, error)
 }
 
 // CreationHook seeds feature state when a space is created; m is the creator's

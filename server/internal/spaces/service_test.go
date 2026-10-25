@@ -8,6 +8,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 var admin = auth.Principal{Kind: auth.Admin}
@@ -272,7 +273,7 @@ type recordingHook struct {
 	calls     []Membership
 }
 
-func (h *recordingHook) OnDeparture(_ context.Context, _ auth.DBTX, m Membership) ([]inbox.Entry, error) {
+func (h *recordingHook) OnDeparture(_ context.Context, _ db.DBTX, m Membership) ([]inbox.Entry, error) {
 	h.calls = append(h.calls, m)
 	return []inbox.Entry{{AgentID: h.recipient, SpaceID: m.SpaceID, Space: m.SpaceName,
 		Type: inbox.BlackboardRemoved, From: m.AgentName, Blackboard: "notes"}}, nil
