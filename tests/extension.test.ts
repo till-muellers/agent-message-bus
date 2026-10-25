@@ -7,11 +7,13 @@ import { type JsonSchema, toZod, type Zod } from "../extensions/omp/agent-messag
 import { createBusExtension } from "../extensions/omp/agent-message-bus/index.ts";
 import { BusError, type BusClient, createClient, type FetchLike, type RemoteTool } from "../extensions/omp/agent-message-bus/lib/client.ts";
 import { runCommand, type CommandDeps, USAGE } from "../extensions/omp/agent-message-bus/lib/command.ts";
+import { conflictWarning } from "../extensions/omp/agent-message-bus/lib/conflict.ts";
 import {
 	type CredentialStore,
 	configDir,
 	createCredentialStore,
 	resolveActive,
+	type SessionCredentials,
 	type StoredCredentials,
 } from "../extensions/omp/agent-message-bus/lib/credentials.ts";
 import { createDeliver, deliveryOptions } from "../extensions/omp/agent-message-bus/lib/deliver.ts";
@@ -224,6 +226,7 @@ describe("runInboxLoop", () => {
 			signal: new AbortController().signal,
 			deliver: async e => void delivered.push(e.id),
 			onError: error => void errors.push(error.message),
+			onConflict: () => {},
 			sleep: noSleep,
 		});
 		expect(delivered).toEqual([1, 2, 3]);
@@ -251,6 +254,7 @@ describe("runInboxLoop", () => {
 			signal: new AbortController().signal,
 			deliver: async () => {},
 			onError: error => void errors.push(error.message),
+			onConflict: () => {},
 			sleep: async ms => void delays.push(ms),
 		});
 		expect(delays).toEqual([1000, 2000, 4000, 8000, 16000, 30000]);
@@ -267,6 +271,7 @@ describe("runInboxLoop", () => {
 			signal: controller.signal,
 			deliver: async () => {},
 			onError: () => {},
+			onConflict: () => {},
 			sleep: noSleep,
 		});
 		expect(bus.calls).toHaveLength(0);
@@ -284,11 +289,69 @@ describe("runInboxLoop", () => {
 			signal: new AbortController().signal,
 			deliver: async e => void delivered.push(e.id),
 			onError: error => void errors.push(error.message),
+			onConflict: () => {},
 			sleep: noSleep,
 		});
 		expect(delivered).toEqual([1, 2]);
 		expect(bus.calls.filter(c => c.url.endsWith("/bus_inbox_ack")).map(c => c.body)).toEqual([{ upTo: 1 }, { upTo: 2 }]);
 		expect(errors).toEqual(["ack failed", "invalid token"]);
+	});
+
+	test("a 409 conflict is reported once per streak, retried with backoff, and a frame resets the streak", async () => {
+		const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
+		const bus = fakeBus([conflict, conflict, () => new Response(streamOf([frame(entry(1))])), conflict]);
+		const delivered: number[] = [];
+		const errors: string[] = [];
+		const conflicts: string[] = [];
+		const delays: number[] = [];
+		await runInboxLoop({
+			client: createClient(bus.fetchFn),
+			getActive: () => ({ url: URL_, token: "tok" }),
+			signal: new AbortController().signal,
+			deliver: async e => void delivered.push(e.id),
+			onError: error => void errors.push(error.message),
+			onConflict: async error => void conflicts.push(error.code),
+			sleep: async ms => void delays.push(ms),
+		});
+		expect(delivered).toEqual([1]);
+		expect(conflicts).toEqual(["conflict", "conflict"]);
+		expect(delays).toEqual([1000, 2000, 1000, 2000]);
+		expect(errors).toEqual(["invalid token"]);
+	});
+
+	test("401 and 403 stay fatal", async () => {
+		for (const [status, code] of [
+			[401, "unauthenticated"],
+			[403, "forbidden"],
+		] as const) {
+			const bus = fakeBus([() => errorResponse(status, code, "no"), () => new Response(streamOf([frame(entry(1))]))]);
+			const delivered: number[] = [];
+			await runInboxLoop({
+				client: createClient(bus.fetchFn),
+				getActive: () => ({ url: URL_, token: "tok" }),
+				signal: new AbortController().signal,
+				deliver: async e => void delivered.push(e.id),
+				onError: () => {},
+				onConflict: () => {},
+				sleep: noSleep,
+			});
+			expect({ code, delivered, opens: bus.calls.length }).toEqual({ code, delivered: [], opens: 1 });
+		}
+	});
+});
+
+describe("conflictWarning", () => {
+	const active = { url: URL_, token: "tok" };
+
+	test("names the agent from whoami, and omits the name when whoami fails", async () => {
+		const named = fakeBus([], { bus_whoami: () => Response.json({ result: { kind: "member", name: "w", spaces: [] } }) });
+		expect(await conflictWarning(createClient(named.fetchFn), active)).toBe(
+			"another session is already connected as w; inbox not delivered here",
+		);
+		const failing = fakeBus([], { bus_whoami: () => errorResponse(500, "internal", "boom") });
+		expect(await conflictWarning(createClient(failing.fetchFn), active)).toBe(
+			"another session is already connected as this agent; inbox not delivered here",
+		);
 	});
 });
 
@@ -375,11 +438,17 @@ function memoryStore(initial?: StoredCredentials): CredentialStore & { value: St
 	return store;
 }
 
-function commandDeps(store: CredentialStore, client: BusClient, env: NodeJS.ProcessEnv = {}): CommandDeps & { restarts: number; stops: number } {
+function commandDeps(
+	store: CredentialStore,
+	client: BusClient,
+	env: NodeJS.ProcessEnv = {},
+	session: SessionCredentials = {},
+): CommandDeps & { restarts: number; stops: number } {
 	const deps = {
 		store,
 		client,
 		env,
+		session,
 		restarts: 0,
 		stops: 0,
 		restart: async () => void deps.restarts++,
@@ -423,14 +492,44 @@ describe("runCommand", () => {
 		expect(await runCommand("promote lead", deps)).toEqual({ message: "Run /bus login <url> <admin-token> first.", level: "error" });
 	});
 
-	test("promote mints a leader with the admin token and stores it", async () => {
+	test("promote mints a leader with the admin token into the session only; the store is untouched", async () => {
 		const bus = fakeBus([], { bus_mint_leader: args => Response.json({ result: { name: args.name, token: "lead-tok" } }) });
-		const store = memoryStore({ url: URL_, adminToken: "adm" });
+		const store = memoryStore({ url: `${URL_}/`, adminToken: "adm" });
 		const deps = commandDeps(store, createClient(bus.fetchFn));
 		const result = await runCommand("promote lead", deps);
-		expect(result).toEqual({ message: "This session now acts as leader lead.", level: "info" });
+		expect(result).toEqual({
+			message: "This session now acts as leader lead (until it ends; run /bus promote again after a restart).",
+			level: "info",
+		});
 		expect(bus.calls[0]).toMatchObject({ url: `${URL_}/v1/tools/bus_mint_leader`, auth: "Bearer adm", body: { name: "lead" } });
-		expect(store.value).toEqual({ url: URL_, adminToken: "adm", token: "lead-tok" });
+		expect(store.value).toEqual({ url: `${URL_}/`, adminToken: "adm" });
+		expect(deps.session.override).toEqual({ url: URL_, token: "lead-tok" });
+		expect(deps.restarts).toBe(1);
+	});
+
+	test("status shows the session's promoted identity over the stored one", async () => {
+		const bus = fakeBus([], {
+			bus_whoami: whoami({ "lead-tok": { kind: "leader", name: "lead", spaces: [] }, mem: { kind: "member", name: "w", spaces: [] } }),
+		});
+		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), createClient(bus.fetchFn), {}, { override: { url: URL_, token: "lead-tok" } });
+		expect((await runCommand("status", deps)).message).toBe(`${URL_}: leader lead; spaces: none`);
+	});
+
+	test("logout clears the session override", async () => {
+		for (const env of [{}, { AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env" }]) {
+			const deps = commandDeps(memoryStore({ url: URL_, adminToken: "adm" }), createClient(fakeBus([]).fetchFn), env, {
+				override: { url: URL_, token: "lead-tok" },
+			});
+			await runCommand("logout", deps);
+			expect(deps.session.override).toBeUndefined();
+		}
+	});
+
+	test("login with an agent token clears the session override so the new token takes effect", async () => {
+		const bus = fakeBus([], { bus_whoami: whoami({ mem: { kind: "member", name: "w", spaces: [] } }) });
+		const deps = commandDeps(memoryStore(), createClient(bus.fetchFn), {}, { override: { url: URL_, token: "lead-tok" } });
+		await runCommand(`login ${URL_} mem`, deps);
+		expect(deps.session.override).toBeUndefined();
 		expect(deps.restarts).toBe(1);
 	});
 
@@ -481,13 +580,16 @@ describe("credentials", () => {
 		for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 	});
 
-	test("resolveActive: env overrides the file", () => {
+	test("resolveActive: session override > env > file", () => {
 		const stored = { url: "http://file", token: "file-tok" };
-		expect(resolveActive({}, stored)).toEqual({ url: "http://file", token: "file-tok" });
-		expect(resolveActive({ AGENT_BUS_URL: "http://env/", AGENT_BUS_TOKEN: "env-tok" }, stored)).toEqual({ url: "http://env", token: "env-tok" });
-		expect(resolveActive({ AGENT_BUS_URL: "http://env" }, stored)).toEqual({ url: "http://file", token: "file-tok" });
-		expect(resolveActive({}, { url: "http://file", adminToken: "a" })).toBeUndefined();
-		expect(resolveActive({}, undefined)).toBeUndefined();
+		const env = { AGENT_BUS_URL: "http://env/", AGENT_BUS_TOKEN: "env-tok" };
+		const session = { override: { url: "http://session", token: "session-tok" } };
+		expect(resolveActive(session, env, stored)).toEqual({ url: "http://session", token: "session-tok" });
+		expect(resolveActive({}, env, stored)).toEqual({ url: "http://env", token: "env-tok" });
+		expect(resolveActive({}, {}, stored)).toEqual({ url: "http://file", token: "file-tok" });
+		expect(resolveActive({}, { AGENT_BUS_URL: "http://env" }, stored)).toEqual({ url: "http://file", token: "file-tok" });
+		expect(resolveActive({}, {}, { url: "http://file", adminToken: "a" })).toBeUndefined();
+		expect(resolveActive({}, {}, undefined)).toBeUndefined();
 	});
 
 	test("configDir: OMP_AGENT_BUS_DIR wins, else <PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus", () => {
@@ -518,11 +620,18 @@ describe("index wiring", () => {
 		for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 	});
 
-	/** Boots the extension against a fake bus serving entries 1 and 2 (critical), runs session_start in `mode`, and returns what was sent. */
-	async function runSession(mode: string) {
+	/**
+	 * Boots the extension against a fake bus (default: entries 1 and 2 (critical)), runs session_start in `mode` until the
+	 * scripted streams run out (the final 401 warning), and returns what was sent.
+	 */
+	async function runSession(
+		mode: string,
+		streams: (() => Response)[] = [() => new Response(streamOf([frame(entry(1)), frame(entry(2, { critical: true }))]))],
+		tools: Parameters<typeof fakeBus>[1] = {},
+	) {
 		const dir = await mkdtemp(join(tmpdir(), "amb-"));
 		dirs.push(dir);
-		const bus = fakeBus([() => new Response(streamOf([frame(entry(1)), frame(entry(2, { critical: true }))]))]);
+		const bus = fakeBus(streams, tools);
 		const sent: { message: { customType: string; content: string; display: boolean }; options: unknown }[] = [];
 		const warnings: string[] = [];
 		const { promise: warned, resolve: onWarn } = Promise.withResolvers<void>();
@@ -537,7 +646,7 @@ describe("index wiring", () => {
 			logger: {
 				warn: (msg: string) => {
 					warnings.push(msg);
-					onWarn();
+					if (msg === "agent-bus: invalid token") onWarn();
 				},
 				info: () => {},
 				error: () => {},
@@ -567,6 +676,51 @@ describe("index wiring", () => {
 			},
 		]);
 		expect(warnings).toEqual(["agent-bus: invalid token"]);
+	});
+
+	test("another session holding the stream warns once, retries, and delivers once the stream opens", async () => {
+		const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
+		const { sent, warnings } = await runSession("tui", [conflict, conflict, () => new Response(streamOf([frame(entry(1))]))], {
+			bus_whoami: () => Response.json({ result: { kind: "member", name: "w", spaces: [] } }),
+		});
+		expect(warnings).toEqual(["agent-bus: another session is already connected as w; inbox not delivered here", "agent-bus: invalid token"]);
+		expect(sent.map(s => s.message.content)).toEqual([formatEntry(entry(1))]);
+	});
+
+	test("promote streams as the minted leader without writing its token to credentials.json; a new session forgets it", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "amb-"));
+		dirs.push(dir);
+		const env = { OMP_AGENT_BUS_DIR: dir };
+		const store = createCredentialStore(env);
+		await store.save({ url: URL_, adminToken: "adm" });
+		const bus = fakeBus([() => new Response(streamOf([frame(entry(1))]))], {
+			bus_mint_leader: args => Response.json({ result: { name: args.name, token: "lead-tok" } }),
+		});
+		type Ctx = { mode: string; ui: { notify(message: string): void } };
+		const handlers: Record<string, ((event: unknown, ctx: Ctx) => unknown)[]> = {};
+		const commands: ((args: string, ctx: Ctx) => Promise<void>)[] = [];
+		const { promise: ended, resolve: onEnd } = Promise.withResolvers<void>();
+		const pi = {
+			zod: z,
+			registerTool: () => {},
+			registerCommand: (_name: string, options: { handler: (typeof commands)[number] }) => void commands.push(options.handler),
+			on: (event: string, handler: (event: unknown, ctx: Ctx) => unknown) => void (handlers[event] ??= []).push(handler),
+			sendMessage: () => {},
+			logger: { warn: () => onEnd(), info: () => {}, error: () => {}, debug: () => {} },
+		} as unknown as ExtensionAPI;
+		await createBusExtension({ fetchFn: bus.fetchFn, env, sleep: noSleep })(pi);
+		const ctx: Ctx = { mode: "print", ui: { notify: () => {} } };
+		const session = async (event: string) => {
+			for (const handler of handlers[event] ?? []) await handler({}, ctx);
+		};
+		await session("session_start");
+		await commands[0]("promote lead", ctx);
+		await ended;
+		await session("session_shutdown");
+		await session("session_start");
+		const streams = bus.calls.filter(c => c.url.endsWith("/v1/inbox/stream"));
+		expect(streams.map(c => c.auth)).toEqual(["Bearer lead-tok", "Bearer lead-tok"]);
+		expect(await store.load()).toEqual({ url: URL_, adminToken: "adm" });
 	});
 
 	test("only interactive modes (tui, rpc) trigger a turn; one-shot modes (print, json) do not", async () => {

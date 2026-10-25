@@ -5,12 +5,14 @@
  */
 import { type CommandResult, parseArgs } from "../../_shared/command.ts";
 import { BusError, type BusClient } from "./client.ts";
-import { type CredentialStore, resolveActive, trimUrl } from "./credentials.ts";
+import { type CredentialStore, resolveActive, type SessionCredentials, trimUrl } from "./credentials.ts";
 
 export interface CommandDeps {
 	store: CredentialStore;
 	client: BusClient;
 	env: NodeJS.ProcessEnv;
+	/** In-memory credentials of this session; `/bus promote` sets the override, login (agent token) and logout clear it. */
+	session: SessionCredentials;
 	/** Re-resolves credentials, registers tools and restarts the inbox loop. */
 	restart(): Promise<void>;
 	/** Stops the inbox loop and drops the active credentials. */
@@ -27,15 +29,15 @@ interface Whoami {
 export const USAGE = [
 	"Agent message bus:",
 	"  /bus login <url> <token>     store a bus token (admin, leader or member)",
-	"  /bus promote <leader-name>   mint a leader token with the stored admin token and use it",
+	"  /bus promote <leader-name>   mint a leader token with the stored admin token; this session only, never stored",
 	"  /bus status                  show who this session is on the bus",
-	"  /bus logout                  forget the stored credentials and stop the inbox stream",
+	"  /bus logout                  forget the stored and session credentials and stop the inbox stream",
 	"  /bus help                    show this help",
 ].join("\n");
 
 async function status(deps: CommandDeps): Promise<CommandResult> {
 	const stored = await deps.store.load();
-	const active = resolveActive(deps.env, stored);
+	const active = resolveActive(deps.session, deps.env, stored);
 	const url = active?.url ?? (stored ? trimUrl(stored.url) : undefined);
 	const token = active?.token ?? stored?.adminToken;
 	if (!url || !token) return { message: `Not logged in.\n${USAGE}`, level: "info" };
@@ -54,25 +56,28 @@ async function login(deps: CommandDeps, rawUrl: string | undefined, token: strin
 		return { message: "Admin token stored. Run /bus promote <leader-name> to act as a leader.", level: "info" };
 	}
 	await deps.store.save({ url, adminToken: stored?.url === url ? stored.adminToken : undefined, token });
+	deps.session.override = undefined;
 	await deps.restart();
 	return { message: `Logged in as ${me.kind} ${me.name}`, level: "info" };
 }
 
+/** Mints a leader token held in this session only: credentials.json keeps just the url and admin token. */
 async function promote(deps: CommandDeps, name: string | undefined): Promise<CommandResult> {
 	if (!name) return { message: USAGE, level: "error" };
 	const stored = await deps.store.load();
 	if (!stored?.adminToken) return { message: "Run /bus login <url> <admin-token> first.", level: "error" };
 	const url = trimUrl(stored.url);
 	const minted = (await deps.client.callTool(url, stored.adminToken, "bus_mint_leader", { name })) as { name: string; token: string };
-	await deps.store.save({ ...stored, url, token: minted.token });
+	deps.session.override = { url, token: minted.token };
 	await deps.restart();
-	return { message: `This session now acts as leader ${minted.name}.`, level: "info" };
+	return { message: `This session now acts as leader ${minted.name} (until it ends; run /bus promote again after a restart).`, level: "info" };
 }
 
-/** Clears the stored file; env credentials, when set, keep the session active. */
+/** Clears the stored file and the session override; env credentials, when set, keep the session active. */
 async function logout(deps: CommandDeps): Promise<CommandResult> {
 	await deps.store.clear();
-	if (!resolveActive(deps.env, undefined)) {
+	deps.session.override = undefined;
+	if (!resolveActive(deps.session, deps.env, undefined)) {
 		deps.stop();
 		return { message: "Logged out.", level: "info" };
 	}
