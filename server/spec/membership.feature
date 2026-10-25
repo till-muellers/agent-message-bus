@@ -8,22 +8,27 @@ Feature: Space membership
     And the admin minted leader "lead2"
     And leader "lead" created space "demo"
 
-  Rule: Leaders of a space invite members (bus_invite_member)
+  Rule: Leaders of a space invite members with invite codes (bus_invite_member)
 
-    Scenario: A leader invites a new member
+    # "leader x invited member y to space z" means: x created an invite code that y accepted.
+    # Code lifetime and redemption are specified in invites.feature.
+
+    Scenario: A leader invites a new member and the member accepts the code
       When leader "lead" invites member "worker" to space "demo"
-      Then the call returns name "worker", space "demo" and a new member token
-      And the returned token authenticates as member "worker" bound to space "demo"
+      Then the call returns name "worker", space "demo" and an invite code
+      When the code is accepted
+      Then the returned token authenticates as member "worker" bound to space "demo"
       And the participants of space "demo" are:
         | name   | role   |
         | lead   | leader |
         | worker | member |
 
-    Scenario: Re-inviting a member returns a second working token without duplicating the participant
+    Scenario: Re-inviting a member yields a second working token without duplicating the participant
       Given leader "lead" invited member "worker" to space "demo"
       When leader "lead" invites member "worker" to space "demo" again
-      Then the call returns a token different from the first one
-      And the second token authenticates as the same member "worker" in space "demo"
+      And the code is accepted
+      Then the returned token is different from the first one
+      And it authenticates as the same member "worker" in space "demo"
       And the first token still authenticates as member "worker"
       And "worker" appears exactly once among the participants of space "demo"
 
@@ -31,8 +36,8 @@ Feature: Space membership
       Given leader "lead" created space "beta"
       And leader "lead" invited member "worker" to space "demo"
       When leader "lead" invites member "worker" to space "beta"
-      Then the call succeeds
-      And the returned token authenticates as member "worker" bound to space "beta"
+      And the code is accepted
+      Then the returned token authenticates as member "worker" bound to space "beta"
       And the earlier token stays bound to space "demo"
 
     Scenario Outline: Only leaders of the space may invite (<case>)
@@ -70,7 +75,11 @@ Feature: Space membership
         | space   |
         | name    |
 
-  Rule: Leaders of a space revoke members (bus_revoke_member)
+  Rule: Leaders of a space revoke members idempotently (bus_revoke_member)
+
+    # Revoking removes the member, if present, and every pending invite code for that name
+    # in the space (see invites.feature). It never fails because nothing matched; the result
+    # {"deleted": true|false} says whether anything was removed.
 
     Background:
       Given leader "lead2" joined space "demo"
@@ -85,19 +94,28 @@ Feature: Space membership
       When the admin revokes member "worker" from space "demo"
       Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
 
-    Scenario Outline: The target must be a member of the space (<case>)
-      When leader "lead" revokes member "<target>" from space "demo"
-      Then the call fails with not_found "member <target> not in space demo"
+    Scenario: An unknown space is not found
+      When leader "lead" revokes member "worker" from space "nope"
+      Then the call fails with not_found "space nope not found"
 
-      Examples:
-        | case                | target |
-        | target is a leader  | lead2  |
-        | unknown participant | ghost  |
+    Scenario: A leader cannot be revoked
+      When leader "lead" revokes member "lead2" from space "demo"
+      Then the call fails with conflict "lead2 is a leader of space demo; leaders cannot be revoked"
+      And "lead2" is a leader of space "demo"
+
+    Scenario: Revoking a name with nothing to remove reports deleted false
+      When leader "lead" revokes member "ghost" from space "demo"
+      Then the call returns {"deleted": false}
+
+    Scenario: Revoking the same member twice reports deleted false the second time
+      Given leader "lead" revoked member "worker" from space "demo"
+      When leader "lead" revokes member "worker" from space "demo"
+      Then the call returns {"deleted": false}
 
     Scenario: A leader revokes a member
       Given member "worker" has an unread "direct_message" inbox entry from "lead" in space "demo"
       When leader "lead" revokes member "worker" from space "demo"
-      Then the call succeeds
+      Then the call returns {"deleted": true}
       And member "worker" has no inbox entries left
       And the participants of space "demo" are:
         | name  | role   |

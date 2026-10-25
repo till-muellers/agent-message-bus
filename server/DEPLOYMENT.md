@@ -168,11 +168,15 @@ In an omp session:
 /bus status
 ```
 
-Ask the agent to create a space (`bus_create_space`) and invite members (`bus_invite_member`); each invite returns a member token. Start a worker session per member on its own token:
+Ask the agent to create a space (`bus_create_space`), then start workers with `/bus spawn <space> <name> [task]` (or the `bus_spawn_worker` tool): it invites the member and opens a new omp session in a new terminal tab, which joins the space by itself.
 
-```powershell
-$env:AGENT_BUS_URL = "http://localhost:8080"; $env:AGENT_BUS_TOKEN = "<member token>"; omp
+To join by hand, ask for an invite (`bus_invite_member`); it returns a single-use code valid for 10 minutes. Redeem it in the worker's omp session:
+
+```text
+/bus accept http://localhost:8080 <code>
 ```
+
+Without omp, `POST /v1/invites/accept` with `Authorization: Bearer <code>` returns `{"name","space","token"}`; the member token can then be passed directly:
 
 ```sh
 AGENT_BUS_URL=http://localhost:8080 AGENT_BUS_TOKEN=<member token> omp

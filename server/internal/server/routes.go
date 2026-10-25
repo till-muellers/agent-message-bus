@@ -8,20 +8,24 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/admin"
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
+	"github.com/till-muellers/agent-message-bus/server/internal/invites"
 	"github.com/till-muellers/agent-message-bus/server/internal/mcpserver"
 	"github.com/till-muellers/agent-message-bus/server/internal/rpc"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
 
-// Routes mounts health, MCP, RPC, inbox stream and localhost admin endpoints.
-// shutdown is invoked by POST /v1/admin/shutdown.
-func Routes(streamRoot context.Context, a *auth.Service, ib *inbox.Service, reg *tools.Registry, shutdown func()) http.Handler {
+// Routes mounts health, MCP, RPC, invite acceptance, inbox stream and localhost admin endpoints.
+// shutdown is invoked by POST /v1/admin/shutdown. Invite acceptance skips the auth
+// middleware because the invite code itself is the bearer.
+func Routes(streamRoot context.Context, a *auth.Service, ib *inbox.Service, inv *invites.Service,
+	reg *tools.Registry, shutdown func()) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.Handle("/mcp", mcpserver.NewHandler(reg, a))
 	api := a.Middleware(rpc.NewHandler(reg))
 	mux.Handle("GET /v1/tools", api)
 	mux.Handle("POST /v1/tools/{name}", api)
+	mux.Handle("POST /v1/invites/accept", inv.AcceptHandler())
 	mux.Handle("GET /v1/inbox/stream", a.Middleware(ib.StreamHandler(streamRoot)))
 	admin.Mount(mux, a.Middleware, a, shutdown)
 	return mux

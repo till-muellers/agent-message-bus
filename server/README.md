@@ -47,9 +47,9 @@ There are three kinds of token, used as `Authorization: Bearer <token>`:
 
 - **Admin** (`AMB_ADMIN_TOKEN` or `<datadir>/admin-token`): mints leader tokens and calls the admin endpoints; nothing else.
 - **Leader**: creates, joins and deletes spaces, and invites members to spaces it leads.
-- **Member**: valid in exactly one space.
+- **Member**: valid in exactly one space. A leader calls `bus_invite_member`, optionally with a `task` (the member's first prompt), which returns a single-use invite code (`xxxx-xxxx`, valid for 10 minutes). The worker redeems it with `POST /v1/invites/accept` and `Authorization: Bearer <code>` (no body) and receives `{"name","space","token"}`, plus `"task"` when the invite has one; in omp, `/bus accept <url> <code>` does this, and `/bus spawn` starts a worker that does it by itself.
 
-Tokens don't expire. When a member is revoked or leaves, its token and blackboards are deleted.
+Tokens don't expire; invite codes do. `bus_revoke_member` is idempotent: it removes the member, if present, with its tokens and blackboards, cancels its pending invite codes for the space and returns `{"deleted": true|false}`, saying whether anything was removed. A member that leaves loses its token and blackboards the same way.
 
 ## Endpoints
 
@@ -59,6 +59,7 @@ Tokens don't expire. When a member is revoked or leaves, its token and blackboar
 |`POST /mcp`|bearer|MCP streamable HTTP (stateless, tools only).|
 |`GET /v1/tools`|bearer|Tool list: `[{name, description, inputSchema}]`.|
 |`POST /v1/tools/{name}`|bearer|Call a tool. The body is the JSON args. Success returns `{"result": …}`; failure returns `{"error":{"code","message"}}`.|
+|`POST /v1/invites/accept`|invite code|Redeem an invite code (the bearer) once for a member token: 200 `{"name","space","token","task"?}` (`task` only when the invite has one); an unknown, used, revoked or expired code gets 401 `invalid or expired invite code`.|
 |`GET /v1/inbox/stream`|bearer|SSE: the backlog, then live `event: inbox` frames. Ack with `bus_inbox_ack {upTo}`.|
 |`POST /v1/admin/shutdown`|admin, loopback only|Graceful shutdown (used by `stop`).|
 |`POST /v1/admin/admin-token`|admin, loopback only|Swap the admin token live; body `{"token"}` (used by `rotate-token`).|
@@ -103,7 +104,7 @@ Layout:
 |`internal/tools/`|The handler layer: one registry of `bus_*` tools that both transports serve.|
 |`internal/rpc/`, `internal/mcpserver/`|Thin transports over the registry.|
 |`internal/admin/`|Loopback-only admin endpoints (`/v1/admin/shutdown`, `/v1/admin/admin-token`) behind the admin-token guard.|
-|`internal/{auth,inbox,spaces,messaging,blackboards}/`|Features. `service.go` holds the logic and `repository.go` holds all SQL. Each feature writes only its own tables; cross-feature effects go through hooks and service methods.|
+|`internal/{auth,inbox,spaces,invites,messaging,blackboards}/`|Features. `service.go` holds the logic and `repository.go` holds all SQL. Each feature writes only its own tables; cross-feature effects go through hooks and service methods.|
 |`internal/domain/`|Business rules shared by features (name pattern, body and title limits).|
 |`internal/platform/`|Shared infrastructure: `db` (`DBTX`, `InTx`, `InsertID`, `QueryIDs`, `Timestamp`, migrations), `broker`, `httpx`, `httpserver`, `config`, `apperr`, `instance`, plus the test helpers `dbtest` and `apperrtest`.|
 |`internal/platform/instance/`|Local instance management: state file, start/stop/status, admin token file and rotation.|

@@ -203,3 +203,50 @@ func TestRevokeSpaceTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckMemberName(t *testing.T) {
+	t.Parallel()
+	s, db := newTestService(t)
+	ctx := context.Background()
+	_, lead := mustLeader(t, s, "lead")
+	spaceID := seedSpace(t, db, lead.AgentID)
+	if _, _, err := s.MintMember(ctx, db, "worker", spaceID); err != nil {
+		t.Fatalf("MintMember: %v", err)
+	}
+	tests := []struct {
+		name     string
+		input    string
+		wantKind apperr.Kind
+		wantMsg  string
+	}{
+		{name: "new valid name", input: "fresh"},
+		{name: "existing member", input: "worker"},
+		{name: "leader name", input: "lead", wantKind: apperr.Conflict, wantMsg: "agent lead is a leader agent"},
+		{name: "invalid name", input: "Bad Name", wantKind: apperr.Invalid,
+			wantMsg: "name must match ^[a-z0-9][a-z0-9_-]{0,62}$"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := s.CheckMemberName(ctx, db, tc.input)
+			if tc.wantKind == "" {
+				if err != nil {
+					t.Fatalf("CheckMemberName(%q) = %v", tc.input, err)
+				}
+				return
+			}
+			apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
+		})
+	}
+	if n := countAgentsNamed(t, db, "fresh"); n != 0 {
+		t.Fatalf("CheckMemberName inserted agent fresh (%d rows)", n)
+	}
+}
+
+func countAgentsNamed(t *testing.T, db *sql.DB, name string) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM agents WHERE name = ?`, name).Scan(&n); err != nil {
+		t.Fatalf("counting agents: %v", err)
+	}
+	return n
+}

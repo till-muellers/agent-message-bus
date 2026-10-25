@@ -82,19 +82,34 @@ func (s *Service) MintMember(ctx context.Context, tx db.DBTX, name string, space
 	return agentID, token, nil
 }
 
+// CheckMemberName validates name as a member agent name without creating it.
+func (s *Service) CheckMemberName(ctx context.Context, q db.DBTX, name string) error {
+	if err := domain.ValidName("name", name); err != nil {
+		return err
+	}
+	_, _, err := s.agentOfKind(ctx, q, name, Member)
+	return err
+}
+
 // ensureAgent returns the id of agent name with kind, creating it if missing.
 func (s *Service) ensureAgent(ctx context.Context, q db.DBTX, name string, kind Kind) (int64, error) {
-	id, existing, found, err := findAgent(ctx, q, name)
-	if err != nil {
-		return 0, err
+	id, found, err := s.agentOfKind(ctx, q, name, kind)
+	if err != nil || found {
+		return id, err
 	}
-	if !found {
-		return insertAgent(ctx, q, name, kind, s.stamp())
+	return insertAgent(ctx, q, name, kind, s.stamp())
+}
+
+// agentOfKind looks up agent name; an existing agent of another kind is a Conflict.
+func (s *Service) agentOfKind(ctx context.Context, q db.DBTX, name string, kind Kind) (id int64, found bool, err error) {
+	id, existing, found, err := findAgent(ctx, q, name)
+	if err != nil || !found {
+		return 0, false, err
 	}
 	if existing != kind {
-		return 0, apperr.New(apperr.Conflict, "agent %s is a %s agent", name, existing)
+		return 0, false, apperr.New(apperr.Conflict, "agent %s is a %s agent", name, existing)
 	}
-	return id, nil
+	return id, true, nil
 }
 
 // issue stores a fresh token's hash and returns the plaintext token.

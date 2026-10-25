@@ -37,6 +37,20 @@ type CreationHook interface {
 	OnSpaceCreated(ctx context.Context, tx db.DBTX, m Membership) error
 }
 
+// RevocationHook removes feature state held for name in a space that does not depend on
+// a participant row, such as pending invite codes. It runs inside the revoking transaction
+// and reports whether it removed anything.
+type RevocationHook interface {
+	OnRevoke(ctx context.Context, tx db.DBTX, spaceID int64, name string) (bool, error)
+}
+
+// Hooks are the feature callbacks a Service runs inside its transactions.
+type Hooks struct {
+	Departure  []DepartureHook
+	Creation   []CreationHook
+	Revocation []RevocationHook
+}
+
 // Notify copies proto once per recipient, stamping recipient, space and sender m.
 func (m Membership) Notify(recipients []int64, proto inbox.Entry) []inbox.Entry {
 	es := make([]inbox.Entry, 0, len(recipients))

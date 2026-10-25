@@ -9,6 +9,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/blackboards"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
+	"github.com/till-muellers/agent-message-bus/server/internal/invites"
 	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
@@ -23,10 +24,14 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 	resolver := spaces.NewResolver(conn)
 	msgSvc := messaging.NewService(conn, resolver, inboxSvc, time.Now)
 	bbSvc := blackboards.NewService(conn, resolver, inboxSvc, time.Now)
-	spaceSvc := spaces.NewService(conn, resolver, authSvc, inboxSvc, time.Now,
-		[]spaces.DepartureHook{msgSvc, bbSvc}, []spaces.CreationHook{msgSvc})
-	reg := tools.New(tools.Deps{
-		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc,
+	spaceSvc := spaces.NewService(conn, resolver, authSvc, inboxSvc, time.Now, spaces.Hooks{
+		Departure:  []spaces.DepartureHook{msgSvc, bbSvc},
+		Creation:   []spaces.CreationHook{msgSvc},
+		Revocation: []spaces.RevocationHook{invites.Revocation{}},
 	})
-	return Routes(streamRoot, authSvc, inboxSvc, reg, shutdown)
+	invSvc := invites.NewService(conn, spaceSvc, time.Now)
+	reg := tools.New(tools.Deps{
+		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc, Invites: invSvc,
+	})
+	return Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, shutdown)
 }
