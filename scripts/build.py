@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Cross-compile the agent-message-bus server into raw release binaries plus SHA256SUMS.
+Cross-compile the agent-message-bus server in `server/` into raw release binaries plus SHA256SUMS.
 
-Usage: python scripts/build_amb.py [--version X] [--out dist]
+Writes `agent-message-bus_<version>_<os>_<arch>[.exe]` for every target and a `SHA256SUMS` file into the
+output directory; the release workflow uploads exactly these files for a `v<version>` tag.
+
+Usage: python scripts/build.py [--version X] [--out dist]
 """
 
 from __future__ import annotations
@@ -16,7 +19,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-APP_DIR = REPO_ROOT / "apps" / "agent-message-bus"
+APP_DIR = REPO_ROOT / "server"
 BINARY_NAME = "agent-message-bus"
 OPERATING_SYSTEMS = ("windows", "linux", "darwin")
 ARCHITECTURES = ("amd64", "arm64")
