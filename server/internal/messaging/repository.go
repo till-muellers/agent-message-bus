@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 type topicRow struct {
@@ -14,7 +14,7 @@ type topicRow struct {
 	name          string
 }
 
-func participantID(ctx context.Context, q auth.DBTX, spaceID int64, name string) (int64, bool, error) {
+func participantID(ctx context.Context, q db.DBTX, spaceID int64, name string) (int64, bool, error) {
 	var id int64
 	err := q.QueryRowContext(ctx, `SELECT a.id FROM participants p JOIN agents a ON a.id = p.agent_id
 		WHERE p.space_id = ? AND a.name = ?`, spaceID, name).Scan(&id)
@@ -27,7 +27,7 @@ func participantID(ctx context.Context, q auth.DBTX, spaceID int64, name string)
 	return id, true, nil
 }
 
-func openTopic(ctx context.Context, q auth.DBTX, spaceID int64, name string) (topicRow, bool, error) {
+func openTopic(ctx context.Context, q db.DBTX, spaceID int64, name string) (topicRow, bool, error) {
 	t := topicRow{name: name}
 	err := q.QueryRowContext(ctx, `SELECT id, created_by FROM topics
 		WHERE space_id = ? AND name = ? AND closed_at IS NULL`, spaceID, name).Scan(&t.id, &t.createdBy)
@@ -40,7 +40,7 @@ func openTopic(ctx context.Context, q auth.DBTX, spaceID int64, name string) (to
 	return t, true, nil
 }
 
-func insertTopic(ctx context.Context, q auth.DBTX, spaceID int64, name string, by int64, at string) (int64, error) {
+func insertTopic(ctx context.Context, q db.DBTX, spaceID int64, name string, by int64, at string) (int64, error) {
 	res, err := q.ExecContext(ctx, `INSERT INTO topics (space_id, name, created_by, created_at)
 		VALUES (?, ?, ?, ?)`, spaceID, name, by, at)
 	if err != nil {
@@ -53,7 +53,7 @@ func insertTopic(ctx context.Context, q auth.DBTX, spaceID int64, name string, b
 	return id, nil
 }
 
-func subscribe(ctx context.Context, q auth.DBTX, topicID, agentID int64) error {
+func subscribe(ctx context.Context, q db.DBTX, topicID, agentID int64) error {
 	_, err := q.ExecContext(ctx, `INSERT OR IGNORE INTO topic_subscriptions (topic_id, agent_id) VALUES (?, ?)`,
 		topicID, agentID)
 	if err != nil {
@@ -62,7 +62,7 @@ func subscribe(ctx context.Context, q auth.DBTX, topicID, agentID int64) error {
 	return nil
 }
 
-func unsubscribe(ctx context.Context, q auth.DBTX, topicID, agentID int64) error {
+func unsubscribe(ctx context.Context, q db.DBTX, topicID, agentID int64) error {
 	_, err := q.ExecContext(ctx, `DELETE FROM topic_subscriptions WHERE topic_id = ? AND agent_id = ?`,
 		topicID, agentID)
 	if err != nil {
@@ -71,7 +71,7 @@ func unsubscribe(ctx context.Context, q auth.DBTX, topicID, agentID int64) error
 	return nil
 }
 
-func closeTopic(ctx context.Context, q auth.DBTX, topicID int64, at string) error {
+func closeTopic(ctx context.Context, q db.DBTX, topicID int64, at string) error {
 	if _, err := q.ExecContext(ctx, `UPDATE topics SET closed_at = ? WHERE id = ?`, at, topicID); err != nil {
 		return fmt.Errorf("closing topic %d: %w", topicID, err)
 	}
@@ -81,17 +81,17 @@ func closeTopic(ctx context.Context, q auth.DBTX, topicID int64, at string) erro
 	return nil
 }
 
-func subscriberIDs(ctx context.Context, q auth.DBTX, topicID, except int64) ([]int64, error) {
+func subscriberIDs(ctx context.Context, q db.DBTX, topicID, except int64) ([]int64, error) {
 	return queryIDs(ctx, q, `SELECT agent_id FROM topic_subscriptions
 		WHERE topic_id = ? AND agent_id != ? ORDER BY agent_id`, topicID, except)
 }
 
-func participantIDs(ctx context.Context, q auth.DBTX, spaceID, except int64) ([]int64, error) {
+func participantIDs(ctx context.Context, q db.DBTX, spaceID, except int64) ([]int64, error) {
 	return queryIDs(ctx, q, `SELECT agent_id FROM participants
 		WHERE space_id = ? AND agent_id != ? ORDER BY agent_id`, spaceID, except)
 }
 
-func queryIDs(ctx context.Context, q auth.DBTX, query string, args ...any) ([]int64, error) {
+func queryIDs(ctx context.Context, q db.DBTX, query string, args ...any) ([]int64, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("querying recipients: %w", err)
@@ -111,7 +111,7 @@ func queryIDs(ctx context.Context, q auth.DBTX, query string, args ...any) ([]in
 	return ids, nil
 }
 
-func listTopics(ctx context.Context, q auth.DBTX, spaceID, agentID int64) ([]TopicInfo, error) {
+func listTopics(ctx context.Context, q db.DBTX, spaceID, agentID int64) ([]TopicInfo, error) {
 	rows, err := q.QueryContext(ctx, `SELECT t.name, a.name,
 		t.name = 'all' OR EXISTS (SELECT 1 FROM topic_subscriptions s WHERE s.topic_id = t.id AND s.agent_id = ?)
 		FROM topics t JOIN agents a ON a.id = t.created_by

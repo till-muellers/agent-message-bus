@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 type spaceRow struct {
@@ -15,7 +15,7 @@ type spaceRow struct {
 }
 
 // listSpaces returns all spaces (spaceID 0) or only spaceID, ordered by name.
-func listSpaces(ctx context.Context, q auth.DBTX, spaceID int64) ([]spaceRow, error) {
+func listSpaces(ctx context.Context, q db.DBTX, spaceID int64) ([]spaceRow, error) {
 	rows, err := q.QueryContext(ctx,
 		`SELECT id, name FROM spaces WHERE ? = 0 OR id = ? ORDER BY name`, spaceID, spaceID)
 	if err != nil {
@@ -37,7 +37,7 @@ func listSpaces(ctx context.Context, q auth.DBTX, spaceID int64) ([]spaceRow, er
 }
 
 // spaceExists reports whether a space called name exists.
-func spaceExists(ctx context.Context, q auth.DBTX, name string) (bool, error) {
+func spaceExists(ctx context.Context, q db.DBTX, name string) (bool, error) {
 	var n int
 	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM spaces WHERE name = ?`, name).Scan(&n); err != nil {
 		return false, fmt.Errorf("checking space %s: %w", name, err)
@@ -46,7 +46,7 @@ func spaceExists(ctx context.Context, q auth.DBTX, name string) (bool, error) {
 }
 
 // insertSpace creates a space and returns its id.
-func insertSpace(ctx context.Context, q auth.DBTX, name string, creator int64, ts string) (int64, error) {
+func insertSpace(ctx context.Context, q db.DBTX, name string, creator int64, ts string) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		`INSERT INTO spaces (name, created_by, created_at) VALUES (?, ?, ?)`, name, creator, ts)
 	if err != nil {
@@ -59,7 +59,7 @@ func insertSpace(ctx context.Context, q auth.DBTX, name string, creator int64, t
 	return id, nil
 }
 
-func insertAllTopic(ctx context.Context, q auth.DBTX, spaceID, creator int64, ts string) error {
+func insertAllTopic(ctx context.Context, q db.DBTX, spaceID, creator int64, ts string) error {
 	_, err := q.ExecContext(ctx,
 		`INSERT INTO topics (space_id, name, created_by, created_at) VALUES (?, 'all', ?, ?)`, spaceID, creator, ts)
 	if err != nil {
@@ -68,7 +68,7 @@ func insertAllTopic(ctx context.Context, q auth.DBTX, spaceID, creator int64, ts
 	return nil
 }
 
-func insertParticipant(ctx context.Context, q auth.DBTX, spaceID, agentID int64, role Role, ts string) error {
+func insertParticipant(ctx context.Context, q db.DBTX, spaceID, agentID int64, role Role, ts string) error {
 	_, err := q.ExecContext(ctx,
 		`INSERT INTO participants (space_id, agent_id, role, joined_at) VALUES (?, ?, ?, ?)`,
 		spaceID, agentID, role, ts)
@@ -79,7 +79,7 @@ func insertParticipant(ctx context.Context, q auth.DBTX, spaceID, agentID int64,
 }
 
 // participantRole returns the agent's role in the space, or found=false.
-func participantRole(ctx context.Context, q auth.DBTX, spaceID, agentID int64) (Role, bool, error) {
+func participantRole(ctx context.Context, q db.DBTX, spaceID, agentID int64) (Role, bool, error) {
 	var role Role
 	err := q.QueryRowContext(ctx, `SELECT role FROM participants WHERE space_id = ? AND agent_id = ?`,
 		spaceID, agentID).Scan(&role)
@@ -93,7 +93,7 @@ func participantRole(ctx context.Context, q auth.DBTX, spaceID, agentID int64) (
 }
 
 // participantByName returns the agent id and role of participant name.
-func participantByName(ctx context.Context, q auth.DBTX, spaceID int64, name string) (int64, Role, bool, error) {
+func participantByName(ctx context.Context, q db.DBTX, spaceID int64, name string) (int64, Role, bool, error) {
 	var id int64
 	var role Role
 	err := q.QueryRowContext(ctx, `SELECT a.id, p.role FROM participants p JOIN agents a ON a.id = p.agent_id
@@ -107,7 +107,7 @@ func participantByName(ctx context.Context, q auth.DBTX, spaceID int64, name str
 	return id, role, true, nil
 }
 
-func countOtherLeaders(ctx context.Context, q auth.DBTX, spaceID, agentID int64) (int, error) {
+func countOtherLeaders(ctx context.Context, q db.DBTX, spaceID, agentID int64) (int, error) {
 	var n int
 	err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM participants
 		WHERE space_id = ? AND role = 'leader' AND agent_id <> ?`, spaceID, agentID).Scan(&n)
@@ -117,7 +117,7 @@ func countOtherLeaders(ctx context.Context, q auth.DBTX, spaceID, agentID int64)
 	return n, nil
 }
 
-func deleteSpace(ctx context.Context, q auth.DBTX, spaceID int64) error {
+func deleteSpace(ctx context.Context, q db.DBTX, spaceID int64) error {
 	if _, err := q.ExecContext(ctx, `DELETE FROM spaces WHERE id = ?`, spaceID); err != nil {
 		return fmt.Errorf("deleting space: %w", err)
 	}
@@ -125,7 +125,7 @@ func deleteSpace(ctx context.Context, q auth.DBTX, spaceID int64) error {
 }
 
 // deleteParticipantData removes inbox rows, space tokens and the participant row.
-func deleteParticipantData(ctx context.Context, q auth.DBTX, spaceID, agentID int64) error {
+func deleteParticipantData(ctx context.Context, q db.DBTX, spaceID, agentID int64) error {
 	stmts := []string{
 		`DELETE FROM inbox WHERE agent_id = ? AND space_id = ?`,
 		`DELETE FROM tokens WHERE agent_id = ? AND space_id = ?`,
@@ -140,7 +140,7 @@ func deleteParticipantData(ctx context.Context, q auth.DBTX, spaceID, agentID in
 }
 
 // listParticipants returns participants ordered leaders first, then by name.
-func listParticipants(ctx context.Context, q auth.DBTX, spaceID int64) ([]Participant, error) {
+func listParticipants(ctx context.Context, q db.DBTX, spaceID int64) ([]Participant, error) {
 	rows, err := q.QueryContext(ctx, `SELECT a.name, p.role FROM participants p JOIN agents a ON a.id = p.agent_id
 		WHERE p.space_id = ? ORDER BY CASE p.role WHEN 'leader' THEN 0 ELSE 1 END, a.name`, spaceID)
 	if err != nil {
@@ -162,7 +162,7 @@ func listParticipants(ctx context.Context, q auth.DBTX, spaceID int64) ([]Partic
 }
 
 // agentSpaces lists the spaces agentID participates in, ordered by name.
-func agentSpaces(ctx context.Context, q auth.DBTX, agentID int64) ([]SpaceRole, error) {
+func agentSpaces(ctx context.Context, q db.DBTX, agentID int64) ([]SpaceRole, error) {
 	rows, err := q.QueryContext(ctx, `SELECT s.name, p.role FROM participants p JOIN spaces s ON s.id = p.space_id
 		WHERE p.agent_id = ? ORDER BY s.name`, agentID)
 	if err != nil {

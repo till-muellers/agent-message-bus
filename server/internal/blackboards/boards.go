@@ -5,8 +5,10 @@ import (
 	"database/sql"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
@@ -30,7 +32,7 @@ func (s *Service) List(ctx context.Context, p auth.Principal, space string) ([]B
 
 // Create adds a blackboard owned by the caller; any participant may create one.
 func (s *Service) Create(ctx context.Context, p auth.Principal, space, name string) error {
-	if err := auth.ValidName("blackboard", name); err != nil {
+	if err := domain.ValidName("blackboard", name); err != nil {
 		return err
 	}
 	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
@@ -60,7 +62,7 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, space, name stri
 }
 
 // removeBoard notifies the board's thread subscribers except m and deletes the board.
-func removeBoard(ctx context.Context, tx auth.DBTX, m spaces.Membership, b board) ([]inbox.Entry, error) {
+func removeBoard(ctx context.Context, tx db.DBTX, m spaces.Membership, b board) ([]inbox.Entry, error) {
 	ids, err := boardSubscribers(ctx, tx, b.id, m.AgentID)
 	if err != nil {
 		return nil, err
@@ -71,7 +73,7 @@ func removeBoard(ctx context.Context, tx auth.DBTX, m spaces.Membership, b board
 	return notify(m, ids, inbox.BlackboardRemoved, inbox.Entry{Blackboard: b.name}), nil
 }
 
-func mustFindBoard(ctx context.Context, q auth.DBTX, spaceID int64, name string) (board, error) {
+func mustFindBoard(ctx context.Context, q db.DBTX, spaceID int64, name string) (board, error) {
 	b, found, err := findBoard(ctx, q, spaceID, name)
 	if err != nil {
 		return board{}, err

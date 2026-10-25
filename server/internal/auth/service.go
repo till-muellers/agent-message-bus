@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
-	"fmt"
 	"time"
 
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 // Service authenticates bearer tokens and mints leader and member tokens.
@@ -43,31 +44,27 @@ func (s *Service) MintLeader(ctx context.Context, p Principal, name string) (str
 	if p.Kind != Admin {
 		return "", apperr.New(apperr.Forbidden, "admin token required")
 	}
-	if err := ValidName("name", name); err != nil {
+	if err := domain.ValidName("name", name); err != nil {
 		return "", err
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", fmt.Errorf("beginning tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	id, err := s.ensureAgent(ctx, tx, name, Leader)
+	var token string
+	err := db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		id, err := s.ensureAgent(ctx, tx, name, Leader)
+		if err != nil {
+			return err
+		}
+		token, err = s.issue(ctx, tx, id, 0)
+		return err
+	})
 	if err != nil {
 		return "", err
-	}
-	token, err := s.issue(ctx, tx, id, 0)
-	if err != nil {
-		return "", err
-	}
-	if err := tx.Commit(); err != nil {
-		return "", fmt.Errorf("committing leader token: %w", err)
 	}
 	return token, nil
 }
 
 // MintMember creates (or reuses) member agent name and issues a token bound to spaceID.
-func (s *Service) MintMember(ctx context.Context, tx DBTX, name string, spaceID int64) (agentID int64, token string, err error) {
-	if err := ValidName("name", name); err != nil {
+func (s *Service) MintMember(ctx context.Context, tx db.DBTX, name string, spaceID int64) (agentID int64, token string, err error) {
+	if err := domain.ValidName("name", name); err != nil {
 		return 0, "", err
 	}
 	agentID, err = s.ensureAgent(ctx, tx, name, Member)
@@ -82,7 +79,7 @@ func (s *Service) MintMember(ctx context.Context, tx DBTX, name string, spaceID 
 }
 
 // ensureAgent returns the id of agent name with kind, creating it if missing.
-func (s *Service) ensureAgent(ctx context.Context, q DBTX, name string, kind Kind) (int64, error) {
+func (s *Service) ensureAgent(ctx context.Context, q db.DBTX, name string, kind Kind) (int64, error) {
 	id, existing, found, err := findAgent(ctx, q, name)
 	if err != nil {
 		return 0, err
@@ -97,7 +94,7 @@ func (s *Service) ensureAgent(ctx context.Context, q DBTX, name string, kind Kin
 }
 
 // issue stores a fresh token's hash and returns the plaintext token.
-func (s *Service) issue(ctx context.Context, q DBTX, agentID, spaceID int64) (string, error) {
+func (s *Service) issue(ctx context.Context, q db.DBTX, agentID, spaceID int64) (string, error) {
 	token, err := NewToken()
 	if err != nil {
 		return "", err
@@ -108,6 +105,11 @@ func (s *Service) issue(ctx context.Context, q DBTX, agentID, spaceID int64) (st
 	return token, nil
 }
 
+// RevokeSpaceTokens deletes every token of agentID bound to spaceID.
+func (s *Service) RevokeSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) error {
+	return deleteSpaceTokens(ctx, q, agentID, spaceID)
+}
+
 func (s *Service) stamp() string {
-	return s.now().UTC().Format(time.RFC3339Nano)
+	return db.Timestamp(s.now())
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
@@ -115,7 +116,7 @@ func (s *Service) RemoveThread(ctx context.Context, p auth.Principal, space stri
 	})
 }
 
-func mustFindThread(ctx context.Context, q auth.DBTX, spaceID, id int64) (thread, error) {
+func mustFindThread(ctx context.Context, q db.DBTX, spaceID, id int64) (thread, error) {
 	t, found, err := findThread(ctx, q, spaceID, id)
 	if err != nil {
 		return thread{}, err

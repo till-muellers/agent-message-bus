@@ -3,14 +3,14 @@ package blackboards
 import (
 	"context"
 
-	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 // OnDeparture implements spaces.DepartureHook: it drops the agent's thread subscriptions in
 // the space and, for members, deletes their boards, notifying remaining subscribers.
-func (s *Service) OnDeparture(ctx context.Context, tx auth.DBTX, m spaces.Membership) ([]inbox.Entry, error) {
+func (s *Service) OnDeparture(ctx context.Context, tx db.DBTX, m spaces.Membership) ([]inbox.Entry, error) {
 	if err := deleteSpaceSubscriptions(ctx, tx, m.SpaceID, m.AgentID); err != nil {
 		return nil, err
 	}

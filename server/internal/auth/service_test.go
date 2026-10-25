@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 )
 
@@ -21,17 +22,11 @@ func newTestService(t *testing.T) (*Service, *sql.DB) {
 	return NewService(db, testAdmin, now), db
 }
 
-func insertSpace(t *testing.T, db *sql.DB, name string, createdBy int64) int64 {
+// seedSpace inserts a space created by createdBy and returns its id.
+func seedSpace(t *testing.T, db *sql.DB, createdBy int64) int64 {
 	t.Helper()
-	res, err := db.Exec(`INSERT INTO spaces (name, created_by, created_at) VALUES (?, ?, ?)`,
-		name, createdBy, "2026-01-02T03:04:05Z")
-	if err != nil {
-		t.Fatalf("insert space: %v", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		t.Fatalf("space id: %v", err)
-	}
+	const id = 100
+	dbtest.SeedSpace(t, db, id, "demo", createdBy)
 	return id
 }
 
@@ -49,23 +44,12 @@ func mustLeader(t *testing.T, s *Service, name string) (string, Principal) {
 	return tok, p
 }
 
-func wantKind(t *testing.T, err error, want apperr.Kind, msg string) {
-	t.Helper()
-	k, ok := apperr.KindOf(err)
-	if !ok || k != want {
-		t.Fatalf("err = %v, want kind %q", err, want)
-	}
-	if msg != "" && err.Error() != msg {
-		t.Errorf("msg = %q, want %q", err.Error(), msg)
-	}
-}
-
 func TestAuthenticate(t *testing.T) {
 	t.Parallel()
 	s, db := newTestService(t)
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
-	spaceID := insertSpace(t, db, "demo", lead.AgentID)
+	spaceID := seedSpace(t, db, lead.AgentID)
 	memberID, memberTok, err := s.MintMember(ctx, db, "worker", spaceID)
 	if err != nil {
 		t.Fatalf("MintMember: %v", err)
@@ -91,7 +75,7 @@ func TestAuthenticate(t *testing.T) {
 			t.Parallel()
 			got, err := s.Authenticate(ctx, tc.token)
 			if tc.err != "" {
-				wantKind(t, err, tc.err, "invalid token")
+				apperrtest.WantKind(t, err, tc.err, "invalid token")
 				return
 			}
 			if err != nil {
@@ -112,7 +96,7 @@ func TestMintLeaderErrors(t *testing.T) {
 	s, db := newTestService(t)
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
-	spaceID := insertSpace(t, db, "demo", lead.AgentID)
+	spaceID := seedSpace(t, db, lead.AgentID)
 	if _, _, err := s.MintMember(ctx, db, "worker", spaceID); err != nil {
 		t.Fatalf("MintMember: %v", err)
 	}
@@ -132,7 +116,7 @@ func TestMintLeaderErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := s.MintLeader(ctx, tc.caller, tc.agent)
-			wantKind(t, err, tc.kind, tc.msg)
+			apperrtest.WantKind(t, err, tc.kind, tc.msg)
 		})
 	}
 }
@@ -142,9 +126,9 @@ func TestMintMemberErrors(t *testing.T) {
 	s, db := newTestService(t)
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
-	spaceID := insertSpace(t, db, "demo", lead.AgentID)
+	spaceID := seedSpace(t, db, lead.AgentID)
 	_, _, err := s.MintMember(ctx, db, "lead", spaceID)
-	wantKind(t, err, apperr.Conflict, "agent lead is a leader agent")
+	apperrtest.WantKind(t, err, apperr.Conflict, "agent lead is a leader agent")
 }
 
 func TestMintMemberReinviteSameAgent(t *testing.T) {
@@ -152,7 +136,7 @@ func TestMintMemberReinviteSameAgent(t *testing.T) {
 	s, db := newTestService(t)
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
-	spaceID := insertSpace(t, db, "demo", lead.AgentID)
+	spaceID := seedSpace(t, db, lead.AgentID)
 	id1, tok1, err := s.MintMember(ctx, db, "worker", spaceID)
 	if err != nil {
 		t.Fatalf("MintMember: %v", err)
@@ -176,5 +160,46 @@ func TestStoredHashIsNotPlaintext(t *testing.T) {
 	}
 	if hash == tok || hash != Hash(tok) {
 		t.Errorf("stored %q, token %q", hash, tok)
+	}
+}
+
+func TestRevokeSpaceTokens(t *testing.T) {
+	t.Parallel()
+	s, db := newTestService(t)
+	ctx := context.Background()
+	leadTok, lead := mustLeader(t, s, "lead")
+	spaceID := seedSpace(t, db, lead.AgentID)
+	dbtest.SeedSpace(t, db, 200, "other", lead.AgentID)
+	memberID, memberTok, err := s.MintMember(ctx, db, "worker", spaceID)
+	if err != nil {
+		t.Fatalf("MintMember: %v", err)
+	}
+	_, otherTok, err := s.MintMember(ctx, db, "worker", 200)
+	if err != nil {
+		t.Fatalf("MintMember other: %v", err)
+	}
+	if err := s.RevokeSpaceTokens(ctx, db, memberID, spaceID); err != nil {
+		t.Fatalf("RevokeSpaceTokens: %v", err)
+	}
+	tests := []struct {
+		name  string
+		token string
+		alive bool
+	}{
+		{"revoked member", memberTok, false},
+		{"other space", otherTok, true},
+		{"leader", leadTok, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := s.Authenticate(ctx, tc.token)
+			if tc.alive && err != nil {
+				t.Fatalf("Authenticate: %v", err)
+			}
+			if !tc.alive {
+				apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
+			}
+		})
 	}
 }

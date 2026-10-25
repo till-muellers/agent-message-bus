@@ -7,16 +7,18 @@ import (
 	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 type tokenMinter interface {
-	MintMember(ctx context.Context, tx auth.DBTX, name string, spaceID int64) (agentID int64, token string, err error)
+	MintMember(ctx context.Context, tx db.DBTX, name string, spaceID int64) (agentID int64, token string, err error)
 }
 
 type inboxWriter interface {
-	Insert(ctx context.Context, tx auth.DBTX, es []inbox.Entry) ([]inbox.Entry, error)
+	Insert(ctx context.Context, tx db.DBTX, es []inbox.Entry) ([]inbox.Entry, error)
 	Publish(es []inbox.Entry)
 }
 
@@ -127,7 +129,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, name string) err
 	if err := requireLeaderPrincipal(p, "create spaces"); err != nil {
 		return err
 	}
-	if err := auth.ValidName("space", name); err != nil {
+	if err := domain.ValidName("space", name); err != nil {
 		return err
 	}
 	return s.inTx(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
