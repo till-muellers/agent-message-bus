@@ -26,11 +26,6 @@ type sendTopicArgs struct {
 	Critical bool   `json:"critical"`
 }
 
-var (
-	topicProps = map[string]any{"space": spaceProp, "topic": topicProp}
-	topicReq   = []string{"space", "topic"}
-)
-
 func topicTools(m *messaging.Service) []Tool {
 	return append(messageTools(m), topicOps(m)...)
 }
@@ -39,18 +34,18 @@ func messageTools(m *messaging.Service) []Tool {
 	return []Tool{
 		define("bus_send_direct", "Participants only; critical requires a leader. Delivers the message to the recipient's inbox.",
 			[]string{"space", "to", "body"},
-			map[string]any{"space": spaceProp, "to": str("Recipient participant name."), "body": bodyProp, "critical": criticalProp},
+			map[string]any{"space": spaceProp(), "to": str(nameDesc("Recipient participant")), "body": bodyProp(), "critical": criticalProp()},
 			func(ctx context.Context, p auth.Principal, a directArgs) (any, error) {
 				return done(m.SendDirect(ctx, p, a.Space, a.To, a.Body, a.Critical))
 			}),
 		define("bus_send_topic", "Participants only; only leaders may send to all or send critical. Delivers to every subscriber except the sender.",
 			[]string{"space", "topic", "body"},
-			map[string]any{"space": spaceProp, "topic": topicProp, "body": bodyProp, "critical": criticalProp},
+			map[string]any{"space": spaceProp(), "topic": topicProp(), "body": bodyProp(), "critical": criticalProp()},
 			func(ctx context.Context, p auth.Principal, a sendTopicArgs) (any, error) {
 				return done(m.SendTopic(ctx, p, a.Space, a.Topic, a.Body, a.Critical))
 			}),
 		define("bus_list_topics", "Participants only. Lists open topics with the caller's subscription state; no side effects.",
-			spaceReq, spaceOnly, func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
+			spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 				return list(m.ListTopics(ctx, p, a.Space))
 			}),
 	}
@@ -66,7 +61,12 @@ func topicOps(m *messaging.Service) []Tool {
 }
 
 func topicOp(name, desc string, fn func(context.Context, auth.Principal, string, string) error) Tool {
-	return define(name, desc, topicReq, topicProps, func(ctx context.Context, p auth.Principal, a topicArgs) (any, error) {
+	return define(name, desc, topicReq(), topicProps(), func(ctx context.Context, p auth.Principal, a topicArgs) (any, error) {
 		return done(fn(ctx, p, a.Space, a.Topic))
 	})
 }
+
+func topicProps() map[string]any {
+	return map[string]any{"space": spaceProp(), "topic": topicProp()}
+}
+func topicReq() []string { return []string{"space", "topic"} }

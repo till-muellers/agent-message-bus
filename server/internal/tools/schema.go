@@ -1,5 +1,11 @@
 package tools
 
+import (
+	"fmt"
+
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
+)
+
 // object builds a closed JSON Schema object with the given required fields and properties.
 func object(required []string, props map[string]any) map[string]any {
 	if required == nil {
@@ -25,11 +31,24 @@ func typed(kind, desc string) map[string]any {
 }
 
 // Shared property schemas.
-var (
-	spaceProp    = str("Space name.")
-	topicProp    = str("Topic name.")
-	boardProp    = str("Blackboard name.")
-	threadProp   = integer("Thread id.")
-	bodyProp     = str("Message body, 1..65536 bytes.")
-	criticalProp = boolean("Leaders only: mark the message critical so it interrupts the recipient.")
-)
+// Shared property schemas; constructors return fresh values so no package state is shared.
+func nameDesc(what string) string {
+	return fmt.Sprintf("%s name, matching %s.", what, domain.NamePattern)
+}
+
+func spaceProp() map[string]any  { return str(nameDesc("Space")) }
+func topicProp() map[string]any  { return str(nameDesc("Topic")) }
+func boardProp() map[string]any  { return str(nameDesc("Blackboard")) }
+func threadProp() map[string]any { return integer("Thread id.") }
+
+func bodyProp() map[string]any {
+	return str(fmt.Sprintf("Message body, 1..%d bytes.", domain.MaxBodyBytes))
+}
+
+func titleProp() map[string]any {
+	return str(fmt.Sprintf("Thread title, 1..%d characters.", domain.MaxTitleChars))
+}
+
+func criticalProp() map[string]any {
+	return boolean("Leaders only: mark the message critical so it interrupts the recipient.")
+}

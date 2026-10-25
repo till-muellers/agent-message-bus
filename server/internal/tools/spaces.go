@@ -18,13 +18,6 @@ type memberArgs struct {
 	Name  string `json:"name"`
 }
 
-var (
-	spaceOnly   = map[string]any{"space": spaceProp}
-	memberProps = map[string]any{"space": spaceProp, "name": str("Member agent name.")}
-	spaceReq    = []string{"space"}
-	memberReq   = []string{"space", "name"}
-)
-
 func spaceTools(s *spaces.Service) []Tool {
 	return append(spaceIdentityTools(s), append(spaceLifecycleTools(s), memberTools(s)...)...)
 }
@@ -40,7 +33,7 @@ func spaceIdentityTools(s *spaces.Service) []Tool {
 				return list(s.List(ctx, p))
 			}),
 		define("bus_list_participants", "Participants only. Lists the space's leaders and members; no side effects.",
-			spaceReq, spaceOnly, func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
+			spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 				return list(s.Participants(ctx, p, a.Space))
 			}),
 	}
@@ -56,7 +49,7 @@ func spaceLifecycleTools(s *spaces.Service) []Tool {
 }
 
 func spaceOp(name, desc string, fn func(context.Context, auth.Principal, string) error) Tool {
-	return define(name, desc, spaceReq, spaceOnly, func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
+	return define(name, desc, spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 		return done(fn(ctx, p, a.Space))
 	})
 }
@@ -64,7 +57,7 @@ func spaceOp(name, desc string, fn func(context.Context, auth.Principal, string)
 func memberTools(s *spaces.Service) []Tool {
 	return []Tool{
 		define("bus_invite_member", "Leaders of the space only. Adds the member agent if needed and returns a new member token valid for this space.",
-			memberReq, memberProps, func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
+			memberReq(), memberProps(), func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
 				token, err := s.Invite(ctx, p, a.Space, a.Name)
 				if err != nil {
 					return nil, err
@@ -72,8 +65,15 @@ func memberTools(s *spaces.Service) []Tool {
 				return map[string]string{"name": a.Name, "space": a.Space, "token": token}, nil
 			}),
 		define("bus_revoke_member", "Leaders of the space only. Removes the member, its tokens, inbox entries and blackboards.",
-			memberReq, memberProps, func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
+			memberReq(), memberProps(), func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
 				return done(s.Revoke(ctx, p, a.Space, a.Name))
 			}),
 	}
 }
+
+func spaceOnly() map[string]any { return map[string]any{"space": spaceProp()} }
+func memberProps() map[string]any {
+	return map[string]any{"space": spaceProp(), "name": str(nameDesc("Member agent"))}
+}
+func spaceReq() []string  { return []string{"space"} }
+func memberReq() []string { return []string{"space", "name"} }
