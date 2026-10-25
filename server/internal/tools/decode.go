@@ -41,12 +41,14 @@ func requirePresent(args json.RawMessage, required []string) error {
 	return nil
 }
 
-// define builds a Tool whose arguments decode into A after checking required fields.
-func define[A any](name, desc string, required []string, props map[string]any,
+// define builds a Tool whose arguments decode into A after checking required fields;
+// result sketches the success result shape for the tool ledger.
+func define[A any](name, desc, result string, required []string, props map[string]any,
 	call func(ctx context.Context, p auth.Principal, a A) (any, error)) Tool {
 	return Tool{
 		Name:        name,
 		Description: desc,
+		Result:      result,
 		Schema:      object(required, props),
 		Call: func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error) {
 			a, err := decode[A](args)
@@ -71,6 +73,9 @@ func list[T any](v []T, err error) (any, error) {
 	}
 	return v, nil
 }
+
+// okResult is the ledger shape of done's success result.
+const okResult = "{ok: true}"
 
 // done maps a plain error result to {ok:true}.
 func done(err error) (any, error) {

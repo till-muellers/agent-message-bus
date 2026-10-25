@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"slices"
 	"sort"
 	"testing"
 )
@@ -18,8 +19,11 @@ func TestRegistryHasAllToolsSortedAndUnique(t *testing.T) {
 			t.Fatalf("duplicate tool %s", tl.Name)
 		}
 		seen[tl.Name] = true
-		if tl.Description == "" || tl.Call == nil {
-			t.Fatalf("tool %s missing description or call", tl.Name)
+		if tl.Description == "" || tl.Result == "" || tl.Call == nil {
+			t.Fatalf("tool %s missing description, result or call", tl.Name)
+		}
+		if !slices.Contains(groupOrder(), tl.Group) {
+			t.Fatalf("tool %s has unknown group %q", tl.Name, tl.Group)
 		}
 	}
 	if !sort.StringsAreSorted(names) {

@@ -17,13 +17,14 @@ type Deps struct {
 	Inbox       *inbox.Service
 }
 
-// New builds the registry of every bus tool.
+// New builds the registry of every bus tool. Services are only used inside
+// Call, so zero-value Deps suffice to list or document the tools.
 func New(d Deps) *Registry {
 	var ts []Tool
-	ts = append(ts, adminTools(d.Auth)...)
-	ts = append(ts, spaceTools(d.Spaces)...)
-	ts = append(ts, topicTools(d.Messaging)...)
-	ts = append(ts, blackboardTools(d.Blackboards)...)
-	ts = append(ts, inboxTools(d.Inbox)...)
+	ts = append(ts, inGroup(GroupAdmin, adminTools(d.Auth))...)
+	ts = append(ts, inGroup(GroupSpaces, spaceTools(d.Spaces))...)
+	ts = append(ts, inGroup(GroupMessaging, topicTools(d.Messaging))...)
+	ts = append(ts, inGroup(GroupBlackboards, blackboardTools(d.Blackboards))...)
+	ts = append(ts, inGroup(GroupInbox, inboxTools(d.Inbox))...)
 	return NewRegistry(ts)
 }

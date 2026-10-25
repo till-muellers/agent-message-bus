@@ -9,12 +9,33 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 )
 
+// Tool groups, in ledger order.
+const (
+	GroupAdmin       = "Admin"
+	GroupSpaces      = "Spaces & membership"
+	GroupMessaging   = "Direct messages & topics"
+	GroupBlackboards = "Blackboards"
+	GroupInbox       = "Inbox"
+)
+
 // Tool is one callable operation with a JSON Schema for its arguments.
 type Tool struct {
 	Name        string
 	Description string
-	Schema      map[string]any
-	Call        func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error)
+	// Result is a one-line sketch of the success result shape.
+	Result string
+	// Group is the ledger section the tool belongs to (one of the Group* constants).
+	Group  string
+	Schema map[string]any
+	Call   func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error)
+}
+
+// inGroup sets group on every tool in ts and returns ts.
+func inGroup(group string, ts []Tool) []Tool {
+	for i := range ts {
+		ts[i].Group = group
+	}
+	return ts
 }
 
 // Registry is an immutable, name-sorted set of tools.
