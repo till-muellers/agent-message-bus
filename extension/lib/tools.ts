@@ -1,13 +1,15 @@
 /** Mirrors the bus server's tool registry into the omp session. */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { BusError, type BusClient, type RemoteTool } from "./client.ts";
+import type { BusClient, RemoteTool } from "./client.ts";
 import type { ActiveCredentials } from "./credentials.ts";
+import { errorMessage, NOT_LOGGED_IN } from "./errors.ts";
 import { toZod } from "./schema.ts";
+import { toolResult } from "./tool-result.ts";
 
 /** Per-session registration: tools are fetched and registered once; logout does not reset it. */
 export interface RegistrationState {
 	registered: boolean;
-	/** Names of the tools registered so far, re-activated by login after a logout. */
+	/** Names of the tools registered so far, switched on or off by `restart()` to match the resolved credentials. */
 	names: string[];
 }
 
@@ -31,17 +33,12 @@ function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, { client, getActive 
 		label: tool.name,
 		description: tool.description,
 		parameters: toZod(tool.inputSchema, pi.zod),
-		async execute(_toolCallId: string, params: Record<string, unknown>) {
-			const current = getActive();
-			if (!current) throw new Error("Not logged in to the agent bus. Run /bus login <url> <token>.");
-			try {
-				const result = await client.callTool(current.url, current.token, tool.name, params);
-				return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
-			} catch (error) {
-				if (error instanceof BusError) throw new Error(`${error.code}: ${error.message}`);
-				throw error;
-			}
-		},
+		execute: (_toolCallId: string, params: Record<string, unknown>) =>
+			toolResult(async () => {
+				const current = getActive();
+				if (!current) throw new Error(NOT_LOGGED_IN);
+				return client.callTool(current.url, current.token, tool.name, params);
+			}),
 	};
 }
 
@@ -59,7 +56,7 @@ export async function registerRemoteTools(pi: ExtensionAPI, options: RemoteTools
 			pi.registerTool(toolDefinition(pi, tool, options));
 			state.names.push(tool.name);
 		} catch (error) {
-			warn(`tool ${tool.name} not registered: ${error instanceof Error ? error.message : String(error)}`);
+			warn(`tool ${tool.name} not registered: ${errorMessage(error)}`);
 		}
 	}
 	return state.names.length;

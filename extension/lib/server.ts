@@ -12,8 +12,8 @@ export type ServerCli = (args: string[]) => Promise<string>;
 export interface ServerCommandDeps {
 	cli: ServerCli;
 	store: CredentialStore;
-	/** Re-activates the bus tools. */
-	activate(): Promise<void>;
+	/** Re-resolves the credentials: the bus tools end up active exactly when agent credentials resolve. */
+	restart(): Promise<void>;
 	/** The full `/bus logout`. */
 	logout(): Promise<CommandResult>;
 }
@@ -42,7 +42,7 @@ async function start(deps: ServerCommandDeps): Promise<CommandResult> {
 	const adminToken = (await deps.cli(["admin-token"])).trim();
 	const stored = await deps.store.load().catch(() => undefined);
 	await deps.store.save({ url, adminToken, token: stored?.url === url ? stored.token : undefined });
-	await deps.activate();
+	await deps.restart();
 	return { message: `Agent message bus running at ${url}; admin token stored. Run /bus promote <leader-name> to act as a leader.`, level: "info" };
 }
 
