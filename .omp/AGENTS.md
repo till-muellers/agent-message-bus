@@ -15,7 +15,7 @@ Conventions and working method for contributors and coding agents in this repo.
 |`server/`|Go server. `main.go`, `cmd/tooldoc/`, `internal/`, `migrations/`, `spec/`.|
 |`extension/`|omp extension (TypeScript). `index.ts` wires `lib/*.ts`; `lib/shared/` holds helpers that are not tied to the bus.|
 |`skills/agent-message-bus/`|Agent-facing skill.|
-|`tests/`|`extension.test.ts` (bun) and `test_build.py` (pytest).|
+|`tests/`|Per-module `*.test.ts` (bun) with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_build.py` (pytest).|
 |`scripts/build.py`|Release build: cross-compiles the server and writes `SHA256SUMS`.|
 |`.omp/`|This guide and the hard rules (`RULES.md`).|
 
@@ -29,11 +29,11 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ## Architecture
 - `server/main.go`: wiring and CLI dispatch only, no logic: config, CLI dispatch, DB, migrations, `server.Build`, `httpserver.Serve`.
-- `server/internal/<feature>/`: one folder per feature (`auth`, `inbox`, `spaces`, `messaging`, `blackboards`).
+- `server/internal/<feature>/`: one folder per feature (`auth`, `inbox`, `spaces`, `invites`, `messaging`, `blackboards`).
   - `service.go`: business logic
   - `repository.go`: all SQL of the feature (interfaces defined where they are used)
   - `*_test.go`: table-driven tests next to the code, real SQLite via `internal/platform/db/dbtest`
-- **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`) and service methods, inside the caller's transaction.
+- **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`, `spaces.RevocationHook`, passed together in the `spaces.Hooks` parameter object) and service methods, inside the caller's transaction.
 - Transports are thin: `internal/tools` (the handler layer: one registry of `bus_*` tools), `internal/rpc`, `internal/mcpserver`, `internal/admin`; `internal/server` composes everything (`Build`, routes).
 - `internal/domain/`: business rules shared by features (names, body and title limits).
 - `internal/platform/`: shared infra (apperr, db, broker, httpx, httpserver, config, instance, detach); only for things used by 2+ packages.
@@ -46,7 +46,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Ask if requirements are unclear.
 - Map the specs on the codebase. Try to answer these questions:
 	- WHAT do I have to change or extend? Is this a new feature?
-	- Is there an EXTENSION SEAM meant for my task (e.g. `spaces.CreationHook`/`DepartureHook`, the tool registry, `inbox.Deliver`)?
+	- Is there an EXTENSION SEAM meant for my task (e.g. `spaces.CreationHook`/`DepartureHook`/`RevocationHook` via `spaces.Hooks`, the tool registry, `inbox.Deliver`)?
 		- What pattern does it follow (strategy, hook, decorator, ...)?
 		- Was it really made for tasks like mine? Is there an alternative?
 		- Does it provide the required abstractions, or does it have to be expanded?
@@ -102,6 +102,36 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ### Python
 - Type hints on all signatures, formatted with ruff.
+
+## Running it locally (smoke tests)
+Facts that are not obvious from the code and that cost time to find out:
+
+**Server**
+- `agent-message-bus start` detaches the server and returns at once; `stop` ends it.
+- For a throwaway instance, set `AMB_ADDR=127.0.0.1:<port>`, `AMB_DB_PATH=<temp>/x.db` and `AMB_ADMIN_TOKEN=<32+ chars>`. The log is written next to the db.
+- The HTTP API is `POST /v1/tools/<name>` with the JSON args as the body and `Authorization: Bearer <token>`. The result comes back as `{"result": …}`.
+
+**Loading the working-tree extension**
+- Use `omp -e <repo>/extension/index.ts`. In omp 18.12, `--plugin-dir <repo>` did not register the extension's flags.
+- A plugin installed with `omp plugin install` loads as well. Both copies register the `bus_*` tools and the `/bus` command, and the installed copy may be an older version.
+
+**Env credentials**
+- `AGENT_BUS_URL`/`AGENT_BUS_TOKEN` are read once at load and then deleted from `process.env`.
+- With two copies loaded, only the first one to load sees them, so the working-tree copy may run without credentials and never activate its tools.
+- For smoke tests, give the session a stored login instead: `OMP_AGENT_BUS_DIR=<temp>` with `credentials.json` containing `{"url":…,"token":…}`.
+
+**omp flags and modes**
+- omp rejects unknown flags with exit code 2. `--bus-url`/`--bus-accept` exist only while this extension is loaded, so a spawned worker needs it too: either installed and up to date, or forwarded `-e`.
+- Print mode (`omp -p`) never starts a turn on inbox delivery, so an idle worker only wakes up in `tui`/`rpc`.
+
+**omp tool lifecycle**
+- omp fires `session_start` once per process. `/new`, `/resume` and `/fork` fire `session_switch`; `/branch` and `/btw` fire `session_branch`, and every branch moves to a new session file.
+- Tools registered with `defaultInactive` stay off until the extension calls `setActiveTools`.
+- Subagents only get the tools their parent passes on (`filterActiveTools` drops parent-owned tools), and they have no inbox stream of their own.
+
+**Bus permissions to remember when writing test prompts**
+- Only leaders may send to `all` or send critical messages. A member that tries gets `forbidden`.
+- A worker should report with `bus_send_direct` to its leader or on a workstream topic.
 
 ## Generated files
 `server/TOOLS.md` is generated from the tool registry and the templates `server/internal/tools/ledger_*.md.tmpl`; never edit it by hand. A golden test fails when it is stale:
