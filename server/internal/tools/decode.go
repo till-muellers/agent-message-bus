@@ -9,9 +9,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
 
-// ok is the result of tools that only report success.
-var ok = map[string]bool{"ok": true}
-
 // decode strictly unmarshals args into T; empty or null args yield the zero value.
 func decode[T any](args json.RawMessage) (T, error) {
 	var v T
@@ -80,5 +77,5 @@ func done(err error) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ok, nil
+	return map[string]bool{"ok": true}, nil
 }

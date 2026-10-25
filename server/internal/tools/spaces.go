@@ -19,10 +19,10 @@ type memberArgs struct {
 }
 
 var (
-	spaceOnly    = map[string]any{"space": spaceProp}
-	memberProps  = map[string]any{"space": spaceProp, "name": str("Member agent name.")}
-	spaceReq     = []string{"space"}
-	memberReq    = []string{"space", "name"}
+	spaceOnly   = map[string]any{"space": spaceProp}
+	memberProps = map[string]any{"space": spaceProp, "name": str("Member agent name.")}
+	spaceReq    = []string{"space"}
+	memberReq   = []string{"space", "name"}
 )
 
 func spaceTools(s *spaces.Service) []Tool {
