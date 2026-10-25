@@ -45,7 +45,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if err := db.Migrate(ctx, conn, migrations.FS); err != nil {
 		return fmt.Errorf("migrate db: %w", err)
 	}

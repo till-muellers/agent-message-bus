@@ -47,7 +47,7 @@ func (s *Service) inTx(ctx context.Context, p auth.Principal, space string, fn t
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	m, err := s.spaces.ResolveTx(ctx, tx, p, space)
 	if err != nil {
 		return err

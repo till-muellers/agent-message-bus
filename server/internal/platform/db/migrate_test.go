@@ -88,7 +88,7 @@ func assertLog(t *testing.T, conn *sql.DB, want []string) {
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var got []string
 	for rows.Next() {
 		var s string

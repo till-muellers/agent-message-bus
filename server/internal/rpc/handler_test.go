@@ -56,7 +56,7 @@ func call(t *testing.T, srv *httptest.Server, token, tool, args string) (int, re
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	var out reply
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
 		t.Fatal(err)
@@ -123,7 +123,7 @@ func TestListTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	var got []struct {
 		Name        string         `json:"name"`
 		Description string         `json:"description"`

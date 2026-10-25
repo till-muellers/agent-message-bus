@@ -58,7 +58,7 @@ func listBoards(ctx context.Context, q auth.DBTX, spaceID int64) ([]BoardInfo, e
 	if err != nil {
 		return nil, fmt.Errorf("listing blackboards: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []BoardInfo{}
 	for rows.Next() {
 		var b BoardInfo
@@ -76,7 +76,7 @@ func ownedBoards(ctx context.Context, q auth.DBTX, spaceID, ownerID int64) ([]bo
 	if err != nil {
 		return nil, fmt.Errorf("listing owned blackboards: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []board
 	for rows.Next() {
 		b := board{ownerID: ownerID}
@@ -138,7 +138,7 @@ func listThreads(ctx context.Context, q auth.DBTX, boardID int64) ([]ThreadInfo,
 	if err != nil {
 		return nil, fmt.Errorf("listing threads: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []ThreadInfo{}
 	for rows.Next() {
 		var t ThreadInfo
@@ -156,7 +156,7 @@ func listPosts(ctx context.Context, q auth.DBTX, threadID int64) ([]Post, error)
 	if err != nil {
 		return nil, fmt.Errorf("listing posts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []Post{}
 	for rows.Next() {
 		var p Post
@@ -211,7 +211,7 @@ func ids(ctx context.Context, q auth.DBTX, query string, args ...any) ([]int64, 
 	if err != nil {
 		return nil, fmt.Errorf("listing subscribers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []int64
 	for rows.Next() {
 		var id int64

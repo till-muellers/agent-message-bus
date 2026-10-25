@@ -114,7 +114,7 @@ func (s *Service) Read(ctx context.Context, p auth.Principal, after int64, limit
 	if err != nil {
 		return nil, fmt.Errorf("reading inbox of agent %d: %w", p.AgentID, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanEntries(rows)
 }
 

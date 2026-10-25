@@ -50,7 +50,7 @@ func (s *Service) inSpace(ctx context.Context, p auth.Principal, space string, f
 	if err != nil {
 		return fmt.Errorf("beginning tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	m, err := s.spaces.ResolveTx(ctx, tx, p, space)
 	if err != nil {
 		return err

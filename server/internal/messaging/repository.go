@@ -96,7 +96,7 @@ func queryIDs(ctx context.Context, q auth.DBTX, query string, args ...any) ([]in
 	if err != nil {
 		return nil, fmt.Errorf("querying recipients: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []int64
 	for rows.Next() {
 		var id int64
@@ -120,7 +120,7 @@ func listTopics(ctx context.Context, q auth.DBTX, spaceID, agentID int64) ([]Top
 	if err != nil {
 		return nil, fmt.Errorf("listing topics: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	ts := []TopicInfo{}
 	for rows.Next() {
 		var t TopicInfo
