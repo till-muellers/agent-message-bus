@@ -8,24 +8,11 @@ import (
 	"testing"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 type step func(ctx context.Context, w *world) error
-
-func wantErr(t *testing.T, err error, kind apperr.Kind, msg string) {
-	t.Helper()
-	if kind == "" {
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		return
-	}
-	var ae *apperr.Error
-	if !errors.As(err, &ae) || ae.Kind != kind || (msg != "" && ae.Msg != msg) {
-		t.Fatalf("got %v, want %s %q", err, kind, msg)
-	}
-}
 
 func create(by, name string) step {
 	return func(ctx context.Context, w *world) error { return w.svc.CreateTopic(ctx, w.p[by], space, name) }
@@ -136,7 +123,13 @@ func TestOperations(t *testing.T) {
 					t.Fatalf("setup %d: %v", i, err)
 				}
 			}
-			wantErr(t, tc.op(ctx, w), tc.kind, tc.msg)
+			err := tc.op(ctx, w)
+			if tc.kind == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.kind != "" {
+				apperrtest.WantKind(t, err, tc.kind, tc.msg)
+			}
 			for name, want := range tc.inboxes {
 				if got := w.inbox(t, name); !reflect.DeepEqual(got, want) {
 					t.Errorf("inbox %s = %q, want %q", name, got, want)
@@ -173,5 +166,18 @@ func TestResolveGate(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	err := w.svc.SendDirect(context.Background(), w.p["ann"], "nope", "bob", "x", false)
-	wantErr(t, err, apperr.NotFound, "space nope not found")
+	apperrtest.WantKind(t, err, apperr.NotFound, "space nope not found")
+}
+
+func TestOnSpaceCreated(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	got, err := w.svc.ListTopics(context.Background(), w.p["bob"], space)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []TopicInfo{{Name: "all", CreatedBy: "lead", Subscribed: true}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
 }

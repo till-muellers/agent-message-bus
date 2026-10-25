@@ -38,14 +38,14 @@ func (s *Service) CreateTopic(ctx context.Context, p auth.Principal, space, name
 	if name == allTopic {
 		return apperr.New(apperr.Conflict, "topic %s is already open", name)
 	}
-	return s.inTx(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
 		if _, found, err := openTopic(ctx, tx, m.SpaceID, name); err != nil || found {
 			if err == nil {
 				err = apperr.New(apperr.Conflict, "topic %s is already open", name)
 			}
 			return nil, err
 		}
-		id, err := insertTopic(ctx, tx, m.SpaceID, name, m.AgentID, s.nowText())
+		id, err := insertTopic(ctx, tx, m.SpaceID, name, m.AgentID, db.Timestamp(s.now()))
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +55,7 @@ func (s *Service) CreateTopic(ctx context.Context, p auth.Principal, space, name
 
 // SendTopic delivers body to the topic's recipients except the sender.
 func (s *Service) SendTopic(ctx context.Context, p auth.Principal, space, topic, body string, critical bool) error {
-	return s.inTx(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
 		if err := checkMessage(m, body, critical); err != nil {
 			return nil, err
 		}
@@ -68,7 +68,7 @@ func (s *Service) SendTopic(ctx context.Context, p auth.Principal, space, topic,
 			return nil, err
 		}
 		proto := inbox.Entry{Type: inbox.TopicMessage, Critical: critical, Topic: topic, Body: body}
-		return fanOut(m, recipients, proto), nil
+		return m.Notify(recipients, proto), nil
 	})
 }
 
@@ -79,7 +79,11 @@ func (s *Service) topicRecipients(ctx context.Context, tx *sql.Tx, m spaces.Memb
 	if m.Role != spaces.RoleLeader {
 		return nil, apperr.New(apperr.Forbidden, "only leaders may send to all")
 	}
-	return participantIDs(ctx, tx, m.SpaceID, m.AgentID)
+	ids, err := s.spaces.ParticipantIDs(ctx, tx, m.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	return without(ids, m.AgentID), nil
 }
 
 // Subscribe subscribes the caller to topic (idempotent).
@@ -98,7 +102,7 @@ func (s *Service) changeSubscription(ctx context.Context, p auth.Principal, spac
 	if topic == allTopic {
 		return apperr.New(apperr.Invalid, "the all topic cannot be subscribed or unsubscribed")
 	}
-	return s.inTx(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
 		t, err := requireTopic(ctx, tx, m, topic)
 		if err != nil {
 			return nil, err
@@ -112,7 +116,7 @@ func (s *Service) CloseTopic(ctx context.Context, p auth.Principal, space, topic
 	if topic == allTopic {
 		return apperr.New(apperr.Forbidden, "the all topic cannot be closed")
 	}
-	return s.inTx(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
 		t, err := requireTopic(ctx, tx, m, topic)
 		if err != nil {
 			return nil, err
@@ -124,10 +128,10 @@ func (s *Service) CloseTopic(ctx context.Context, p auth.Principal, space, topic
 		if err != nil {
 			return nil, err
 		}
-		if err := closeTopic(ctx, tx, t.id, s.nowText()); err != nil {
+		if err := closeTopic(ctx, tx, t.id, db.Timestamp(s.now())); err != nil {
 			return nil, err
 		}
-		return fanOut(m, recipients, inbox.Entry{Type: inbox.TopicClosed, Topic: topic}), nil
+		return m.Notify(recipients, inbox.Entry{Type: inbox.TopicClosed, Topic: topic}), nil
 	})
 }
 
