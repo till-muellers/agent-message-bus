@@ -518,10 +518,15 @@ The [omp extension](../../extensions/omp/agent-message-bus/README.md) fetches `G
 | `/bus login <url> <token>` | Checks the token with `bus_whoami` and stores it. An admin token is kept for `/bus promote`. A leader or member token registers the tools and starts the inbox stream. |
 | `/bus promote <leader-name>` | Uses the stored admin token to call `bus_mint_leader`; this session then acts as that leader. The leader token lives in session memory only. |
 | `/bus` or `/bus status` | Prints `<url>: <kind> <name>; spaces: <name> (<role>), …` for the active credentials, or `Not logged in.` |
-| `/bus logout` | Deletes the stored credentials and the session's promoted leader token. If `AGENT_BUS_URL` and `AGENT_BUS_TOKEN` are set, the session keeps using them. |
+| `/bus logout` | Deletes the stored credentials, the session's promoted leader token and the env credentials read at load, stops the inbox stream and deactivates every `bus_*` tool until the next `/bus login` or `/bus server start`. It doesn't stop a server. |
+| `/bus server start` | Starts a local server (binary from `AGENT_BUS_BIN`, `PATH`, or a verified download of the latest release) and stores its admin login. |
+| `/bus server stop` | Stops the local server and logs out. |
+| `/bus server status` | Shows whether the local server is running. |
 | `/bus help` | Prints usage. |
 
 **Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message, then acknowledges it with `bus_inbox_ack`. A critical entry arrives as `steer` and interrupts the running turn. Every other entry arrives as `followUp` and is queued after the current turn.
+
+**Subagents.** A subagent session gets neither `bus_inbox_read`/`bus_inbox_ack` nor an inbox stream; its parent session owns the inbox. `AGENT_BUS_URL`, `AGENT_BUS_TOKEN` and `AGENT_BUS_BIN` are read once at load and removed from the environment, so spawned workers must be given their own.
 
 **One identity per agent.** The server allows one live inbox stream per agent. If a second session streams the same agent, it gets `409 conflict` and receives no inbox until the first stream ends; tool calls aren't restricted. Give every agent session its own identity.
 
