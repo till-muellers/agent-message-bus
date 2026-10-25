@@ -1,21 +1,24 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { type JsonSchema, toZod, type Zod } from "../extensions/omp/agent-message-bus/lib/schema.ts";
 import { createBusExtension } from "../extensions/omp/agent-message-bus/index.ts";
-import { BusError, type BusClient, createClient, type FetchLike } from "../extensions/omp/agent-message-bus/lib/client.ts";
-import { runCommand, type CommandDeps } from "../extensions/omp/agent-message-bus/lib/command.ts";
+import { BusError, type BusClient, createClient, type FetchLike, type RemoteTool } from "../extensions/omp/agent-message-bus/lib/client.ts";
+import { runCommand, type CommandDeps, USAGE } from "../extensions/omp/agent-message-bus/lib/command.ts";
 import {
 	type CredentialStore,
+	configDir,
 	createCredentialStore,
 	resolveActive,
 	type StoredCredentials,
 } from "../extensions/omp/agent-message-bus/lib/credentials.ts";
-import { type Entry, formatEntry, runInboxLoop } from "../extensions/omp/agent-message-bus/lib/inbox.ts";
+import { createDeliver, deliveryOptions } from "../extensions/omp/agent-message-bus/lib/deliver.ts";
+import { formatEntry } from "../extensions/omp/agent-message-bus/lib/format.ts";
+import { type Entry, runInboxLoop } from "../extensions/omp/agent-message-bus/lib/inbox.ts";
 import { parseSse } from "../extensions/omp/agent-message-bus/lib/sse.ts";
-import { registerRemoteTools } from "../extensions/omp/agent-message-bus/lib/tools.ts";
+import { registerRemoteTools, type RemoteToolsOptions } from "../extensions/omp/agent-message-bus/lib/tools.ts";
 
 /**
  * Recording stand-in for `pi.zod` (no zod package in this repo): nodes keep enough state to rebuild JSON schema.
@@ -98,8 +101,12 @@ interface Call {
 	body: unknown;
 }
 
-/** Fake bus: each stream open shifts the next scripted response; tool calls go to `tools`. */
-function fakeBus(streams: (() => Response)[], tools: Record<string, (args: Record<string, unknown>, auth: string | undefined) => Response> = {}) {
+/** Fake bus: each stream open shifts the next scripted response; `/v1/tools` lists `list`; tool calls go to `tools`. */
+function fakeBus(
+	streams: (() => Response)[],
+	tools: Record<string, (args: Record<string, unknown>, auth: string | undefined) => Response> = {},
+	list: RemoteTool[] = [],
+) {
 	const calls: Call[] = [];
 	const fetchFn: FetchLike = async (url, init) => {
 		calls.push({ url, method: init.method, auth: init.headers.Authorization, body: init.body ? JSON.parse(init.body) : undefined });
@@ -107,7 +114,7 @@ function fakeBus(streams: (() => Response)[], tools: Record<string, (args: Recor
 			const next = streams.shift();
 			return next ? next() : errorResponse(401, "unauthenticated", "invalid token");
 		}
-		if (url.endsWith("/v1/tools")) return Response.json([]);
+		if (url.endsWith("/v1/tools")) return Response.json(list);
 		const name = url.slice(url.lastIndexOf("/") + 1);
 		const handler = tools[name];
 		if (!handler) return Response.json({ result: { acked: 1 } });
@@ -172,6 +179,37 @@ describe("formatEntry", () => {
 	});
 });
 
+describe("deliver", () => {
+	test("deliveryOptions: critical steers, others follow up; only tui and rpc trigger a turn", () => {
+		for (const [critical, mode, expected] of [
+			[true, "tui", { deliverAs: "steer", triggerTurn: true }],
+			[false, "rpc", { deliverAs: "followUp", triggerTurn: true }],
+			[true, "print", { deliverAs: "steer", triggerTurn: false }],
+			[false, "json", { deliverAs: "followUp", triggerTurn: false }],
+			[false, undefined, { deliverAs: "followUp", triggerTurn: false }],
+		] as const) {
+			expect({ critical, mode, options: deliveryOptions(entry(1, { critical }), mode) }).toEqual({ critical, mode, options: expected });
+		}
+	});
+
+	test("createDeliver sends the formatted entry with the options for the mode at delivery time", async () => {
+		const sent: unknown[] = [];
+		let mode = "print";
+		const pi = { sendMessage: (message: unknown, options: unknown) => void sent.push({ message, options }) } as unknown as ExtensionAPI;
+		const deliver = createDeliver(pi, () => mode);
+		await deliver(entry(1));
+		mode = "tui";
+		await deliver(entry(2, { critical: true }));
+		expect(sent).toEqual([
+			{ message: { customType: "agent-bus", content: formatEntry(entry(1)), display: true }, options: { deliverAs: "followUp", triggerTurn: false } },
+			{
+				message: { customType: "agent-bus", content: formatEntry(entry(2, { critical: true })), display: true },
+				options: { deliverAs: "steer", triggerTurn: true },
+			},
+		]);
+	});
+});
+
 describe("runInboxLoop", () => {
 	test("delivers in order, acks each id, reconnects, and stops on 401", async () => {
 		const bus = fakeBus([
@@ -233,6 +271,25 @@ describe("runInboxLoop", () => {
 		});
 		expect(bus.calls).toHaveLength(0);
 	});
+
+	test("an ack failure is reported without reconnecting or redelivering", async () => {
+		const bus = fakeBus([() => new Response(streamOf([frame(entry(1)), frame(entry(2))]))], {
+			bus_inbox_ack: args => (args.upTo === 1 ? errorResponse(500, "internal", "ack failed") : Response.json({ result: { acked: 2 } })),
+		});
+		const delivered: number[] = [];
+		const errors: string[] = [];
+		await runInboxLoop({
+			client: createClient(bus.fetchFn),
+			getActive: () => ({ url: URL_, token: "tok" }),
+			signal: new AbortController().signal,
+			deliver: async e => void delivered.push(e.id),
+			onError: error => void errors.push(error.message),
+			sleep: noSleep,
+		});
+		expect(delivered).toEqual([1, 2]);
+		expect(bus.calls.filter(c => c.url.endsWith("/bus_inbox_ack")).map(c => c.body)).toEqual([{ upTo: 1 }, { upTo: 2 }]);
+		expect(errors).toEqual(["ack failed", "invalid token"]);
+	});
 });
 
 describe("client", () => {
@@ -251,27 +308,55 @@ describe("client", () => {
 });
 
 describe("registerRemoteTools", () => {
+	type FakeTool = { name: string; label: string; execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }> };
+	const listTool = (name: string, inputSchema: JsonSchema = { type: "object", properties: {} }): RemoteTool => ({ name, description: name, inputSchema });
+
+	function setup(fetchFn: FetchLike, getActive: RemoteToolsOptions["getActive"] = () => ({ url: URL_, token: "t" })) {
+		const tools: FakeTool[] = [];
+		const warnings: string[] = [];
+		const pi = { zod: z, registerTool: (t: FakeTool) => void tools.push(t) } as unknown as ExtensionAPI;
+		const options: RemoteToolsOptions = { client: createClient(fetchFn), getActive, state: { registered: false }, warn: m => void warnings.push(m) };
+		return { tools, warnings, options, register: () => registerRemoteTools(pi, options) };
+	}
+
 	test("registers once and executes with the current credentials", async () => {
 		const seen: (string | undefined)[] = [];
 		const fetchFn: FetchLike = async (url, init) => {
 			if (url.endsWith("/v1/tools"))
 				return Response.json([{ name: "bus_list_spaces", description: "List", inputSchema: { type: "object", properties: {}, additionalProperties: false } }]);
 			seen.push(init.headers.Authorization);
-			if (url.endsWith("/bus_fail")) return errorResponse(403, "forbidden", "nope");
 			return Response.json({ result: [{ name: "demo" }] });
 		};
-		const tools: { name: string; label: string; execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }> }[] = [];
-		const pi = { zod: z, registerTool: (t: (typeof tools)[number]) => void tools.push(t) } as unknown as ExtensionAPI;
-		let token = "one";
-		const state = { registered: false };
-		const getActive = () => ({ url: URL_, token });
-		await registerRemoteTools(pi, createClient(fetchFn), getActive, state);
-		await registerRemoteTools(pi, createClient(fetchFn), getActive, state);
+		let token: string | undefined = "one";
+		const { tools, register } = setup(fetchFn, () => (token ? { url: URL_, token } : undefined));
+		expect(await register()).toBe(1);
+		expect(await register()).toBe(0);
 		expect(tools.map(t => [t.name, t.label])).toEqual([["bus_list_spaces", "bus_list_spaces"]]);
+		token = undefined;
+		await expect(tools[0].execute("id", {})).rejects.toThrow("Not logged in to the agent bus. Run /bus login <url> <token>.");
 		token = "two";
 		const out = await tools[0].execute("id", {});
 		expect(out.content[0].text).toBe(JSON.stringify([{ name: "demo" }], null, 2));
 		expect(seen).toEqual(["Bearer two"]);
+	});
+
+	test("a tool that fails to register is reported; the others still register", async () => {
+		const list = [listTool("bus_a"), listTool("bus_bad", { type: "object", properties: { xs: { type: "array" } } }), listTool("bus_c")];
+		const { tools, warnings, register } = setup(async () => Response.json(list));
+		expect(await register()).toBe(2);
+		expect(tools.map(t => t.name)).toEqual(["bus_a", "bus_c"]);
+		expect(warnings).toEqual(["tool bus_bad not registered: unsupported schema type array"]);
+	});
+
+	test("a failed list fetch leaves registration open for the next attempt", async () => {
+		let fail = true;
+		const { tools, options, register } = setup(async () => (fail ? errorResponse(500, "internal", "boom") : Response.json([listTool("bus_a")])));
+		await expect(register()).rejects.toThrow("boom");
+		expect(options.state.registered).toBe(false);
+		fail = false;
+		expect(await register()).toBe(1);
+		expect(options.state.registered).toBe(true);
+		expect(tools.map(t => t.name)).toEqual(["bus_a"]);
 	});
 });
 
@@ -290,11 +375,11 @@ function memoryStore(initial?: StoredCredentials): CredentialStore & { value: St
 	return store;
 }
 
-function commandDeps(store: CredentialStore, client: BusClient): CommandDeps & { restarts: number; stops: number } {
+function commandDeps(store: CredentialStore, client: BusClient, env: NodeJS.ProcessEnv = {}): CommandDeps & { restarts: number; stops: number } {
 	const deps = {
 		store,
 		client,
-		env: {},
+		env,
 		restarts: 0,
 		stops: 0,
 		restart: async () => void deps.restarts++,
@@ -317,14 +402,20 @@ describe("runCommand", () => {
 		expect(deps.restarts).toBe(0);
 	});
 
-	test("login with a member token stores token and restarts", async () => {
+	test("login with a member token stores token and restarts; the admin token is kept only for the same url", async () => {
 		const bus = fakeBus([], { bus_whoami: whoami({ mem: { kind: "member", name: "w", space: "demo", spaces: [{ name: "demo", role: "member" }] } }) });
-		const store = memoryStore({ url: "http://old", adminToken: "adm" });
-		const deps = commandDeps(store, createClient(bus.fetchFn));
-		const result = await runCommand(["login", URL_, "mem"], deps);
-		expect(result.message).toBe("Logged in as member w");
-		expect(store.value).toEqual({ url: URL_, adminToken: "adm", token: "mem" });
-		expect(deps.restarts).toBe(1);
+		for (const [storedUrl, adminToken] of [
+			["http://old", undefined],
+			[URL_, "adm"],
+		] as const) {
+			const store = memoryStore({ url: storedUrl, adminToken: "adm" });
+			const deps = commandDeps(store, createClient(bus.fetchFn));
+			const result = await runCommand(["login", URL_, "mem"], deps);
+			expect(result.message).toBe("Logged in as member w");
+			expect({ storedUrl, value: store.value }).toEqual({ storedUrl, value: { url: URL_, adminToken, token: "mem" } });
+			expect(store.value?.adminToken).toBe(adminToken);
+			expect(deps.restarts).toBe(1);
+		}
 	});
 
 	test("promote without an admin token is an error", async () => {
@@ -360,6 +451,23 @@ describe("runCommand", () => {
 		expect((await runCommand("frobnicate", deps)).level).toBe("error");
 	});
 
+	test("logout keeps the session on env credentials when AGENT_BUS_URL and AGENT_BUS_TOKEN are set", async () => {
+		const store = memoryStore({ url: URL_, token: "t" });
+		const deps = commandDeps(store, createClient(fakeBus([]).fetchFn), { AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env" });
+		expect(await runCommand("logout", deps)).toEqual({
+			message: "Logged out; session still uses AGENT_BUS_URL/AGENT_BUS_TOKEN from the environment.",
+			level: "info",
+		});
+		expect(store.value).toBeUndefined();
+		expect({ restarts: deps.restarts, stops: deps.stops }).toEqual({ restarts: 1, stops: 0 });
+	});
+
+	test("help prints usage, which lists /bus help", async () => {
+		const deps = commandDeps(memoryStore(), createClient(fakeBus([]).fetchFn));
+		expect(await runCommand("help", deps)).toEqual({ message: USAGE, level: "info" });
+		expect(USAGE).toContain("/bus help");
+	});
+
 	test("server errors surface as error messages", async () => {
 		const bus = fakeBus([], { bus_whoami: () => errorResponse(401, "unauthenticated", "invalid token") });
 		const deps = commandDeps(memoryStore(), createClient(bus.fetchFn));
@@ -380,6 +488,12 @@ describe("credentials", () => {
 		expect(resolveActive({ AGENT_BUS_URL: "http://env" }, stored)).toEqual({ url: "http://file", token: "file-tok" });
 		expect(resolveActive({}, { url: "http://file", adminToken: "a" })).toBeUndefined();
 		expect(resolveActive({}, undefined)).toBeUndefined();
+	});
+
+	test("configDir: OMP_AGENT_BUS_DIR wins, else <PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus", () => {
+		expect(configDir({ OMP_AGENT_BUS_DIR: "/bus", PI_CODING_AGENT_DIR: "/agent" })).toBe("/bus");
+		expect(configDir({ PI_CODING_AGENT_DIR: "/agent" })).toBe(join("/agent", "agent-message-bus"));
+		expect(configDir({})).toBe(join(homedir(), ".omp", "agent", "agent-message-bus"));
 	});
 
 	test("store saves 0600, loads, clears; unreadable file is an error", async () => {
@@ -413,11 +527,11 @@ describe("index wiring", () => {
 		const warnings: string[] = [];
 		const { promise: warned, resolve: onWarn } = Promise.withResolvers<void>();
 		const handlers: Record<string, ((event: unknown, ctx: { mode: string }) => unknown)[]> = {};
-		const commands: string[] = [];
+		const commands: { name: string; description: string }[] = [];
 		const pi = {
 			zod: z,
 			registerTool: () => {},
-			registerCommand: (name: string) => void commands.push(name),
+			registerCommand: (name: string, options: { description: string }) => void commands.push({ name, description: options.description }),
 			on: (event: string, handler: (event: unknown, ctx: { mode: string }) => unknown) => void (handlers[event] ??= []).push(handler),
 			sendMessage: (message: (typeof sent)[number]["message"], options: unknown) => void sent.push({ message, options }),
 			logger: {
@@ -444,7 +558,7 @@ describe("index wiring", () => {
 
 	test("session_start streams the inbox: critical → steer, others → followUp", async () => {
 		const { sent, warnings, commands } = await runSession("tui");
-		expect(commands).toEqual(["bus"]);
+		expect(commands).toEqual([{ name: "bus", description: "Agent message bus: login <url> <token> | promote <leader-name> | status | logout | help" }]);
 		expect(sent).toEqual([
 			{ message: { customType: "agent-bus", content: formatEntry(entry(1)), display: true }, options: { deliverAs: "followUp", triggerTurn: true } },
 			{
@@ -471,5 +585,44 @@ describe("index wiring", () => {
 				],
 			});
 		}
+	});
+
+	test("logout keeps tools registered; calls fail until the next login, then use the new token", async () => {
+		const dir = await mkdtemp(join(tmpdir(), "amb-"));
+		dirs.push(dir);
+		const env = { OMP_AGENT_BUS_DIR: dir };
+		await createCredentialStore(env).save({ url: URL_, token: "mem" });
+		const bus = fakeBus(
+			[],
+			{
+				bus_whoami: () => Response.json({ result: { kind: "member", name: "w", spaces: [] } }),
+				bus_list_spaces: (_args, auth) => Response.json({ result: auth }),
+			},
+			[{ name: "bus_list_spaces", description: "List", inputSchema: { type: "object", properties: {} } }],
+		);
+		type Ctx = { mode: string; ui: { notify(message: string): void } };
+		const tools: { execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }> }[] = [];
+		const handlers: Record<string, ((event: unknown, ctx: Ctx) => unknown)[]> = {};
+		const commands: ((args: string, ctx: Ctx) => Promise<void>)[] = [];
+		const pi = {
+			zod: z,
+			registerTool: (tool: (typeof tools)[number]) => void tools.push(tool),
+			registerCommand: (_name: string, options: { handler: (typeof commands)[number] }) => void commands.push(options.handler),
+			on: (event: string, handler: (event: unknown, ctx: Ctx) => unknown) => void (handlers[event] ??= []).push(handler),
+			sendMessage: () => {},
+			logger: { warn: () => {}, info: () => {}, error: () => {}, debug: () => {} },
+		} as unknown as ExtensionAPI;
+		await createBusExtension({ fetchFn: bus.fetchFn, env, sleep: noSleep })(pi);
+		const notes: string[] = [];
+		const ctx: Ctx = { mode: "print", ui: { notify: message => void notes.push(message) } };
+		for (const handler of handlers.session_start ?? []) await handler({}, ctx);
+		await commands[0]("logout", ctx);
+		await expect(tools[0].execute("id", {})).rejects.toThrow("Not logged in to the agent bus. Run /bus login <url> <token>.");
+		await commands[0](`login ${URL_} mem2`, ctx);
+		const out = await tools[0].execute("id", {});
+		for (const handler of handlers.session_shutdown ?? []) await handler({}, ctx);
+		expect(out.content[0].text).toBe(JSON.stringify("Bearer mem2", null, 2));
+		expect(tools).toHaveLength(1);
+		expect(notes).toEqual(["Logged out.", "Logged in as member w"]);
 	});
 });

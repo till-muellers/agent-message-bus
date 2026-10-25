@@ -12,10 +12,10 @@ Server behaviour (spaces, topics, blackboards, permissions) is specified in [`ap
 
 | Command | Effect |
 | :--- | :--- |
-| `/bus login <url> <token>` | Calls `bus_whoami` with the token. **Admin** token: stored as `adminToken`, nothing else starts; reply `Admin token stored. Run /bus promote <leader-name> to act as a leader.` A stored agent token is kept if the url is the same. **Leader/member** token: stored as `token`, then tools are registered and the inbox stream starts; reply `Logged in as <kind> <name>`. A trailing `/` on the url is stripped. |
+| `/bus login <url> <token>` | Calls `bus_whoami` with the token. **Admin** token: stored as `adminToken`, nothing else starts; reply `Admin token stored. Run /bus promote <leader-name> to act as a leader.` A stored agent token is kept if the url is the same. **Leader/member** token: stored as `token`, then tools are registered and the inbox stream starts; reply `Logged in as <kind> <name>`. A stored admin token is kept only if the url is the same, so `/bus promote` never sends one server's admin token to another. A trailing `/` on the url is stripped. |
 | `/bus promote <leader-name>` | Requires a stored admin token (otherwise `Run /bus login <url> <admin-token> first.`). Calls `bus_mint_leader`, stores the new leader token, and restarts with it; reply `This session now acts as leader <name>.` |
 | `/bus` or `/bus status` | Calls `bus_whoami` with the active credentials, including env overrides; if there is no agent token, it uses the stored admin token. Prints `<url>: <kind> <name>; spaces: <name> (<role>), …`, or `Not logged in.` with usage. |
-| `/bus logout` | Stops the inbox stream and deletes the credentials file. Reply: `Logged out.` |
+| `/bus logout` | Deletes the credentials file. If env `AGENT_BUS_URL` and `AGENT_BUS_TOKEN` are set, the session restarts on them; reply `Logged out; session still uses AGENT_BUS_URL/AGENT_BUS_TOKEN from the environment.` Otherwise it stops the inbox stream; reply `Logged out.` Registered tools stay registered either way. |
 | `/bus help` | Prints usage. |
 
 Server errors are shown as `<code>: <message>`.
@@ -43,11 +43,11 @@ http://localhost:8080: leader lead; spaces: none
 
 ## Tools
 
-At session start (or on `/bus login` or `/bus promote`), the extension fetches `GET /v1/tools` once per session. It registers each tool under its server name, converting the JSON Schema to zod via `pi.zod`. Each call uses the credentials that are active **at call time**, so `/bus promote` changes identity without re-registering. A tool result is the server's `result` as pretty-printed JSON. A server error is thrown as `<code>: <message>`. After `/bus logout`, calls fail with `Not logged in to the agent bus. Run /bus login <url> <token>.` If the tool fetch fails, the inbox stream is not started either; the error is logged as `agent-bus: …` (or shown as the command reply), and the next `/bus login` retries.
+At session start (or on `/bus login` or `/bus promote`), the extension fetches `GET /v1/tools` once per session. It registers each tool under its server name, converting the JSON Schema to zod via `pi.zod`. A tool that cannot be registered (for example an unsupported schema) is logged as `agent-bus: tool <name> not registered: …`; the other tools still register. Each call uses the credentials that are active **at call time**, so `/bus promote` changes identity without re-registering. A tool result is the server's `result` as pretty-printed JSON. A server error is thrown as `<code>: <message>`. After `/bus logout` (without env credentials), the tools stay registered but calls fail with `Not logged in to the agent bus. Run /bus login <url> <token>.` until the next login. If the tool fetch fails, the inbox stream is not started either; the error is logged as `agent-bus: …` (or shown as the command reply), and the next `/bus login` retries.
 
 ## Inbox delivery
 
-The extension holds `GET /v1/inbox/stream` open. For each `inbox` event, it sends a custom message (`customType: "agent-bus"`, displayed) and then calls `bus_inbox_ack {upTo: id}`. The ack permanently deletes the entry on the server.
+The extension holds `GET /v1/inbox/stream` open. For each `inbox` event, it sends a custom message (`customType: "agent-bus"`, displayed) and then calls `bus_inbox_ack {upTo: id}`. The ack permanently deletes the entry on the server. A failed ack is logged as `agent-bus: <message>` and the stream continues: reconnecting would redeliver the entry, and the next ack's higher `upTo` covers it.
 
 ```text
 [agent-bus] <space> · <where> · from <sender>[ · CRITICAL]
