@@ -18,14 +18,18 @@ func TestLoad(t *testing.T) {
 		{
 			name: "defaults",
 			env:  map[string]string{"AMB_ADMIN_TOKEN": valid, "XDG_DATA_HOME": "X"},
-			want: Config{Addr: ":8080", DBPath: filepath.Join("X", "agent-message-bus", "agent-message-bus.db"), AdminToken: valid},
+			want: Config{Addr: "127.0.0.1:8080", DBPath: filepath.Join("X", "agent-message-bus", "agent-message-bus.db"), AdminToken: valid},
 		},
 		{
 			name: "overrides",
 			env:  map[string]string{"AMB_ADMIN_TOKEN": valid, "AMB_ADDR": ":9", "AMB_DB_PATH": "x.db"},
 			want: Config{Addr: ":9", DBPath: "x.db", AdminToken: valid},
 		},
-		{name: "missing token", env: map[string]string{}, wantErr: "AMB_ADMIN_TOKEN is required"},
+		{
+			name: "token optional",
+			env:  map[string]string{"AMB_DB_PATH": "x.db"},
+			want: Config{Addr: "127.0.0.1:8080", DBPath: "x.db"},
+		},
 		{
 			name:    "short token",
 			env:     map[string]string{"AMB_ADMIN_TOKEN": "short"},

@@ -20,7 +20,7 @@ const adminToken = "admin-token-0123456789-0123456789-abcdef"
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := httptest.NewServer(server.Build(ctx, dbtest.Open(t), adminToken))
+	srv := httptest.NewServer(server.Build(ctx, dbtest.Open(t), adminToken, func() {}))
 	t.Cleanup(func() { cancel(); srv.Close() })
 	return srv
 }
@@ -165,5 +165,30 @@ func TestInboxStreamOnePerAgent(t *testing.T) {
 			t.Fatalf("stream after disconnect still %d", status)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestAdminEndpoints(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	down := make(chan struct{}, 1)
+	srv := httptest.NewServer(server.Build(ctx, dbtest.Open(t), adminToken, func() { down <- struct{}{} }))
+	t.Cleanup(func() { cancel(); srv.Close() })
+	next := strings.Repeat("r", 40)
+	if status, body := do(t, srv, http.MethodPost, "/v1/admin/admin-token", adminToken, `{"token":"`+next+`"}`); status != http.StatusOK {
+		t.Fatalf("rotate: %d %s", status, body)
+	}
+	if status, _ := do(t, srv, http.MethodGet, "/v1/tools", adminToken, ""); status != http.StatusUnauthorized {
+		t.Fatalf("old token: %d", status)
+	}
+	if status, _ := do(t, srv, http.MethodGet, "/v1/tools", next, ""); status != http.StatusOK {
+		t.Fatalf("new token: %d", status)
+	}
+	if status, _ := do(t, srv, http.MethodPost, "/v1/admin/shutdown", next, ""); status != http.StatusOK {
+		t.Fatalf("shutdown: %d", status)
+	}
+	select {
+	case <-down:
+	default:
+		t.Fatal("shutdown callback not called")
 	}
 }

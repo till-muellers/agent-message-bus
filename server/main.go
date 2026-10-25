@@ -1,15 +1,17 @@
-// Command agent-message-bus serves the agent message bus over MCP and HTTP.
+// Command agent-message-bus serves the agent message bus over MCP and HTTP and manages its local instance.
 package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -17,69 +19,104 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/detach"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/httpserver"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/instance"
 	"github.com/till-muellers/agent-message-bus/server/internal/server"
 	"github.com/till-muellers/agent-message-bus/server/migrations"
 )
 
-const usage = `Usage: agent-message-bus [--detached]
+const usage = `Usage: agent-message-bus [command]
 
 Serves the agent message bus (MCP at /mcp, RPC at /v1/tools, SSE at /v1/inbox/stream, /healthz).
+One instance runs per data dir.
+
+Commands:
+  (none)          serve in the foreground; Ctrl+C or SIGTERM shuts down gracefully
+  start           start in the background (output appends to <datadir>/agent-message-bus.log)
+                  and wait until healthy; no-op when already running
+  stop            shut the running instance down (POST /v1/admin/shutdown, kill on timeout)
+  status [--json] print whether an instance is running, with its pid and url
+  admin-token     print the admin token (generates <datadir>/admin-token if missing)
+  rotate-token    generate a new admin token, apply it to the running instance and save it
 
 Flags:
-  --detached   run in the background; output appends to <db dir>/agent-message-bus.log,
-               pid is written to <db dir>/agent-message-bus.pid
-  --help       show this help
+  --help          show this help
 
 Environment:
-  AMB_ADMIN_TOKEN  required, at least 32 characters
-  AMB_ADDR         listen address (default :8080)
+  AMB_ADMIN_TOKEN  optional admin token override (at least 32 characters); default is the
+                   generated <datadir>/admin-token file
+  AMB_ADDR         listen address (default 127.0.0.1:8080)
   AMB_DB_PATH      SQLite file (default <datadir>/agent-message-bus.db, where <datadir> is
                    Windows: %LOCALAPPDATA%\agent-message-bus
                    macOS:   ~/Library/Application Support/agent-message-bus
                    others:  $XDG_DATA_HOME/agent-message-bus or ~/.local/share/agent-message-bus)
+                   The state file agent-message-bus.state.json lives next to it.
 `
+
+const waitTimeout = 10 * time.Second
 
 func main() {
 	fs := flag.NewFlagSet("agent-message-bus", flag.ExitOnError)
 	fs.Usage = func() { _, _ = fmt.Fprint(fs.Output(), usage) }
-	detached := fs.Bool("detached", false, "run in the background")
 	_ = fs.Parse(os.Args[1:]) // ExitOnError: --help exits 0, bad flags exit 2
-	if err := dispatch(*detached); err != nil {
+	if err := dispatch(fs.Args()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func dispatch(detached bool) error {
+func dispatch(args []string) error {
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	if detached {
-		return startDetached(cfg)
-	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	return run(ctx, cfg)
+	if len(args) == 0 {
+		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+		return run(ctx, cfg)
+	}
+	return command(ctx, manager(cfg), args[0], args[1:])
 }
 
-func startDetached(cfg config.Config) error {
-	dir := cfg.DataDir()
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("creating data dir %s: %w", dir, err)
+func command(ctx context.Context, m instance.Manager, name string, rest []string) error {
+	switch name {
+	case "start":
+		return m.Start(ctx)
+	case "stop":
+		return m.Stop(ctx)
+	case "status":
+		fs := flag.NewFlagSet("status", flag.ExitOnError)
+		asJSON := fs.Bool("json", false, "print JSON")
+		_ = fs.Parse(rest)
+		return m.Status(ctx, *asJSON)
+	case "admin-token":
+		return m.AdminToken()
+	case "rotate-token":
+		return m.RotateToken(ctx)
 	}
-	logPath := filepath.Join(dir, "agent-message-bus.log")
-	pidPath := filepath.Join(dir, "agent-message-bus.pid")
-	pid, err := detach.Start(os.Args[1:], os.Environ(), logPath, pidPath)
-	if err != nil {
-		return fmt.Errorf("detach: %w", err)
+	return fmt.Errorf("unknown command %q; run agent-message-bus --help", name)
+}
+
+func manager(cfg config.Config) instance.Manager {
+	return instance.Manager{
+		Config: cfg,
+		Client: &http.Client{Timeout: 5 * time.Second},
+		Spawn:  func(logPath string) (int, error) { return detach.Start(nil, os.Environ(), logPath) },
+		Kill:   instance.KillPID,
+		Out:    os.Stdout,
+		Timeout: waitTimeout,
+		Poll:    100 * time.Millisecond,
 	}
-	fmt.Printf("agent-message-bus started (pid %d); log: %s; pid file: %s\n", pid, logPath, pidPath)
-	return nil
 }
 
 func run(ctx context.Context, cfg config.Config) error {
+	token, err := cfg.ResolveAdminToken()
+	if err != nil {
+		return fmt.Errorf("admin token: %w", err)
+	}
+	if err := instance.EnsureNotRunning(ctx, http.DefaultClient, cfg.DataDir()); err != nil {
+		return err
+	}
 	conn, err := db.Open(ctx, cfg.DBPath)
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
@@ -88,9 +125,23 @@ func run(ctx context.Context, cfg config.Config) error {
 	if err := db.Migrate(ctx, conn, migrations.FS); err != nil {
 		return fmt.Errorf("migrate db: %w", err)
 	}
+	return serve(ctx, cfg, conn, token)
+}
+
+func serve(ctx context.Context, cfg config.Config, conn *sql.DB, token string) error {
+	ctx, shutdown := context.WithCancel(ctx)
+	defer shutdown()
+	ln, err := net.Listen("tcp", cfg.Addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", cfg.Addr, err)
+	}
+	unpublish, err := instance.Publish(cfg.DataDir(), ln.Addr().String(), time.Now())
+	if err != nil {
+		return errors.Join(err, ln.Close())
+	}
+	defer unpublish()
 	streamRoot, cancelStreams := context.WithCancel(context.Background())
 	defer cancelStreams()
-	h := server.Build(streamRoot, conn, cfg.AdminToken)
-	srv := &http.Server{Addr: cfg.Addr, Handler: h, ReadHeaderTimeout: 10 * time.Second}
-	return httpserver.Serve(ctx, srv, cancelStreams)
+	srv := &http.Server{Handler: server.Build(streamRoot, conn, token, shutdown), ReadHeaderTimeout: 10 * time.Second}
+	return httpserver.Serve(ctx, srv, ln, cancelStreams)
 }

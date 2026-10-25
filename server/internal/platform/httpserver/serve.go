@@ -6,17 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"time"
 )
 
 const shutdownTimeout = 10 * time.Second
 
-// Serve runs srv until ctx is done, then cancels streams and shuts down within 10s.
-func Serve(ctx context.Context, srv *http.Server, cancelStreams context.CancelFunc) error {
+// Serve runs srv on ln until ctx is done, then cancels streams and shuts down within 10s.
+func Serve(ctx context.Context, srv *http.Server, ln net.Listener, cancelStreams context.CancelFunc) error {
 	errc := make(chan error, 1)
-	go func() { errc <- srv.ListenAndServe() }()
-	slog.Info("listening", "addr", srv.Addr)
+	go func() { errc <- srv.Serve(ln) }()
+	slog.Info("listening", "addr", ln.Addr().String())
 	select {
 	case err := <-errc:
 		return fmt.Errorf("serve: %w", err)

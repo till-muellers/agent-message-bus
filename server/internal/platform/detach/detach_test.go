@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,9 +23,9 @@ func TestHelperProcess(t *testing.T) {
 func TestStart(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	logPath, pidPath := filepath.Join(dir, "x.log"), filepath.Join(dir, "x.pid")
-	args := []string{"-test.run=^TestHelperProcess$", Flag}
-	pid, err := Start(args, append(os.Environ(), helperEnv), logPath, pidPath)
+	logPath := filepath.Join(dir, "x.log")
+	args := []string{"-test.run=^TestHelperProcess$"}
+	pid, err := Start(args, append(os.Environ(), helperEnv), logPath)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -36,9 +34,6 @@ func TestStart(t *testing.T) {
 		t.Fatalf("find %d: %v", pid, err)
 	}
 	t.Cleanup(func() { _ = proc.Kill() })
-	if got, _ := os.ReadFile(pidPath); string(got) != strconv.Itoa(pid) {
-		t.Fatalf("pid file %q, want %d", got, pid)
-	}
 	waitForLog(t, logPath, "helper ready -test.run=^TestHelperProcess$\n")
 	if err := proc.Kill(); err != nil {
 		t.Fatalf("child %d not alive: %v", pid, err)
@@ -54,18 +49,4 @@ func waitForLog(t *testing.T, path, want string) {
 	}
 	b, _ := os.ReadFile(path)
 	t.Fatalf("log %q never contained %q", b, want)
-}
-
-func TestStripFlag(t *testing.T) {
-	t.Parallel()
-	tests := []struct{ in, want []string }{
-		{in: []string{}, want: []string{}},
-		{in: []string{Flag}, want: []string{}},
-		{in: []string{"a", Flag, "b", "-detached"}, want: []string{"a", "b"}},
-	}
-	for _, tc := range tests {
-		if got := stripFlag(tc.in); !reflect.DeepEqual(got, tc.want) {
-			t.Fatalf("stripFlag(%v) = %v, want %v", tc.in, got, tc.want)
-		}
-	}
 }

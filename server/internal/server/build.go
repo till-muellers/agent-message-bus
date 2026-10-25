@@ -16,8 +16,8 @@ import (
 )
 
 // Build wires every service onto conn and returns the routed handler.
-// Inbox streams end when streamRoot is cancelled.
-func Build(streamRoot context.Context, conn *sql.DB, adminToken string) http.Handler {
+// Inbox streams end when streamRoot is cancelled; shutdown is called by POST /v1/admin/shutdown.
+func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown func()) http.Handler {
 	authSvc := auth.NewService(conn, adminToken, time.Now)
 	inboxSvc := inbox.NewService(conn, broker.NewMemory(256), time.Now)
 	resolver := spaces.NewResolver(conn)
@@ -28,5 +28,5 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string) http.Han
 	reg := tools.New(tools.Deps{
 		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc,
 	})
-	return Routes(streamRoot, authSvc, inboxSvc, reg)
+	return Routes(streamRoot, authSvc, inboxSvc, reg, shutdown)
 }

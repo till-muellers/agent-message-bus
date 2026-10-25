@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -9,14 +10,14 @@ import (
 
 func TestServe(t *testing.T) {
 	tests := []struct {
-		name       string
-		addr       string
-		cancel     bool
-		wantErr    string
-		wantCancel bool
+		name        string
+		cancel      bool
+		closeListen bool
+		wantErr     string
+		wantCancel  bool
 	}{
-		{name: "graceful shutdown", addr: "127.0.0.1:0", cancel: true, wantCancel: true},
-		{name: "unusable addr", addr: "bad:addr:x", wantErr: "serve:"},
+		{name: "graceful shutdown", cancel: true, wantCancel: true},
+		{name: "closed listener", closeListen: true, wantErr: "serve:"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -25,9 +26,16 @@ func TestServe(t *testing.T) {
 			if tc.cancel {
 				cancel()
 			}
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.closeListen {
+				_ = ln.Close()
+			}
 			called := false
-			srv := &http.Server{Addr: tc.addr, Handler: http.NotFoundHandler()}
-			err := Serve(ctx, srv, func() { called = true })
+			srv := &http.Server{Handler: http.NotFoundHandler()}
+			err = Serve(ctx, srv, ln, func() { called = true })
 			if tc.wantErr == "" && err != nil {
 				t.Fatalf("Serve() error = %v, want nil", err)
 			}

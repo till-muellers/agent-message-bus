@@ -18,7 +18,7 @@ const adminToken = "admin-token-0123456789-0123456789-abcdef"
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := httptest.NewServer(server.Build(ctx, dbtest.Open(t), adminToken))
+	srv := httptest.NewServer(server.Build(ctx, dbtest.Open(t), adminToken, func() {}))
 	t.Cleanup(func() { cancel(); srv.Close() })
 	return srv
 }

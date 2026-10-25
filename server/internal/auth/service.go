@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
+	"sync/atomic"
 	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/domain"
@@ -14,19 +15,22 @@ import (
 // Service authenticates bearer tokens and mints leader and member tokens.
 type Service struct {
 	db        *sql.DB
-	adminHash string
+	adminHash atomic.Pointer[string]
 	now       func() time.Time
 }
 
 // NewService returns a Service using adminToken as the admin credential.
 func NewService(db *sql.DB, adminToken string, now func() time.Time) *Service {
-	return &Service{db: db, adminHash: Hash(adminToken), now: now}
+	s := &Service{db: db, now: now}
+	h := Hash(adminToken)
+	s.adminHash.Store(&h)
+	return s
 }
 
 // Authenticate resolves token to a Principal.
 func (s *Service) Authenticate(ctx context.Context, token string) (Principal, error) {
 	h := Hash(token)
-	if subtle.ConstantTimeCompare([]byte(h), []byte(s.adminHash)) == 1 {
+	if subtle.ConstantTimeCompare([]byte(h), []byte(*s.adminHash.Load())) == 1 {
 		return Principal{Kind: Admin}, nil
 	}
 	p, found, err := lookupToken(ctx, s.db, h)
