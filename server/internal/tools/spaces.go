@@ -25,14 +25,17 @@ func spaceTools(s *spaces.Service) []Tool {
 func spaceIdentityTools(s *spaces.Service) []Tool {
 	return []Tool{
 		define("bus_whoami", "Any token. Returns the caller's kind, name and the spaces it participates in; no side effects.",
+			"{kind, name?, space?, spaces: [{name, role}]}",
 			nil, nil, func(ctx context.Context, p auth.Principal, _ noArgs) (any, error) {
 				return s.Whoami(ctx, p)
 			}),
 		define("bus_list_spaces", "Leaders see all spaces; members see only their own space. No side effects.",
+			"[{name, leaders, members, joined}]",
 			nil, nil, func(ctx context.Context, p auth.Principal, _ noArgs) (any, error) {
 				return list(s.List(ctx, p))
 			}),
 		define("bus_list_participants", "Participants only. Lists the space's leaders and members; no side effects.",
+			"[{name, role}]",
 			spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 				return list(s.Participants(ctx, p, a.Space))
 			}),
@@ -41,22 +44,25 @@ func spaceIdentityTools(s *spaces.Service) []Tool {
 
 func spaceLifecycleTools(s *spaces.Service) []Tool {
 	return []Tool{
-		spaceOp("bus_create_space", "Leaders only. Creates the space with its all topic and joins the caller as leader.", s.Create),
-		spaceOp("bus_join_space", "Leaders only. Joins an existing space as a leader.", s.Join),
-		spaceOp("bus_leave_space", "Participants only; the last leader cannot leave. Removes the caller's inbox entries and subscriptions; members also lose their blackboards and tokens.", s.Leave),
-		spaceOp("bus_delete_space", "Leaders only, once no other leader remains. Deletes the space and everything in it, including member tokens.", s.Delete),
+		spaceOp("bus_create_space", "Leaders only. Creates the space with its all topic and joins the caller as leader.", s, (*spaces.Service).Create),
+		spaceOp("bus_join_space", "Leaders only. Joins an existing space as a leader.", s, (*spaces.Service).Join),
+		spaceOp("bus_leave_space", "Participants only; the last leader cannot leave. Removes the caller's inbox entries and subscriptions; members also lose their blackboards and tokens.", s, (*spaces.Service).Leave),
+		spaceOp("bus_delete_space", "Leaders only, once no other leader remains. Deletes the space and everything in it, including member tokens.", s, (*spaces.Service).Delete),
 	}
 }
 
-func spaceOp(name, desc string, fn func(context.Context, auth.Principal, string) error) Tool {
-	return define(name, desc, spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
-		return done(fn(ctx, p, a.Space))
+// spaceOp binds fn to s only when the tool is called.
+func spaceOp(name, desc string, s *spaces.Service,
+	fn func(*spaces.Service, context.Context, auth.Principal, string) error) Tool {
+	return define(name, desc, okResult, spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
+		return done(fn(s, ctx, p, a.Space))
 	})
 }
 
 func memberTools(s *spaces.Service) []Tool {
 	return []Tool{
 		define("bus_invite_member", "Leaders of the space only. Adds the member agent if needed and returns a new member token valid for this space.",
+			"{name, space, token}",
 			memberReq(), memberProps(), func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
 				token, err := s.Invite(ctx, p, a.Space, a.Name)
 				if err != nil {
@@ -65,6 +71,7 @@ func memberTools(s *spaces.Service) []Tool {
 				return map[string]string{"name": a.Name, "space": a.Space, "token": token}, nil
 			}),
 		define("bus_revoke_member", "Leaders of the space only. Removes the member, its tokens, inbox entries and blackboards.",
+			okResult,
 			memberReq(), memberProps(), func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
 				return done(s.Revoke(ctx, p, a.Space, a.Name))
 			}),

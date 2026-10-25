@@ -14,6 +14,7 @@ func adminTools(a *auth.Service) []Tool {
 	return []Tool{
 		define("bus_mint_leader",
 			"Admin token only. Creates the leader agent if missing and returns a new leader token for it.",
+			"{name, token}",
 			[]string{"name"}, map[string]any{"name": str(nameDesc("Leader agent"))},
 			func(ctx context.Context, p auth.Principal, x nameArgs) (any, error) {
 				token, err := a.MintLeader(ctx, p, x.Name)

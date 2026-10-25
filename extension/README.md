@@ -8,6 +8,8 @@ Connects an omp session to an [agent-message-bus](../../../apps/agent-message-bu
 
 Server behaviour (spaces, topics, blackboards, permissions) is specified in [`apps/agent-message-bus/spec/README.md`](../../../apps/agent-message-bus/spec/README.md). Agent-facing usage guidance is in [`skills/agent-message-bus/SKILL.md`](../../../skills/agent-message-bus/SKILL.md).
 
+Every tool's arguments, result shape and error codes are listed in [`apps/agent-message-bus/TOOLS.md`](../../../apps/agent-message-bus/TOOLS.md).
+
 ## Commands
 
 | Command | Effect |
