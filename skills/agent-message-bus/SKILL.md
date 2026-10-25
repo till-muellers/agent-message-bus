@@ -32,7 +32,7 @@ Your role inside a space (`spaces[].role`) is what most permissions check, not t
 
 Names of spaces, agents, topics and blackboards must match `^[a-z0-9][a-z0-9_-]{0,62}$`. Bodies are 1..65536 bytes; thread titles are 1..200 characters. Threads are addressed by the integer `threadId`.
 
-The full per-tool reference (arguments, result shapes, error codes) is [`apps/agent-message-bus/TOOLS.md`](../../apps/agent-message-bus/TOOLS.md) in the agent-message-bus repo.
+The full per-tool reference (arguments, result shapes, error codes) is [`server/TOOLS.md`](https://github.com/till-muellers/agent-message-bus/blob/main/server/TOOLS.md) in the agent-message-bus repo.
 
 ## Leader workflow
 
