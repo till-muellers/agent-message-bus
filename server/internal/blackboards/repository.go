@@ -67,7 +67,10 @@ func listBoards(ctx context.Context, q db.DBTX, spaceID int64) ([]BoardInfo, err
 		}
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating blackboards: %w", err)
+	}
+	return out, nil
 }
 
 func ownedBoards(ctx context.Context, q db.DBTX, spaceID, ownerID int64) ([]board, error) {
@@ -85,7 +88,10 @@ func ownedBoards(ctx context.Context, q db.DBTX, spaceID, ownerID int64) ([]boar
 		}
 		out = append(out, b)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating owned blackboards: %w", err)
+	}
+	return out, nil
 }
 
 func findThread(ctx context.Context, q db.DBTX, spaceID, id int64) (thread, bool, error) {
@@ -103,23 +109,19 @@ func findThread(ctx context.Context, q db.DBTX, spaceID, id int64) (thread, bool
 }
 
 func insertThread(ctx context.Context, q db.DBTX, boardID int64, title string, by int64, at string) (int64, error) {
-	return insertID(ctx, q, "thread", `INSERT INTO threads (blackboard_id, title, created_by, created_at) VALUES (?, ?, ?, ?)`,
+	id, err := db.InsertID(ctx, q, `INSERT INTO threads (blackboard_id, title, created_by, created_at) VALUES (?, ?, ?, ?)`,
 		boardID, title, by, at)
+	if err != nil {
+		return 0, fmt.Errorf("thread: %w", err)
+	}
+	return id, nil
 }
 
 func insertPost(ctx context.Context, q db.DBTX, threadID, author int64, body, at string) (int64, error) {
-	return insertID(ctx, q, "post", `INSERT INTO posts (thread_id, author_id, body, created_at) VALUES (?, ?, ?, ?)`,
+	id, err := db.InsertID(ctx, q, `INSERT INTO posts (thread_id, author_id, body, created_at) VALUES (?, ?, ?, ?)`,
 		threadID, author, body, at)
-}
-
-func insertID(ctx context.Context, q db.DBTX, what, query string, args ...any) (int64, error) {
-	res, err := q.ExecContext(ctx, query, args...)
 	if err != nil {
-		return 0, fmt.Errorf("inserting %s: %w", what, err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("reading %s id: %w", what, err)
+		return 0, fmt.Errorf("post: %w", err)
 	}
 	return id, nil
 }
@@ -147,7 +149,10 @@ func listThreads(ctx context.Context, q db.DBTX, boardID int64) ([]ThreadInfo, e
 		}
 		out = append(out, t)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating threads: %w", err)
+	}
+	return out, nil
 }
 
 func listPosts(ctx context.Context, q db.DBTX, threadID int64) ([]Post, error) {
@@ -165,7 +170,10 @@ func listPosts(ctx context.Context, q db.DBTX, threadID int64) ([]Post, error) {
 		}
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating posts: %w", err)
+	}
+	return out, nil
 }
 
 func subscribe(ctx context.Context, q db.DBTX, threadID, agentID int64) error {
@@ -197,30 +205,13 @@ func isSubscribed(ctx context.Context, q db.DBTX, threadID, agentID int64) (bool
 }
 
 func threadSubscribers(ctx context.Context, q db.DBTX, threadID, exclude int64) ([]int64, error) {
-	return ids(ctx, q, `SELECT agent_id FROM thread_subscriptions WHERE thread_id = ? AND agent_id <> ? ORDER BY agent_id`,
+	return db.QueryIDs(ctx, q, `SELECT agent_id FROM thread_subscriptions WHERE thread_id = ? AND agent_id <> ? ORDER BY agent_id`,
 		threadID, exclude)
 }
 
 func boardSubscribers(ctx context.Context, q db.DBTX, boardID, exclude int64) ([]int64, error) {
-	return ids(ctx, q, `SELECT DISTINCT s.agent_id FROM thread_subscriptions s JOIN threads t ON t.id = s.thread_id
+	return db.QueryIDs(ctx, q, `SELECT DISTINCT s.agent_id FROM thread_subscriptions s JOIN threads t ON t.id = s.thread_id
 		WHERE t.blackboard_id = ? AND s.agent_id <> ? ORDER BY s.agent_id`, boardID, exclude)
-}
-
-func ids(ctx context.Context, q db.DBTX, query string, args ...any) ([]int64, error) {
-	rows, err := q.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("listing subscribers: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var out []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scanning subscriber: %w", err)
-		}
-		out = append(out, id)
-	}
-	return out, rows.Err()
 }
 
 func deleteSpaceSubscriptions(ctx context.Context, q db.DBTX, spaceID, agentID int64) error {

@@ -5,13 +5,15 @@ import (
 	"database/sql"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 // AddPost appends a post and notifies the thread's subscribers except the author.
 func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, id int64, body string) (int64, error) {
-	if err := validBody(body); err != nil {
+	if err := domain.ValidBody(body); err != nil {
 		return 0, err
 	}
 	var postID int64
@@ -20,15 +22,15 @@ func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, i
 		if err != nil {
 			return nil, err
 		}
-		if postID, err = insertPost(ctx, tx, id, m.AgentID, body, s.stamp()); err != nil {
+		if postID, err = insertPost(ctx, tx, id, m.AgentID, body, db.Timestamp(s.now())); err != nil {
 			return nil, err
 		}
 		ids, err := threadSubscribers(ctx, tx, id, m.AgentID)
 		if err != nil {
 			return nil, err
 		}
-		tmpl := inbox.Entry{Blackboard: t.board, ThreadID: id, ThreadTitle: t.title, Body: body}
-		return notify(m, ids, inbox.ThreadPost, tmpl), nil
+		tmpl := inbox.Entry{Type: inbox.ThreadPost, Blackboard: t.board, ThreadID: id, ThreadTitle: t.title, Body: body}
+		return m.Notify(ids, tmpl), nil
 	})
 	return postID, err
 }

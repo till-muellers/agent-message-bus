@@ -9,6 +9,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
@@ -17,7 +18,7 @@ func TestBoardsLifecycle(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	boardWithThread(t, f, f.m1)
-	wantErr(t, f.svc.Create(ctx, f.m2, "alpha", "b"), apperr.Conflict, "blackboard b already exists")
+	apperrtest.WantKind(t, f.svc.Create(ctx, f.m2, "alpha", "b"), apperr.Conflict, "blackboard b already exists")
 	must(t, f.svc.Create(ctx, f.b1, "beta", "b"))
 	got, err := f.svc.List(ctx, f.lead, "alpha")
 	must(t, err)
@@ -25,7 +26,7 @@ func TestBoardsLifecycle(t *testing.T) {
 		t.Fatalf("List = %+v", got)
 	}
 	_, err = f.svc.ListThreads(ctx, f.lead, "alpha", "nope")
-	wantErr(t, err, apperr.NotFound, "blackboard nope not found")
+	apperrtest.WantKind(t, err, apperr.NotFound, "blackboard nope not found")
 }
 
 func TestCreateBadName(t *testing.T) {
@@ -53,11 +54,11 @@ func TestThreadValidation(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := f.svc.CreateThread(ctx, f.m1, "alpha", "b", tc.title, tc.body)
-			wantErr(t, err, apperr.Invalid, tc.msg)
+			apperrtest.WantKind(t, err, apperr.Invalid, tc.msg)
 		})
 	}
 	_, err := f.svc.AddPost(ctx, f.m1, "alpha", id, "")
-	wantErr(t, err, apperr.Invalid, "body must be 1..65536 bytes")
+	apperrtest.WantKind(t, err, apperr.Invalid, "body must be 1..65536 bytes")
 	_, err = f.svc.CreateThread(ctx, f.m1, "alpha", "b", strings.Repeat("é", 200), "x")
 	must(t, err)
 }
@@ -130,12 +131,12 @@ func TestRemoveThreadPermissions(t *testing.T) {
 			p := map[string]auth.Principal{"creator": f.m1, "leader": f.lead, "other": f.m2}[who]
 			err := f.svc.RemoveThread(ctx, p, "alpha", id)
 			if who == "other" {
-				wantErr(t, err, apperr.Forbidden, "only the creator or a leader may remove thread "+strconv.FormatInt(id, 10))
+				apperrtest.WantKind(t, err, apperr.Forbidden, "only the creator or a leader may remove thread "+strconv.FormatInt(id, 10))
 				return
 			}
 			must(t, err)
 			_, err = f.svc.ReadThread(ctx, f.m1, "alpha", id)
-			wantErr(t, err, apperr.NotFound, "thread "+strconv.FormatInt(id, 10)+" not found")
+			apperrtest.WantKind(t, err, apperr.NotFound, "thread "+strconv.FormatInt(id, 10)+" not found")
 			es := readInbox(t, f.ib, f.m2)
 			if len(es) != 1 || es[0].Type != inbox.ThreadRemoved || es[0].ThreadID != id || es[0].ThreadTitle != "plan" {
 				t.Fatalf("m2 inbox = %+v", es)
@@ -160,7 +161,7 @@ func TestDeleteBoardPermissions(t *testing.T) {
 			principal := map[string]auth.Principal{"owner": f.m1, "leader": f.lead, "other": f.m2}[who]
 			err := f.svc.Delete(ctx, principal, "alpha", "b")
 			if who == "other" {
-				wantErr(t, err, apperr.Forbidden, "only the owner or a leader may delete blackboard b")
+				apperrtest.WantKind(t, err, apperr.Forbidden, "only the owner or a leader may delete blackboard b")
 				return
 			}
 			must(t, err)
@@ -176,7 +177,7 @@ func TestDeleteBoardPermissions(t *testing.T) {
 			if len(es) != 1 || es[0].Type != inbox.BlackboardRemoved || es[0].Blackboard != "b" {
 				t.Fatalf("m2 inbox = %+v", es)
 			}
-			wantErr(t, f.svc.Delete(ctx, f.lead, "alpha", "b"), apperr.NotFound, "blackboard b not found")
+			apperrtest.WantKind(t, f.svc.Delete(ctx, f.lead, "alpha", "b"), apperr.NotFound, "blackboard b not found")
 		})
 	}
 }
@@ -188,12 +189,12 @@ func TestThreadFromOtherSpace(t *testing.T) {
 	id := boardWithThread(t, f, f.m1)
 	msg := "thread " + strconv.FormatInt(id, 10) + " not found"
 	_, err := f.svc.ReadThread(ctx, f.lead, "beta", id)
-	wantErr(t, err, apperr.NotFound, msg)
+	apperrtest.WantKind(t, err, apperr.NotFound, msg)
 	_, err = f.svc.AddPost(ctx, f.b1, "beta", id, "x")
-	wantErr(t, err, apperr.NotFound, msg)
-	wantErr(t, f.svc.Subscribe(ctx, f.b1, "beta", id), apperr.NotFound, msg)
-	wantErr(t, f.svc.Unsubscribe(ctx, f.b1, "beta", id), apperr.NotFound, msg)
-	wantErr(t, f.svc.RemoveThread(ctx, f.lead, "beta", id), apperr.NotFound, msg)
+	apperrtest.WantKind(t, err, apperr.NotFound, msg)
+	apperrtest.WantKind(t, f.svc.Subscribe(ctx, f.b1, "beta", id), apperr.NotFound, msg)
+	apperrtest.WantKind(t, f.svc.Unsubscribe(ctx, f.b1, "beta", id), apperr.NotFound, msg)
+	apperrtest.WantKind(t, f.svc.RemoveThread(ctx, f.lead, "beta", id), apperr.NotFound, msg)
 }
 
 func TestDeparture(t *testing.T) {
