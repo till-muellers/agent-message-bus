@@ -13,9 +13,9 @@ Conventions and working method for contributors and coding agents in this repo.
 |Path|Contents|
 |---|---|
 |`server/`|Go server. `main.go`, `cmd/tooldoc/`, `internal/`, `migrations/`, `spec/`.|
-|`extension/`|omp extension (TypeScript). `index.ts` wires `lib/*.ts`; `lib/shared/` holds helpers that are not tied to the bus.|
+|`extension/`|omp extension (TypeScript). `index.ts` wires `lib/<feature>/`; `lib/shared/` holds helpers that are not tied to the bus.|
 |`skills/agent-message-bus/`|Agent-facing skill.|
-|`tests/`|Per-module `*.test.ts` (bun) with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_build.py` (pytest).|
+|`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_build.py` (pytest).|
 |`scripts/build.py`|Release build: cross-compiles the server and writes `SHA256SUMS`.|
 |`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only by PR.|
 |`.omp/`|This guide and the hard rules (`RULES.md`).|
