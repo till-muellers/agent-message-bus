@@ -97,6 +97,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Every schema change is a new numbered migration in `server/migrations/`. Never edit an applied one.
 - `0001_schema.up.sql` is the one-time alpha reset: the whole schema, irreversible, no `.down.sql`. Every later migration must be reversible (`.down.sql`).
 - A migration without `.down.sql` says so in its header line: `-- … Not reversible: …`.
+- Later migrations get their number at merge time: the next free number; rename on rebase if another slice merged one first.
 
 ### TypeScript
 - `strict` mode, no `any`; use `unknown` and narrow. No untyped function signatures.

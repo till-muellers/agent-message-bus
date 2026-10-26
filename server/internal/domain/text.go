@@ -29,8 +29,13 @@ func ValidName(field, v string) error {
 
 // ValidBody requires 1..MaxBodyBytes bytes.
 func ValidBody(body string) error {
-	if len(body) < 1 || len(body) > MaxBodyBytes {
-		return apperr.New(apperr.Invalid, "body must be 1..%d bytes", MaxBodyBytes)
+	return ValidText("body", body)
+}
+
+// ValidText requires 1..MaxBodyBytes bytes and names field in the Invalid error.
+func ValidText(field, v string) error {
+	if len(v) < 1 || len(v) > MaxBodyBytes {
+		return apperr.New(apperr.Invalid, "%s must be 1..%d bytes", field, MaxBodyBytes)
 	}
 	return nil
 }

@@ -53,7 +53,7 @@ func NewService(conn *sql.DB, a admission, now func() time.Time) *Service {
 func (s *Service) Create(ctx context.Context, p auth.Principal, space, name string, task *string) (Invite, error) {
 	r := row{name: name}
 	if task != nil {
-		if err := domain.ValidBody(*task); err != nil {
+		if err := domain.ValidText("task", *task); err != nil {
 			return Invite{}, err
 		}
 		r.task = sql.NullString{String: *task, Valid: true}

@@ -42,8 +42,8 @@ func TestCreateErrors(t *testing.T) {
 	}{
 		{name: "leader name", space: "demo", invitee: "boss", kind: apperr.Conflict, msg: "agent boss is a leader agent"},
 		{name: "unknown space", space: "nope", invitee: "worker", kind: apperr.NotFound},
-		{name: "empty task", space: "demo", invitee: "worker", task: &empty, kind: apperr.Invalid, msg: "body must be 1..65536 bytes"},
-		{name: "long task", space: "demo", invitee: "worker", task: &long, kind: apperr.Invalid, msg: "body must be 1..65536 bytes"},
+		{name: "empty task", space: "demo", invitee: "worker", task: &empty, kind: apperr.Invalid, msg: "task must be 1..65536 bytes"},
+		{name: "long task", space: "demo", invitee: "worker", task: &long, kind: apperr.Invalid, msg: "task must be 1..65536 bytes"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

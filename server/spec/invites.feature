@@ -27,13 +27,20 @@ Feature: Invite codes
       Then the call fails with conflict "agent boss is a leader agent"
       And no invite code is stored
 
-    Scenario: A leader attaches a first prompt to an invite code
-      When leader "lead" invites member "worker" to space "demo" with task "fix the bug"
-      Then the call returns name "worker", space "demo" and an invite code
+    Scenario: Deleting the space removes its invite codes
+      Given leader "lead" created an invite code for member "worker" in space "demo"
+      When leader "lead" deletes space "demo"
+      Then no invite code is stored
 
-    Scenario Outline: The task follows the message body rule (<case>)
+  Rule: An invalid invite task names the task field (bus_invite_member)
+
+    # The message body and thread title limits keep naming "body" and "title"
+    # (direct-messages.feature, topics.feature, blackboards.feature); only the
+    # invite task names itself.
+
+    Scenario Outline: The task follows the body limit but names itself (<case>)
       When leader "lead" invites member "worker" to space "demo" with task <task>
-      Then the call fails with invalid "body must be 1..65536 bytes"
+      Then the call fails with invalid "task must be 1..65536 bytes"
       And no invite code is stored
 
       Examples:
@@ -41,10 +48,13 @@ Feature: Invite codes
         | empty    | ""             |
         | too long | of 65537 bytes |
 
-    Scenario: Deleting the space removes its invite codes
-      Given leader "lead" created an invite code for member "worker" in space "demo"
-      When leader "lead" deletes space "demo"
-      Then no invite code is stored
+    Scenario: A task at the limit is accepted
+      When leader "lead" invites member "worker" to space "demo" with task "fix the bug"
+      Then the call returns name "worker", space "demo" and an invite code
+
+    Scenario: An invite without a task is accepted
+      When leader "lead" invites member "worker" to space "demo"
+      Then the call returns name "worker", space "demo" and an invite code
 
   Rule: An invite code is redeemed once for a member token (POST /v1/invites/accept)
 
