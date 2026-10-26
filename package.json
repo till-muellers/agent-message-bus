@@ -1,6 +1,6 @@
 {
 	"name": "@till-muellers/omp-agent-message-bus",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "omp plugin for agent-message-bus: bus_* tools, /bus command and inbox streaming for multi-agent coordination",
 	"type": "module",
 	"license": "MIT",
