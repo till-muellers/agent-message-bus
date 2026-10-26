@@ -45,7 +45,7 @@ func TestDecode(t *testing.T) {
 }
 
 func TestDefineRequiresFields(t *testing.T) {
-	tl := define("t", "d", "r", []string{"space", "n"}, map[string]any{"space": str("s"), "n": integer("n")},
+	tl := define("t", "a", "d", "r", []string{"space", "n"}, map[string]any{"space": str("s"), "n": integer("n")},
 		func(_ context.Context, _ auth.Principal, a sample) (any, error) { return a, nil })
 	cases := []struct {
 		name, in, msg string

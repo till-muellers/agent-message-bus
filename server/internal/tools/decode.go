@@ -41,13 +41,15 @@ func requirePresent(args json.RawMessage, required []string) error {
 	return nil
 }
 
-// define builds a Tool whose arguments decode into A after checking required fields;
-// result sketches the success result shape for the tool ledger.
-func define[A any](name, desc, result string, required []string, props map[string]any,
+// define builds a Tool whose arguments decode into A after checking required fields.
+// desc states the purpose first, then the pitfalls; the Description served to agents is desc
+// followed by the access sentence. result sketches the success result shape for the tool ledger.
+func define[A any](name, access, desc, result string, required []string, props map[string]any,
 	call func(ctx context.Context, p auth.Principal, a A) (any, error)) Tool {
 	return Tool{
 		Name:        name,
-		Description: desc,
+		Description: desc + " " + access,
+		Access:      access,
 		Result:      result,
 		Schema:      object(required, props),
 		Call: func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error) {

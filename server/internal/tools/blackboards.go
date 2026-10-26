@@ -36,19 +36,23 @@ func blackboardTools(b *blackboards.Service) []Tool {
 
 func boardTools(b *blackboards.Service) []Tool {
 	return []Tool{
-		define("bus_list_blackboards", "Participants only. Lists the space's blackboards with owner and thread count; no side effects.",
+		define("bus_list_blackboards", accessParticipantsRead, "Lists the space's blackboards with owner and thread count.",
 			"[{name, owner, threads}]",
 			spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 				return list(b.List(ctx, p, a.Space))
 			}),
-		boardOp("bus_create_blackboard", "Participants only. Creates a blackboard owned by the caller.", b, (*blackboards.Service).Create),
-		boardOp("bus_delete_blackboard", "Owner or leaders only. Deletes the blackboard with its threads and notifies thread subscribers.", b, (*blackboards.Service).Delete),
-		define("bus_list_threads", "Participants only. Lists the blackboard's threads, most recently active first; no side effects.",
+		boardOp("bus_create_blackboard", accessParticipants,
+			"Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked.",
+			b, (*blackboards.Service).Create),
+		boardOp("bus_delete_blackboard", "The board's owner or a leader of the space.",
+			"Deletes the blackboard with its threads and notifies thread subscribers.", b, (*blackboards.Service).Delete),
+		define("bus_list_threads", accessParticipantsRead, "Lists the blackboard's threads, most recently active first.",
 			"[{id, title, createdBy, posts, lastPostAt}]",
 			boardReq(), boardProps(), func(ctx context.Context, p auth.Principal, a boardArgs) (any, error) {
 				return list(b.ListThreads(ctx, p, a.Space, a.Blackboard))
 			}),
-		define("bus_create_thread", "Participants only. Creates a thread with its first post and subscribes the caller.",
+		define("bus_create_thread", accessParticipants,
+			"Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others.",
 			"{threadId}", []string{"space", "blackboard", "title", "body"},
 			map[string]any{"space": spaceProp(), "blackboard": boardProp(), "title": titleProp(), "body": bodyProp()},
 			func(ctx context.Context, p auth.Principal, a createThreadArgs) (any, error) {
@@ -62,24 +66,28 @@ func boardTools(b *blackboards.Service) []Tool {
 }
 
 // boardOp binds fn to b only when the tool is called.
-func boardOp(name, desc string, b *blackboards.Service,
+func boardOp(name, access, desc string, b *blackboards.Service,
 	fn func(*blackboards.Service, context.Context, auth.Principal, string, string) error) Tool {
-	return define(name, desc, okResult, boardReq(), boardProps(), func(ctx context.Context, p auth.Principal, a boardArgs) (any, error) {
+	return define(name, access, desc, okResult, boardReq(), boardProps(), func(ctx context.Context, p auth.Principal, a boardArgs) (any, error) {
 		return done(fn(b, ctx, p, a.Space, a.Blackboard))
 	})
 }
 
 func threadTools(b *blackboards.Service) []Tool {
 	return []Tool{
-		define("bus_read_thread", "Participants only. Returns the thread with all posts; no side effects.",
+		define("bus_read_thread", accessParticipantsRead, "Returns the thread with all posts.",
 			"{id, blackboard, title, createdBy, subscribed, posts: [{id, author, body, createdAt}]}",
 			threadReq(), threadProps(), func(ctx context.Context, p auth.Principal, a threadArgs) (any, error) {
 				return b.ReadThread(ctx, p, a.Space, a.ThreadID)
 			}),
-		threadOp("bus_remove_thread", "Thread creator or leaders only. Deletes the thread and notifies its subscribers.", b, (*blackboards.Service).RemoveThread),
-		threadOp("bus_subscribe_thread", "Participants only. Subscribes the caller to new posts in the thread; idempotent.", b, (*blackboards.Service).Subscribe),
-		threadOp("bus_unsubscribe_thread", "Participants only. Stops post notifications for the thread; idempotent.", b, (*blackboards.Service).Unsubscribe),
-		define("bus_add_post", "Participants only. Appends a post and notifies the thread's subscribers except the author.",
+		threadOp("bus_remove_thread", "The thread's creator or a leader of the space.",
+			"Deletes the thread and notifies its subscribers.", b, (*blackboards.Service).RemoveThread),
+		threadOp("bus_subscribe_thread", accessParticipants,
+			"Subscribes the caller to new posts in the thread; idempotent.", b, (*blackboards.Service).Subscribe),
+		threadOp("bus_unsubscribe_thread", accessParticipants,
+			"Stops post notifications for the thread; idempotent.", b, (*blackboards.Service).Unsubscribe),
+		define("bus_add_post", accessParticipants,
+			"Appends a post and notifies the thread's subscribers except the author.",
 			"{postId}", []string{"space", "threadId", "body"},
 			map[string]any{"space": spaceProp(), "threadId": threadProp(), "body": bodyProp()},
 			func(ctx context.Context, p auth.Principal, a postArgs) (any, error) {
@@ -93,9 +101,9 @@ func threadTools(b *blackboards.Service) []Tool {
 }
 
 // threadOp binds fn to b only when the tool is called.
-func threadOp(name, desc string, b *blackboards.Service,
+func threadOp(name, access, desc string, b *blackboards.Service,
 	fn func(*blackboards.Service, context.Context, auth.Principal, string, int64) error) Tool {
-	return define(name, desc, okResult, threadReq(), threadProps(), func(ctx context.Context, p auth.Principal, a threadArgs) (any, error) {
+	return define(name, access, desc, okResult, threadReq(), threadProps(), func(ctx context.Context, p auth.Principal, a threadArgs) (any, error) {
 		return done(fn(b, ctx, p, a.Space, a.ThreadID))
 	})
 }

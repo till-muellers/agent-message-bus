@@ -17,11 +17,13 @@ type inviteArgs struct {
 }
 
 func inviteTools(inv *invites.Service) []Tool {
-	desc := fmt.Sprintf("Leaders of the space only. Returns a single-use invite code for the member agent, valid for %d minutes; "+
-		"redeeming it (POST /v1/invites/accept with the code as bearer, or /bus accept <url> <code> in omp) joins the space as that member "+
-		"and returns task, if given. bus_revoke_member cancels pending codes.", int(invites.TTL/time.Minute))
+	desc := fmt.Sprintf("Returns an invite code that lets member agent <name> join the space, with an optional task "+
+		"returned once on accept. Pitfalls: the code is single-use and expires after %d minutes; the user redeems it with "+
+		"/bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; "+
+		"inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes.",
+		int(invites.TTL/time.Minute))
 	return []Tool{
-		define("bus_invite_member", desc, "{name, space, code, expires_at}",
+		define("bus_invite_member", accessSpaceLeaders, desc, "{name, space, code, expires_at}",
 			memberReq(), inviteProps(), func(ctx context.Context, p auth.Principal, a inviteArgs) (any, error) {
 				i, err := inv.Create(ctx, p, a.Space, a.Name, a.Task)
 				if err != nil {
