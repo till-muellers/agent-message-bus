@@ -73,12 +73,14 @@ func subscriberIDs(ctx context.Context, q db.DBTX, topicID, except int64) ([]int
 	return ids, nil
 }
 
-func listTopics(ctx context.Context, q db.DBTX, spaceID, agentID int64) ([]TopicInfo, error) {
+// listTopics lists the open topics of spaceID with agentID's subscription state; the all
+// topic counts as subscribed only for a participant (joined).
+func listTopics(ctx context.Context, q db.DBTX, spaceID, agentID int64, joined bool) ([]TopicInfo, error) {
 	rows, err := q.QueryContext(ctx, `SELECT t.name, a.name,
-		t.name = 'all' OR EXISTS (SELECT 1 FROM topic_subscriptions s WHERE s.topic_id = t.id AND s.agent_id = ?)
+		(t.name = 'all' AND ?) OR EXISTS (SELECT 1 FROM topic_subscriptions s WHERE s.topic_id = t.id AND s.agent_id = ?)
 		FROM topics t JOIN agents a ON a.id = t.created_by
 		WHERE t.space_id = ? AND t.closed_at IS NULL
-		ORDER BY t.name != 'all', t.name`, agentID, spaceID)
+		ORDER BY t.name != 'all', t.name`, joined, agentID, spaceID)
 	if err != nil {
 		return nil, fmt.Errorf("listing topics: %w", err)
 	}

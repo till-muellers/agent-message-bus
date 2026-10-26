@@ -66,14 +66,26 @@ func (s *Service) runRevocationHooks(ctx context.Context, tx *sql.Tx, spaceID in
 	return cancelled, nil
 }
 
-// revocableMember looks up member name in the space of leader m; leaders cannot be revoked.
+// revocableMember looks up participant name in the space of m. Admins may also revoke
+// leaders; nobody revokes an admin with it.
 func revocableMember(ctx context.Context, tx *sql.Tx, m Membership, name string) (Membership, bool, error) {
 	id, role, found, err := participantByName(ctx, tx, m.SpaceID, name)
 	if err != nil || !found {
 		return Membership{}, false, err
 	}
-	if role != RoleMember {
-		return Membership{}, false, apperr.New(apperr.Conflict, "%s is a leader of space %s; leaders cannot be revoked", name, m.SpaceName)
+	if err := checkRevocable(m, name, role); err != nil {
+		return Membership{}, false, err
 	}
 	return Membership{SpaceID: m.SpaceID, SpaceName: m.SpaceName, AgentID: id, AgentName: name, Role: role}, true, nil
+}
+
+// checkRevocable refuses admin targets, and leader targets unless the revoker m is an admin.
+func checkRevocable(m Membership, name string, role Role) error {
+	switch {
+	case role == RoleAdmin:
+		return apperr.New(apperr.Conflict, "%s is an admin of space %s; admins cannot be revoked from a space", name, m.SpaceName)
+	case role == RoleLeader && !m.Admin:
+		return apperr.New(apperr.Conflict, "%s is a leader of space %s; leaders cannot be revoked", name, m.SpaceName)
+	}
+	return nil
 }

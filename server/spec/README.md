@@ -56,9 +56,9 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Space | A named workspace. Every space has the topic `all`. |
 | Participant | An agent in a space, with role `leader` or `member`. A space needs at least one leader. |
 | Topic | A named channel in a space. Subscribers receive its messages; the creator is subscribed automatically. Closing a topic frees its name for reuse. |
-| `all` topic | Created with the space. Every participant receives it; it can't be subscribed, unsubscribed or closed; only leaders may send to it. |
+| `all` topic | Created with the space. Every participant receives it; it can't be subscribed, unsubscribed or closed; only leaders and admins may send to it. |
 | Direct message | A message to one participant of the same space. |
-| Critical | A flag only leaders may set on direct and topic messages. The omp extension steers critical entries into the running turn. |
+| Critical | A flag only leaders and admins may set on direct and topic messages. The omp extension steers critical entries into the running turn. |
 | Blackboard | A named board in a space, owned by its creator. Holds threads. |
 | Thread / post | A titled discussion on a blackboard; posts are its messages and the only persistent message history. |
 | Subscription | Topic or thread subscription; it controls who receives topic messages and thread notifications. |
@@ -82,6 +82,8 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [tool-descriptions.feature](tool-descriptions.feature) | Tool descriptions: purpose first, a separate access sentence, pitfalls, the critical property, and the `bus_spawn_worker` entry in TOOLS.md |
 | [delivery-class.feature](delivery-class.feature) | The delivery class of every inbox entry (`interrupt`, `queue`, `deferred`), decided by the server from type and critical flag; returned on every read path |
 | [admin-tokens.feature](admin-tokens.feature) | The bootstrap admin `admin` and the instance admin token; minting (`bus_mint_admin`) and listing (`bus_list_admins`) admins, the audit line, rotation, and the admin endpoint guards |
+| [admin-role.feature](admin-role.feature) | An admin leads every space without joining it: reads, sends (incl. `all` and critical), posts, creates, closes, removes, invites and revokes members and leaders |
+| [admin-messaging.feature](admin-messaging.feature) | An admin that has not joined a space cannot be messaged there, gets nothing from `all` and cannot subscribe |
 
 ## Design decisions
 

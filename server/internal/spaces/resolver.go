@@ -16,7 +16,7 @@ type Resolver struct{ db db.DBTX }
 // NewResolver returns a Resolver reading from db.
 func NewResolver(conn *sql.DB) *Resolver { return &Resolver{db: conn} }
 
-// requireAgent rejects the admin principal, which never acts inside spaces.
+// requireAgent rejects the admin principal where admins have no rights: listing and deleting spaces.
 func requireAgent(p auth.Principal) error {
 	if p.Kind == auth.Admin {
 		return apperr.New(apperr.Forbidden, "admin token cannot act in spaces; mint a leader with bus_mint_leader")
@@ -49,11 +49,9 @@ func (r *Resolver) Resolve(ctx context.Context, p auth.Principal, space string) 
 	return r.ResolveTx(ctx, r.db, p, space)
 }
 
-// ResolveTx is Resolve inside the caller's transaction q.
+// ResolveTx is Resolve inside the caller's transaction q. An admin resolves in every
+// space with Admin set; its Role is its participant role, or "" when it has not joined.
 func (r *Resolver) ResolveTx(ctx context.Context, q db.DBTX, p auth.Principal, space string) (Membership, error) {
-	if err := requireAgent(p); err != nil {
-		return Membership{}, err
-	}
 	id, found, err := spaceIDByName(ctx, q, space)
 	if err != nil {
 		return Membership{}, err
@@ -68,8 +66,10 @@ func (r *Resolver) ResolveTx(ctx context.Context, q db.DBTX, p auth.Principal, s
 	if err != nil {
 		return Membership{}, fmt.Errorf("resolving %s: %w", space, err)
 	}
-	if !found {
+	m := Membership{SpaceID: id, SpaceName: space, AgentID: p.AgentID, AgentName: p.AgentName, Role: role,
+		Admin: p.Kind == auth.Admin}
+	if !found && !m.Admin {
 		return Membership{}, apperr.New(apperr.Forbidden, "not a participant of space %s", space)
 	}
-	return Membership{SpaceID: id, SpaceName: space, AgentID: p.AgentID, AgentName: p.AgentName, Role: role}, nil
+	return m, nil
 }

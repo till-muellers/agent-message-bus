@@ -89,9 +89,9 @@ Feature: Direct messages
     When member "ann" sends a direct message with a body of 0 bytes to "bob" in space "nope"
     Then the call fails with not_found "space nope not found"
 
-  Scenario: The admin cannot send direct messages
+  Scenario: The admin sends direct messages without joining
     When the admin sends direct message "x" to "bob" in space "demo"
-    Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
+    Then bob receives a "direct_message" inbox entry from "admin" with body "x"
 
   Scenario: A leader who is not a participant cannot send direct messages
     Given the admin minted leader "lead2"

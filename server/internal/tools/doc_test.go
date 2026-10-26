@@ -52,7 +52,7 @@ func TestToolSectionAndIndexShareAnchor(t *testing.T) {
 	doc := RenderMarkdown(New(Deps{}))
 	for _, want := range []string{
 		"\n### bus_add_post\n",
-		"| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants only. |",
+		"| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants and admins. |",
 		"\n## Blackboards\n",
 		`-d '{"body":"<body>","space":"<space>","threadId":1}'`,
 		"**Result:** `{postId}`",

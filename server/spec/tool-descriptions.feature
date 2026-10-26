@@ -23,7 +23,7 @@ Feature: Tool descriptions guide the agent on their own
 
     Scenario: The extension's spawn tool follows the same shape
       Then the description of bus_spawn_worker starts with "Starts a worker agent"
-      And it states "Leaders of the space."
+      And it states "Leaders of the space and admins."
 
   Rule: Descriptions name the pitfalls an agent cannot see from the schema
 
@@ -46,21 +46,22 @@ Feature: Tool descriptions guide the agent on their own
         | bus_subscribe_topic   | the all topic cannot be subscribed or unsubscribed, because everyone receives it          |
         | bus_close_topic       | the all topic cannot be closed, and a closed topic's name can be reused                   |
         | bus_send_direct       | an agent cannot send a direct message to itself                                           |
+        | bus_revoke_member     | an admin may also revoke leaders, the last leader included                                |
         | bus_create_thread     | the creator is subscribed and gets later posts by others                                  |
 
     Scenario: The critical flag says what happens on each kind of client
-      Then the "critical" property of bus_send_direct and bus_send_topic reads "Leaders only. omp recipients are interrupted (steer); other clients see critical: true."
+      Then the "critical" property of bus_send_direct and bus_send_topic reads "Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true."
 
-  Rule: Every tool states its access in one sentence
+  Rule: Access lines name admins where they have leader rights
 
-    Scenario Outline: <tool> states its access
+    Scenario Outline: <tool> states its access for admins
       Then the access of <tool> reads "<access>"
 
       Examples:
-        | tool              | access                |
-        | bus_invite_member | Leaders of the space. |
-        | bus_inbox_read    | Leaders and members.  |
-        | bus_spawn_worker  | Leaders of the space. |
+        | tool              | access                           |
+        | bus_invite_member | Leaders of the space and admins. |
+        | bus_inbox_read    | Leaders and members.             |
+        | bus_spawn_worker  | Leaders of the space and admins. |
 
   Rule: The extension's own tool is documented like the server's
 

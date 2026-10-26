@@ -160,6 +160,9 @@ func (s *Service) Join(ctx context.Context, p auth.Principal, name string) error
 
 // Delete removes a space; only its sole remaining leader may do so.
 func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) error {
+	if err := requireAgent(p); err != nil {
+		return err
+	}
 	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.r.ResolveTx(ctx, tx, p, name)
 		if err != nil {
@@ -179,12 +182,16 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) err
 	})
 }
 
-// Leave removes p from space; the last leader cannot leave.
+// Leave removes p from space; the last leader cannot leave, and an admin that has not
+// joined has nothing to leave.
 func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) error {
 	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.r.ResolveTx(ctx, tx, p, space)
 		if err != nil {
 			return nil, err
+		}
+		if !m.Joined() {
+			return nil, apperr.New(apperr.Forbidden, "not a participant of space %s", space)
 		}
 		if m.Role == RoleLeader {
 			n, err := countOtherLeaders(ctx, tx, m.SpaceID, m.AgentID)

@@ -28,30 +28,30 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 | [bus_mint_leader](#bus_mint_leader) | [Admin](#admin) | Admins only. | Creates the leader agent if missing and returns a new leader token for it. |
 | [bus_create_space](#bus_create_space) | [Spaces & membership](#spaces--membership) | Leaders only. | Creates the space with its all topic and joins the caller as leader. |
 | [bus_delete_space](#bus_delete_space) | [Spaces & membership](#spaces--membership) | Leaders of the space, once no other leader remains. | Deletes the space and everything in it, including member tokens. |
-| [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space. | Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. |
+| [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. |
 | [bus_join_space](#bus_join_space) | [Spaces & membership](#spaces--membership) | Leaders only. | Joins an existing space as a leader; a space can have several leaders. |
-| [bus_leave_space](#bus_leave_space) | [Spaces & membership](#spaces--membership) | Participants only. | Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. |
-| [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants only; no side effects. | Lists the space's leaders and members. |
+| [bus_leave_space](#bus_leave_space) | [Spaces & membership](#spaces--membership) | Participants. | Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. |
+| [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Lists the space's leaders and members. |
 | [bus_list_spaces](#bus_list_spaces) | [Spaces & membership](#spaces--membership) | Leaders see all spaces, members only their own; no side effects. | Lists spaces with their leaders, member count and whether the caller joined. |
-| [bus_revoke_member](#bus_revoke_member) | [Spaces & membership](#spaces--membership) | Leaders of the space. | Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Leaders cannot be revoked. |
+| [bus_revoke_member](#bus_revoke_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included. |
 | [bus_whoami](#bus_whoami) | [Spaces & membership](#spaces--membership) | Any token; no side effects. | Returns the caller's kind, name and the spaces it participates in. |
-| [bus_close_topic](#bus_close_topic) | [Direct messages & topics](#direct-messages--topics) | The topic's creator or a leader of the space. | Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the all topic cannot be closed, and a closed topic's name can be reused. |
-| [bus_create_topic](#bus_create_topic) | [Direct messages & topics](#direct-messages--topics) | Participants only. | Opens a new topic and subscribes the caller. Pitfall: nobody else is notified, so subscribers must be told the topic name. |
-| [bus_list_topics](#bus_list_topics) | [Direct messages & topics](#direct-messages--topics) | Participants only; no side effects. | Lists open topics with the caller's subscription state. |
-| [bus_send_direct](#bus_send_direct) | [Direct messages & topics](#direct-messages--topics) | Participants only; critical requires a leader. | Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, and an agent cannot send a direct message to itself. |
-| [bus_send_topic](#bus_send_topic) | [Direct messages & topics](#direct-messages--topics) | Participants only; only leaders may send to all or send critical. | Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic. |
-| [bus_subscribe_topic](#bus_subscribe_topic) | [Direct messages & topics](#direct-messages--topics) | Participants only. | Subscribes the caller to the topic; idempotent. Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it. |
-| [bus_unsubscribe_topic](#bus_unsubscribe_topic) | [Direct messages & topics](#direct-messages--topics) | Participants only. | Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed. |
-| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants only. | Appends a post and notifies the thread's subscribers except the author. |
-| [bus_create_blackboard](#bus_create_blackboard) | [Blackboards](#blackboards) | Participants only. | Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked. |
-| [bus_create_thread](#bus_create_thread) | [Blackboards](#blackboards) | Participants only. | Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others. |
-| [bus_delete_blackboard](#bus_delete_blackboard) | [Blackboards](#blackboards) | The board's owner or a leader of the space. | Deletes the blackboard with its threads and notifies thread subscribers. |
-| [bus_list_blackboards](#bus_list_blackboards) | [Blackboards](#blackboards) | Participants only; no side effects. | Lists the space's blackboards with owner and thread count. |
-| [bus_list_threads](#bus_list_threads) | [Blackboards](#blackboards) | Participants only; no side effects. | Lists the blackboard's threads, most recently active first. |
-| [bus_read_thread](#bus_read_thread) | [Blackboards](#blackboards) | Participants only; no side effects. | Returns the thread with all posts. |
-| [bus_remove_thread](#bus_remove_thread) | [Blackboards](#blackboards) | The thread's creator or a leader of the space. | Deletes the thread and notifies its subscribers. |
-| [bus_subscribe_thread](#bus_subscribe_thread) | [Blackboards](#blackboards) | Participants only. | Subscribes the caller to new posts in the thread; idempotent. |
-| [bus_unsubscribe_thread](#bus_unsubscribe_thread) | [Blackboards](#blackboards) | Participants only. | Stops post notifications for the thread; idempotent. |
+| [bus_close_topic](#bus_close_topic) | [Direct messages & topics](#direct-messages--topics) | The topic's creator, leaders of the space and admins. | Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the all topic cannot be closed, and a closed topic's name can be reused. |
+| [bus_create_topic](#bus_create_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins. | Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. Pitfall: nobody else is notified, so subscribers must be told the topic name. |
+| [bus_list_topics](#bus_list_topics) | [Direct messages & topics](#direct-messages--topics) | Participants and admins; no side effects. | Lists open topics with the caller's subscription state. |
+| [bus_send_direct](#bus_send_direct) | [Direct messages & topics](#direct-messages--topics) | Participants and admins; critical requires a leader or an admin. | Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, and an agent cannot send a direct message to itself. |
+| [bus_send_topic](#bus_send_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins; only leaders and admins may send to all or send critical. | Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic. |
+| [bus_subscribe_topic](#bus_subscribe_topic) | [Direct messages & topics](#direct-messages--topics) | Participants (admins join first). | Subscribes the caller to the topic; idempotent. Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it. |
+| [bus_unsubscribe_topic](#bus_unsubscribe_topic) | [Direct messages & topics](#direct-messages--topics) | Participants (admins join first). | Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed. |
+| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants and admins. | Appends a post and notifies the thread's subscribers except the author. |
+| [bus_create_blackboard](#bus_create_blackboard) | [Blackboards](#blackboards) | Participants and admins. | Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked. |
+| [bus_create_thread](#bus_create_thread) | [Blackboards](#blackboards) | Participants and admins. | Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others, unless it is an admin that has not joined the space. |
+| [bus_delete_blackboard](#bus_delete_blackboard) | [Blackboards](#blackboards) | The board's owner, leaders of the space and admins. | Deletes the blackboard with its threads and notifies thread subscribers. |
+| [bus_list_blackboards](#bus_list_blackboards) | [Blackboards](#blackboards) | Participants and admins; no side effects. | Lists the space's blackboards with owner and thread count. |
+| [bus_list_threads](#bus_list_threads) | [Blackboards](#blackboards) | Participants and admins; no side effects. | Lists the blackboard's threads, most recently active first. |
+| [bus_read_thread](#bus_read_thread) | [Blackboards](#blackboards) | Participants and admins; no side effects. | Returns the thread with all posts. |
+| [bus_remove_thread](#bus_remove_thread) | [Blackboards](#blackboards) | The thread's creator, leaders of the space and admins. | Deletes the thread and notifies its subscribers. |
+| [bus_subscribe_thread](#bus_subscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Subscribes the caller to new posts in the thread; idempotent. |
+| [bus_unsubscribe_thread](#bus_unsubscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Stops post notifications for the thread; idempotent. |
 | [bus_inbox_ack](#bus_inbox_ack) | [Inbox](#inbox) | Leaders and members. | Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled. |
 | [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders and members. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks and reading does not acknowledge. |
 
@@ -129,7 +129,7 @@ curl -X POST $BUS/v1/tools/bus_delete_space -H "Authorization: Bearer $TOKEN" -d
 
 ### bus_invite_member
 
-Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. Leaders of the space.
+Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. Leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -159,7 +159,7 @@ curl -X POST $BUS/v1/tools/bus_join_space -H "Authorization: Bearer $TOKEN" -d '
 
 ### bus_leave_space
 
-Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. Participants only.
+Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. Participants.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -173,7 +173,7 @@ curl -X POST $BUS/v1/tools/bus_leave_space -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_list_participants
 
-Lists the space's leaders and members. Participants only; no side effects.
+Lists the space's leaders and members. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -199,7 +199,7 @@ curl -X POST $BUS/v1/tools/bus_list_spaces -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_revoke_member
 
-Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Leaders cannot be revoked. Leaders of the space.
+Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included. Leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -228,7 +228,7 @@ curl -X POST $BUS/v1/tools/bus_whoami -H "Authorization: Bearer $TOKEN" -d '{}'
 
 ### bus_close_topic
 
-Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the all topic cannot be closed, and a closed topic's name can be reused. The topic's creator or a leader of the space.
+Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the all topic cannot be closed, and a closed topic's name can be reused. The topic's creator, leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -243,7 +243,7 @@ curl -X POST $BUS/v1/tools/bus_close_topic -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_create_topic
 
-Opens a new topic and subscribes the caller. Pitfall: nobody else is notified, so subscribers must be told the topic name. Participants only.
+Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. Pitfall: nobody else is notified, so subscribers must be told the topic name. Participants and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -258,7 +258,7 @@ curl -X POST $BUS/v1/tools/bus_create_topic -H "Authorization: Bearer $TOKEN" -d
 
 ### bus_list_topics
 
-Lists open topics with the caller's subscription state. Participants only; no side effects.
+Lists open topics with the caller's subscription state. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -272,14 +272,14 @@ curl -X POST $BUS/v1/tools/bus_list_topics -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_send_direct
 
-Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, and an agent cannot send a direct message to itself. Participants only; critical requires a leader.
+Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, and an agent cannot send a direct message to itself. Participants and admins; critical requires a leader or an admin.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `body` | string | yes | Message body, 1..65536 bytes. |
 | `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `to` | string | yes | Recipient participant name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `critical` | boolean | no | Leaders only. omp recipients are interrupted (steer); other clients see critical: true. |
+| `critical` | boolean | no | Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true. |
 
 **Result:** `{ok: true}`
 
@@ -289,14 +289,14 @@ curl -X POST $BUS/v1/tools/bus_send_direct -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_send_topic
 
-Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic. Participants only; only leaders may send to all or send critical.
+Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic. Participants and admins; only leaders and admins may send to all or send critical.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `body` | string | yes | Message body, 1..65536 bytes. |
 | `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `topic` | string | yes | Topic name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `critical` | boolean | no | Leaders only. omp recipients are interrupted (steer); other clients see critical: true. |
+| `critical` | boolean | no | Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true. |
 
 **Result:** `{ok: true}`
 
@@ -306,7 +306,7 @@ curl -X POST $BUS/v1/tools/bus_send_topic -H "Authorization: Bearer $TOKEN" -d '
 
 ### bus_subscribe_topic
 
-Subscribes the caller to the topic; idempotent. Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it. Participants only.
+Subscribes the caller to the topic; idempotent. Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it. Participants (admins join first).
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -321,7 +321,7 @@ curl -X POST $BUS/v1/tools/bus_subscribe_topic -H "Authorization: Bearer $TOKEN"
 
 ### bus_unsubscribe_topic
 
-Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed. Participants only.
+Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed. Participants (admins join first).
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -338,7 +338,7 @@ curl -X POST $BUS/v1/tools/bus_unsubscribe_topic -H "Authorization: Bearer $TOKE
 
 ### bus_add_post
 
-Appends a post and notifies the thread's subscribers except the author. Participants only.
+Appends a post and notifies the thread's subscribers except the author. Participants and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -354,7 +354,7 @@ curl -X POST $BUS/v1/tools/bus_add_post -H "Authorization: Bearer $TOKEN" -d '{"
 
 ### bus_create_blackboard
 
-Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked. Participants only.
+Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked. Participants and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -369,7 +369,7 @@ curl -X POST $BUS/v1/tools/bus_create_blackboard -H "Authorization: Bearer $TOKE
 
 ### bus_create_thread
 
-Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others. Participants only.
+Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others, unless it is an admin that has not joined the space. Participants and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -386,7 +386,7 @@ curl -X POST $BUS/v1/tools/bus_create_thread -H "Authorization: Bearer $TOKEN" -
 
 ### bus_delete_blackboard
 
-Deletes the blackboard with its threads and notifies thread subscribers. The board's owner or a leader of the space.
+Deletes the blackboard with its threads and notifies thread subscribers. The board's owner, leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -401,7 +401,7 @@ curl -X POST $BUS/v1/tools/bus_delete_blackboard -H "Authorization: Bearer $TOKE
 
 ### bus_list_blackboards
 
-Lists the space's blackboards with owner and thread count. Participants only; no side effects.
+Lists the space's blackboards with owner and thread count. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -415,7 +415,7 @@ curl -X POST $BUS/v1/tools/bus_list_blackboards -H "Authorization: Bearer $TOKEN
 
 ### bus_list_threads
 
-Lists the blackboard's threads, most recently active first. Participants only; no side effects.
+Lists the blackboard's threads, most recently active first. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -430,7 +430,7 @@ curl -X POST $BUS/v1/tools/bus_list_threads -H "Authorization: Bearer $TOKEN" -d
 
 ### bus_read_thread
 
-Returns the thread with all posts. Participants only; no side effects.
+Returns the thread with all posts. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -445,7 +445,7 @@ curl -X POST $BUS/v1/tools/bus_read_thread -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_remove_thread
 
-Deletes the thread and notifies its subscribers. The thread's creator or a leader of the space.
+Deletes the thread and notifies its subscribers. The thread's creator, leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -460,7 +460,7 @@ curl -X POST $BUS/v1/tools/bus_remove_thread -H "Authorization: Bearer $TOKEN" -
 
 ### bus_subscribe_thread
 
-Subscribes the caller to new posts in the thread; idempotent. Participants only.
+Subscribes the caller to new posts in the thread; idempotent. Participants (admins join first).
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -475,7 +475,7 @@ curl -X POST $BUS/v1/tools/bus_subscribe_thread -H "Authorization: Bearer $TOKEN
 
 ### bus_unsubscribe_thread
 
-Stops post notifications for the thread; idempotent. Participants only.
+Stops post notifications for the thread; idempotent. Participants (admins join first).
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -563,7 +563,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 
 ### bus_spawn_worker
 
-Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself and gets `<task>` as its first prompt; the invite code is never exposed. Pitfalls: each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space.
+Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself and gets `<task>` as its first prompt; the invite code is never exposed. Pitfalls: each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space and admins.
 
 Registered by the omp extension only; the server does not serve it.
 

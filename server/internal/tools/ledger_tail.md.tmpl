@@ -42,7 +42,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 
 ### bus_spawn_worker
 
-Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself and gets `<task>` as its first prompt; the invite code is never exposed. Pitfalls: each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space.
+Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself and gets `<task>` as its first prompt; the invite code is never exposed. Pitfalls: each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space and admins.
 
 Registered by the omp extension only; the server does not serve it.
 

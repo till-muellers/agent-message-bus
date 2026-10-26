@@ -32,7 +32,7 @@ func topicTools(m *messaging.Service) []Tool {
 
 func messageTools(m *messaging.Service) []Tool {
 	return []Tool{
-		define("bus_send_direct", "Participants only; critical requires a leader.",
+		define("bus_send_direct", "Participants and admins; critical requires a leader or an admin.",
 			"Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, "+
 				"and an agent cannot send a direct message to itself.",
 			okResult, []string{"space", "to", "body"},
@@ -40,7 +40,7 @@ func messageTools(m *messaging.Service) []Tool {
 			func(ctx context.Context, p auth.Principal, a directArgs) (any, error) {
 				return done(m.SendDirect(ctx, p, a.Space, a.To, a.Body, a.Critical))
 			}),
-		define("bus_send_topic", "Participants only; only leaders may send to all or send critical.",
+		define("bus_send_topic", "Participants and admins; only leaders and admins may send to all or send critical.",
 			"Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic.",
 			okResult, []string{"space", "topic", "body"},
 			map[string]any{"space": spaceProp(), "topic": topicProp(), "body": bodyProp(), "critical": criticalProp()},
@@ -58,16 +58,17 @@ func messageTools(m *messaging.Service) []Tool {
 func topicOps(m *messaging.Service) []Tool {
 	return []Tool{
 		topicOp("bus_create_topic", accessParticipants,
-			"Opens a new topic and subscribes the caller. Pitfall: nobody else is notified, so subscribers must be told the topic name.",
+			"Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. "+
+				"Pitfall: nobody else is notified, so subscribers must be told the topic name.",
 			m, (*messaging.Service).CreateTopic),
-		topicOp("bus_subscribe_topic", accessParticipants,
+		topicOp("bus_subscribe_topic", accessSubscribers,
 			"Subscribes the caller to the topic; idempotent. "+
 				"Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it.",
 			m, (*messaging.Service).Subscribe),
-		topicOp("bus_unsubscribe_topic", accessParticipants,
+		topicOp("bus_unsubscribe_topic", accessSubscribers,
 			"Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed.",
 			m, (*messaging.Service).Unsubscribe),
-		topicOp("bus_close_topic", "The topic's creator or a leader of the space.",
+		topicOp("bus_close_topic", "The topic's creator, leaders of the space and admins.",
 			"Closes the topic, notifies subscribers and drops all subscriptions. "+
 				"Pitfall: the all topic cannot be closed, and a closed topic's name can be reused.",
 			m, (*messaging.Service).CloseTopic),

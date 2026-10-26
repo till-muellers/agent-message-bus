@@ -48,7 +48,6 @@ Feature: Space membership
       Examples:
         | case                   | caller          | space | code      | message                                                               |
         | member caller          | member "worker" | demo  | forbidden | only leaders may invite members                                       |
-        | admin                  | the admin       | demo  | forbidden | admin token cannot act in spaces; mint a leader with bus_mint_leader |
         | leader not participant | leader "lead2"  | demo  | forbidden | not a participant of space demo                                       |
         | unknown space          | leader "lead"   | nope  | not_found | space nope not found                                                  |
 
@@ -90,9 +89,9 @@ Feature: Space membership
       When member "peer" revokes member "worker" from space "demo"
       Then the call fails with forbidden "only leaders may revoke members"
 
-    Scenario: The admin cannot revoke members
+    Scenario: The admin revokes members
       When the admin revokes member "worker" from space "demo"
-      Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
+      Then the call returns {"deleted": true}
 
     Scenario: An unknown space is not found
       When leader "lead" revokes member "worker" from space "nope"
@@ -147,9 +146,9 @@ Feature: Space membership
       When leader "lead2" lists the participants of space "demo"
       Then the call fails with forbidden "not a participant of space demo"
 
-    Scenario: The admin cannot leave a space
+    Scenario: An admin that has not joined cannot leave a space
       When the admin leaves space "demo"
-      Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
+      Then the call fails with forbidden "not a participant of space demo"
 
   Rule: Departure (leave or revoke) cleans up in a fixed order within one transaction
 
