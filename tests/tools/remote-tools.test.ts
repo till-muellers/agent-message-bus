@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { createClient, type FetchLike, type RemoteTool } from "../../extension/lib/bus/client.ts";
 import type { JsonSchema } from "../../extension/lib/bus/schema.ts";
-import { INBOX_TOOLS, registerRemoteTools, type RemoteToolsOptions } from "../../extension/lib/tools/remote-tools.ts";
+import { registerRemoteTools, type RemoteToolsOptions } from "../../extension/lib/tools/remote-tools.ts";
 import { errorResponse, URL_, z } from "../fakes.ts";
 
 type FakeTool = { name: string; label: string; execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }> };
@@ -17,8 +17,9 @@ function setup(fetchFn: FetchLike, getActive: RemoteToolsOptions["getActive"] = 
 		getActive,
 		state: { registered: false, names: [] },
 		warn: m => void warnings.push(m),
+		kind: "main",
 	};
-	return { tools, warnings, options, register: (exclude?: readonly string[]) => registerRemoteTools(pi, { ...options, exclude }) };
+	return { tools, warnings, options, register: (overrides: Partial<RemoteToolsOptions> = {}) => registerRemoteTools(pi, { ...options, ...overrides }) };
 }
 
 describe("registerRemoteTools", () => {
@@ -70,10 +71,17 @@ describe("registerRemoteTools", () => {
 		expect(tools.map(t => t.name)).toEqual(["bus_a"]);
 	});
 
-	test("excluded tools are not registered; registered names are recorded", async () => {
-		const list = [listTool("bus_inbox_read"), listTool("bus_send"), listTool("bus_inbox_ack")];
+	test("the shadowed and withheld tools are not registered in a main session; the names are recorded", async () => {
+		const list = [listTool("bus_inbox_read"), listTool("bus_send"), listTool("bus_wait"), listTool("bus_inbox_ack")];
 		const { options, register } = setup(async () => Response.json(list));
-		expect(await register(INBOX_TOOLS)).toBe(1);
-		expect(options.state.names).toEqual(["bus_send"]);
+		expect(await register()).toBe(2);
+		expect(options.state.names).toEqual(["bus_inbox_read", "bus_send"]);
+	});
+
+	test("a subagent gets exactly the allow-list", async () => {
+		const list = [listTool("bus_list_blackboards"), listTool("bus_read_thread"), listTool("bus_add_post"), listTool("bus_send_direct"), listTool("bus_something_new")];
+		const { options, register } = setup(async () => Response.json(list));
+		expect(await register({ kind: "sub" })).toBe(3);
+		expect(options.state.names).toEqual(["bus_list_blackboards", "bus_read_thread", "bus_add_post"]);
 	});
 });

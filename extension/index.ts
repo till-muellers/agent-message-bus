@@ -141,7 +141,9 @@ function registerBusCommand(
 }
 
 /** Session start redeems `--bus-accept` once; start, switch and branch re-key the accepted token and reconnect. */
-function registerSessionEvents(pi: ExtensionAPI, store: CredentialStore, session: Session): void {
+function registerSessionEvents(pi: ExtensionAPI, store: CredentialStore, session: Session, spawn: Spawn): void {
+	// The local tools never reach a subagent: they are registered with the first main session.
+	let localToolsRegistered = false;
 	const redeemFlag = createInviteFlag({
 		flag: name => pi.getFlag(name),
 		isSub: session.isSub,
@@ -152,6 +154,10 @@ function registerSessionEvents(pi: ExtensionAPI, store: CredentialStore, session
 	const guarded = (work: () => Promise<void>) => work().catch(error => session.warn(errorMessage(error)));
 	pi.on("session_start", (_event, ctx) =>
 		guarded(async () => {
+			if (!localToolsRegistered && ctx.agent?.kind === "main") {
+				localToolsRegistered = true;
+				pi.registerTool(spawnToolDefinition(pi, spawn));
+			}
 			await session.setContext(ctx);
 			const joined = await redeemFlag();
 			if (!joined) return session.restart();
@@ -201,9 +207,8 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		const spawn = workerSpawner({ env, platform: options.platform ?? process.platform, which }, options, session, ownVersion);
 		pi.registerFlag("bus-url", { type: "string", description: "Bus url for --bus-accept" });
 		pi.registerFlag("bus-accept", { type: "string", description: "Invite code to redeem when the session starts" });
-		pi.registerTool(spawnToolDefinition(pi, spawn));
 		registerBusCommand(pi, store, session, localServerCli(busEnv, options, which, env), spawn, ownVersion, installed, gate);
-		registerSessionEvents(pi, store, session);
+		registerSessionEvents(pi, store, session, spawn);
 	};
 }
 

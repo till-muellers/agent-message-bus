@@ -132,7 +132,7 @@ Facts that are not obvious from the code and that cost time to find out:
 **omp tool lifecycle**
 - omp fires `session_start` once per process. `/new`, `/resume` and `/fork` fire `session_switch`; `/branch` and `/btw` fire `session_branch`, and every branch moves to a new session file.
 - Tools registered with `defaultInactive` stay off until the extension calls `setActiveTools`.
-- Subagents only get the tools their parent passes on (`filterActiveTools` drops parent-owned tools), and they have no inbox stream of their own.
+- A subagent gets the tools the extension registers for it: omp enables every tool an extension instance registers (`filterActiveTools` only drops parent-owned tools), so the extension registers an allow-list of the five blackboard tools for a subagent and withholds the rest. A subagent has no inbox stream of its own.
 
 **Bus permissions to remember when writing test prompts**
 - Only leaders and admins may send to `all` or send critical messages. A member that tries gets `forbidden`.

@@ -8,7 +8,8 @@ import { createSessionStore, type SessionStore, sessionKey } from "./session-sto
 
 /** The parts of the omp context that identify a session: its agent kind and its session file. */
 export interface IdentityContext {
-	agent?: { kind?: string };
+	/** The agent the session runs: its kind and its registry id. */
+	agent?: { kind?: string; id?: string };
 	sessionManager?: { getSessionFile(): string | undefined };
 }
 

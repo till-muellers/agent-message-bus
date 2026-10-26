@@ -119,6 +119,7 @@ export function createSession(deps: SessionDeps): Session {
 		setContext(ctx, change) {
 			view.mode = ctx.mode;
 			view.sub = ctx.agent?.kind === "sub";
+			view.agentId = ctx.agent?.id;
 			view.isIdle = () => ctx.isIdle();
 			return identity.bind(ctx, change);
 		},
