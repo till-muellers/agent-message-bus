@@ -3,7 +3,7 @@
  * CLI (`start`, `stop`, `status --json`, `admin-token`).
  */
 import type { CommandResult } from "./shared/command.ts";
-import type { CredentialStore } from "./credentials.ts";
+import type { CredentialStore } from "./session/stored-credentials.ts";
 import type { Runner } from "./runner.ts";
 
 /** Runs `<binary> <args>` and returns stdout; a non-zero exit is an error. */

@@ -4,8 +4,8 @@
  */
 import type { CommandResult } from "./shared/command.ts";
 import type { BusClient } from "./bus/client.ts";
-import { type SessionCredentials, trimUrl } from "./credentials.ts";
-import type { SessionIdentity } from "./session-identity.ts";
+import { type SessionCredentials, trimUrl } from "./session/stored-credentials.ts";
+import type { SessionIdentity } from "./session/session-identity.ts";
 
 export interface AcceptDeps {
 	client: BusClient;

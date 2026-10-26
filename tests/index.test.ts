@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { BusExtensionOptions } from "../extension/index.ts";
-import { createCredentialStore } from "../extension/lib/credentials.ts";
+import { createCredentialStore } from "../extension/lib/session/stored-credentials.ts";
 import { formatEntry } from "../extension/lib/format.ts";
 import type { RunOptions, Runner } from "../extension/lib/runner.ts";
 import {

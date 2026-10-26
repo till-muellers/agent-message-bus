@@ -1,8 +1,8 @@
 /**
  * The member identity this omp session accepted with `/bus accept`: owns the session's key, its credential file
- * (`lib/session-store.ts`) and `SessionCredentials.accepted`, which nothing else writes.
+ * (`session-store.ts`) and `SessionCredentials.accepted`, which nothing else writes.
  */
-import type { ActiveCredentials, SessionCredentials } from "./credentials.ts";
+import type { ActiveCredentials, SessionCredentials } from "./stored-credentials.ts";
 import { createSessionStore, type SessionStore, sessionKey } from "./session-store.ts";
 
 /** The parts of the omp context that identify a session: its agent kind and its session file. */

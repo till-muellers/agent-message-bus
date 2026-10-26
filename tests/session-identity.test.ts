@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { SessionCredentials } from "../extension/lib/credentials.ts";
-import { createSessionIdentity } from "../extension/lib/session-identity.ts";
+import type { SessionCredentials } from "../extension/lib/session/stored-credentials.ts";
+import { createSessionIdentity } from "../extension/lib/session/session-identity.ts";
 import { URL_, useTempDirs } from "./fakes.ts";
 
 const ctx = (sessionFile: string | undefined, kind = "main") => ({ agent: { kind }, sessionManager: { getSessionFile: () => sessionFile } });

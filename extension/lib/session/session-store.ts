@@ -7,8 +7,8 @@
  */
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import type { ActiveCredentials } from "./credentials.ts";
-import { createJsonFileStore, type JsonFileStore } from "./shared/credential-store.ts";
+import type { ActiveCredentials } from "./stored-credentials.ts";
+import { createJsonFileStore, type JsonFileStore } from "../shared/credential-store.ts";
 
 export type SessionStore = JsonFileStore<ActiveCredentials>;
 

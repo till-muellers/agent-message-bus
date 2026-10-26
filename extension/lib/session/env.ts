@@ -4,8 +4,8 @@
  * memory and deleted from the environment so child processes and subagents
  * do not inherit them.
  */
-import type { ActiveCredentials } from "./credentials.ts";
-import { trimUrl } from "./credentials.ts";
+import type { ActiveCredentials } from "./stored-credentials.ts";
+import { trimUrl } from "./stored-credentials.ts";
 
 export interface BusEnv {
 	/** `AGENT_BUS_URL` + `AGENT_BUS_TOKEN`, when both were set. */

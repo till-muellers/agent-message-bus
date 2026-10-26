@@ -6,16 +6,16 @@
  * under `agent-message-bus/credentials.json`, owner-only (0600; Windows ignores
  * the mode and relies on the user-profile ACL). `OMP_AGENT_BUS_DIR` overrides
  * the directory. `AGENT_BUS_URL` + `AGENT_BUS_TOKEN` are read once at load
- * (`lib/env.ts`) into the session and override the stored url/token, so
+ * (`env.ts`) into the session and override the stored url/token, so
  * other clients can hand a session a token directly. A member token from `/bus accept`
- * is kept per omp session (`lib/session-identity.ts`) and loaded into
+ * is kept per omp session (`session-identity.ts`) and loaded into
  * `SessionCredentials.accepted`; env credentials win over it. A leader token
  * from `/bus promote` lives only in the session (`SessionCredentials`) and
  * overrides all of them; it is never written to a file. `/bus logout` clears
  * them all.
  */
 import { join } from "node:path";
-import { agentConfigDir, createJsonFileStore, type JsonFileStore } from "./shared/credential-store.ts";
+import { agentConfigDir, createJsonFileStore, type JsonFileStore } from "../shared/credential-store.ts";
 
 export interface StoredCredentials {
 	url: string;
@@ -31,7 +31,7 @@ export interface ActiveCredentials {
 
 /**
  * Credentials held by the session: the leader token minted by `/bus promote`, the env credentials read at load and
- * the member token accepted by `/bus accept` (owned and persisted per session by `lib/session-identity.ts`).
+ * the member token accepted by `/bus accept` (owned and persisted per session by `session-identity.ts`).
  */
 export interface SessionCredentials {
 	override?: ActiveCredentials;
