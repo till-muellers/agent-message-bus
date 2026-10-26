@@ -8,7 +8,7 @@ import { type InboxLoopOptions, runInboxLoop } from "./inbox-loop.ts";
 export interface InboxRunnerOptions {
 	client: BusClient;
 	getActive(): ActiveCredentials | undefined;
-	deliver: InboxLoopOptions["deliver"];
+	dispatcher: InboxLoopOptions["dispatcher"];
 	warn(message: string): void;
 	sleep?: InboxLoopOptions["sleep"];
 }
@@ -18,7 +18,7 @@ export interface InboxRunner {
 	stop(): void;
 }
 
-export function createInboxRunner({ client, getActive, deliver, warn, sleep }: InboxRunnerOptions): InboxRunner {
+export function createInboxRunner({ client, getActive, dispatcher, warn, sleep }: InboxRunnerOptions): InboxRunner {
 	let loop: AbortController | undefined;
 	async function onConflict(): Promise<void> {
 		const current = getActive();
@@ -28,7 +28,7 @@ export function createInboxRunner({ client, getActive, deliver, warn, sleep }: I
 		start() {
 			loop = new AbortController();
 			const onError = (error: Error) => warn(error.message);
-			void runInboxLoop({ client, getActive, signal: loop.signal, sleep, deliver, onError, onConflict }).catch(error => warn(errorMessage(error)));
+			void runInboxLoop({ client, getActive, signal: loop.signal, sleep, dispatcher, onError, onConflict }).catch(error => warn(errorMessage(error)));
 		},
 		stop() {
 			loop?.abort();

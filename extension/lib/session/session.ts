@@ -16,9 +16,11 @@ import { createSessionIdentity, type IdentityContext, type SessionChange } from 
 import type { CredentialStore } from "./stored-credentials.ts";
 import type { BusEnv } from "./env.ts";
 
-/** The parts of the omp context a session reads: mode, agent kind and the session file. */
+/** The parts of the omp context a session reads: mode, agent kind, idleness and the session file. */
 export interface SessionContext extends IdentityContext {
 	mode?: string;
+	/** Whether the agent is idle right now. */
+	isIdle(): boolean;
 }
 
 /** The session's bus state: its credentials, accepted identity and connection. */
@@ -59,7 +61,7 @@ export function createSession(deps: SessionDeps): Session {
 	const warn = (message: string) => pi.logger.warn(`agent-bus: ${message}`);
 	const credentials = createSessionCredentials(busEnv.credentials);
 	const identity = createSessionIdentity(dir, credentials);
-	const view: SessionView = { sub: false };
+	const view: SessionView = { sub: false, isIdle: () => true };
 	const connection = createConnection({ pi, client, store, credentials, identity, view, gate, warn, sleep: deps.sleep, localTools });
 	return {
 		...connection,
@@ -81,6 +83,7 @@ export function createSession(deps: SessionDeps): Session {
 		setContext(ctx, change) {
 			view.mode = ctx.mode;
 			view.sub = ctx.agent?.kind === "sub";
+			view.isIdle = () => ctx.isIdle();
 			return identity.bind(ctx, change);
 		},
 	};

@@ -30,7 +30,7 @@ describe("inbox streaming", () => {
 
 	/** Boots with env credentials, runs session_start until the scripted streams run out (the final 401 warning), then shuts down. */
 	async function runSession(mode: string, options: FakeBusOptions = {}) {
-		const streams = options.streams ?? [() => new Response(streamOf([frame(entry(1)), frame(entry(2, { critical: true }))]))];
+		const streams = options.streams ?? [() => new Response(streamOf([frame(entry(1)), frame(entry(2, { class: "interrupt" }))]))];
 		const bus = fakeBus({ ...options, streams });
 		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
 		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode });
@@ -43,9 +43,9 @@ describe("inbox streaming", () => {
 	test("session_start streams the inbox: critical → steer, others → followUp", async () => {
 		const { sent, warnings } = await runSession("tui");
 		expect(sent).toEqual([
-			{ message: { customType: "agent-bus", content: formatEntry(entry(1)), display: true }, options: { deliverAs: "followUp", triggerTurn: true } },
+			{ message: { customType: "agent-bus", content: formatEntry(entry(1)), display: true }, options: { deliverAs: "aside", triggerTurn: false } },
 			{
-				message: { customType: "agent-bus", content: formatEntry(entry(2, { critical: true })), display: true },
+				message: { customType: "agent-bus", content: formatEntry(entry(2, { class: "interrupt" })), display: true },
 				options: { deliverAs: "steer", triggerTurn: true },
 			},
 		]);
@@ -62,21 +62,16 @@ describe("inbox streaming", () => {
 		expect(sent.map(s => s.message.content)).toEqual([formatEntry(entry(1))]);
 	});
 
-	test("only interactive modes (tui, rpc) trigger a turn; one-shot modes (print, json) do not", async () => {
-		for (const [mode, triggerTurn] of [
-			["print", false],
-			["json", false],
-			["tui", true],
-			["rpc", true],
-		] as const) {
+	test("the class and the phase decide the mechanism: an interactive session steers and wakes, a one-shot session waits", async () => {
+		const cases: [string, { deliverAs: string; triggerTurn: boolean }[]][] = [
+			["print", [{ deliverAs: "nextTurn", triggerTurn: false }, { deliverAs: "nextTurn", triggerTurn: false }]],
+			["json", [{ deliverAs: "nextTurn", triggerTurn: false }, { deliverAs: "nextTurn", triggerTurn: false }]],
+			["tui", [{ deliverAs: "aside", triggerTurn: false }, { deliverAs: "steer", triggerTurn: true }]],
+			["rpc", [{ deliverAs: "aside", triggerTurn: false }, { deliverAs: "steer", triggerTurn: true }]],
+		];
+		for (const [mode, options] of cases) {
 			const { sent } = await runSession(mode);
-			expect({ mode, options: sent.map(s => s.options) }).toEqual({
-				mode,
-				options: [
-					{ deliverAs: "followUp", triggerTurn },
-					{ deliverAs: "steer", triggerTurn },
-				],
-			});
+			expect({ mode, options: sent.map(s => s.options) }).toEqual({ mode, options });
 		}
 	});
 

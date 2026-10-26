@@ -114,12 +114,17 @@ The extension holds `GET /v1/inbox/stream` open. For each `inbox` event, it send
 <body>
 ```
 
-| Entry | `deliverAs` | Starts a turn |
-| :--- | :--- | :--- |
-| `critical: true` (leaders only) | `steer`: interrupts the running turn | in `tui` and `rpc` modes |
-| everything else | `followUp`: queued after the current turn | in `tui` and `rpc` modes |
+The server stamps every entry with a delivery **class**; the class and the phase of the session decide how the entry enters it:
 
-In one-shot `print`/`json` modes (and when the mode is unknown), entries are added to the context without triggering a turn, because those modes run their own prompt right after `session_start`.
+| Class | Meaning | `tui`/`rpc`, busy | `tui`/`rpc`, idle | `print`/`json`, busy | `print`/`json`, idle |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `interrupt` | must reach the agent now | `steer` | `steer` + starts a turn | `steer` | `nextTurn` |
+| `queue` | reaches the agent at its next step | `aside` | `aside` (starts a turn) | `aside` | `nextTurn` |
+| `deferred` | reaches the agent with its next turn | `nextTurn` | `nextTurn` | `nextTurn` | `nextTurn` |
+
+`steer` interrupts the running turn, `aside` is injected at the next step boundary (and wakes an idle session), `nextTurn` waits for the next turn without starting one. A critical entry (`critical: true`, leaders only) is the server's `interrupt` class. The extension never looks at the entry's `type` or `critical` itself.
+
+In one-shot `print`/`json` modes (and when the mode is unknown), every entry waits for the next turn, because those modes run their own prompt right after `session_start` and a turn of their own would compete with it.
 
 **Reconnect:** when the stream ends or fails, the extension waits 1 s, then doubles the wait up to 30 s. Each delivered entry resets the wait to 1 s. An `unauthenticated` (401) or `forbidden` (403) error stops the loop for good: the token was revoked, the member left, or the space was deleted. Run `/bus login` again to restart. Errors are logged as `agent-bus: <message>`. The stream stops at session shutdown and on `/bus logout`.
 
