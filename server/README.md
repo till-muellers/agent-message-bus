@@ -33,6 +33,8 @@ One instance runs per data dir. While it runs, `<datadir>/agent-message-bus.stat
 |`AMB_ADDR`|`127.0.0.1:8080`|Listen address.|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its directory is created if missing. `<datadir>`: Windows `%LOCALAPPDATA%\agent-message-bus`; macOS `~/Library/Application Support/agent-message-bus`; others `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`.|
 
+**Upgrade.** Pre-release databases are not upgraded: stop the server and delete `agent-message-bus.db`, `-wal` and `-shm` before starting this version.
+
 Optional Docker (local build, no registry; the image sets `AMB_DB_PATH=/data/agent-message-bus.db`):
 
 ```powershell
@@ -108,4 +110,4 @@ Layout:
 |`internal/domain/`|Business rules shared by features (name pattern, body and title limits).|
 |`internal/platform/`|Shared infrastructure: `db` (`DBTX`, `InTx`, `InsertID`, `QueryIDs`, `Timestamp`, migrations), `broker`, `httpx`, `httpserver`, `config`, `apperr`, `instance`, plus the test helpers `dbtest` and `apperrtest`.|
 |`internal/platform/instance/`|Local instance management: state file, start/stop/status, admin token file and rotation.|
-|`migrations/`|Numbered SQL files; never edit an applied one.|
+|`migrations/`|Numbered SQL files; never edit an applied one. `0001_schema.up.sql` is the irreversible baseline (no `.down.sql`); every later migration has a `.down.sql`.|

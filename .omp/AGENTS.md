@@ -95,7 +95,8 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ### SQL
 - Every schema change is a new numbered migration in `server/migrations/`. Never edit an applied one.
-- Migrations must be reversible (`.down.sql`), or explicitly marked as not.
+- `0001_schema.up.sql` is the one-time alpha reset: the whole schema, irreversible, no `.down.sql`. Every later migration must be reversible (`.down.sql`).
+- A migration without `.down.sql` says so in its header line: `-- … Not reversible: …`.
 
 ### TypeScript
 - `strict` mode, no `any`; use `unknown` and narrow. No untyped function signatures.
@@ -141,8 +142,34 @@ Facts that are not obvious from the code and that cost time to find out:
 cd server && go run ./cmd/tooldoc > TOOLS.md
 ```
 
+## Definition of ready
+A slice is ready when (`docs/design/arch/definition-of-ready.md` §1):
+- **Described**: goal, files, size, risks and dependencies in `docs/design/arch/slices.md` or the bead.
+- **Specs approved**: the rules to move are named by file and line, their folder has no open REVIEW finding and no unresolved `@po-decision`; pure refactors state "no behaviour change".
+- **No blocking question** open in `docs/design/arch/QUESTIONS.md`.
+- **Contracts fixed**: every client-visible change is in `docs/design/arch/contracts.md`.
+- **Dependencies merged**: every server slice it depends on is on `main`.
+- **Shared-code approval** for `internal/platform/**` or `internal/domain/**`; **no new dependency** without approval.
+- **Acceptance tests named** with their RED reason.
+- **Schema decided** in `docs/design/arch/schema.md` (or "—").
+- **Docs listed**: TOOLS.md, tool-count sites, `spec/README.md`, `server/README.md`, `DEPLOYMENT.md`, `.omp/AGENTS.md` corrections.
+- **Size ≤ M** (S ≈ ≤ 300 changed lines incl. tests, M ≈ ≤ 800).
+
 ## Definition of done
-Tests pass, lint and typecheck are clean, the diff is reviewed, no unrelated changes, and the pull request's CI (`go`, `typescript`, `python`) is green. Locally:
+A slice is done when all hold:
+1. **TDD evidence**: each acceptance test failed first for the stated reason (RED noted in the PR description) and passes now; bug fixes start with a reproducing test.
+2. **Spec in sync**: the named rules are in `server/spec/*.feature` (verbatim scenario text), replaced lines are gone, `spec/README.md` features table/glossary updated. Only PO-decided scenarios are moved.
+3. **Generated files**: tool changes → `server/TOOLS.md` regenerated, golden test green; the absolute tool count set at all sites.
+4. **Contracts**: implementation matches `contracts.md`; deviations are updated there first; extension-facing change → `server/internal/server/protocol.go` bumped per policy.
+5. **Schema**: new numbered migration with `.down.sql` (only `0001_schema` is irreversible), never an edit of a merged migration.
+6. **Code rules**: one responsibility per file, functions ≲ 30 lines, errors wrapped with `%w`, `ctx` first for I/O, no global mutable state, no panic for control flow, no debug prints/dead code/TODOs. Features write only their own tables.
+7. **Shared code** only as approved; no unapproved dependency.
+8. **Docs**: README/DEPLOYMENT/extension README lines updated; the slice's `.omp/AGENTS.md` correction applied.
+9. **Local checks** clean (below).
+10. **Review**: self-review with the review checklist; no unrelated changes (or mentioned in the PR); reviewer approval.
+11. **Delivery**: branch `slice/<id>-<slug>`, PR to protected `main`, CI `go`, `typescript`, `python` green, merged by PR.
+
+Locally:
 
 ```sh
 cd server

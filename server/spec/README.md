@@ -76,6 +76,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [inbox.feature](inbox.feature) | Reading and acknowledging the inbox; the SSE stream |
 | [local-instance.feature](local-instance.feature) | `start`, `stop`, `status`, `admin-token`, `rotate-token`; the state file; single instance per data dir |
 | [transports.feature](transports.feature) | RPC routes, error bodies and status codes, argument validation, MCP, admin endpoints |
+| [schema.feature](schema.feature) | The single irreversible `0001_schema` migration with kind/role `admin`; later numbered migrations apply on top |
 
 ## Design decisions
 
