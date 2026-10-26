@@ -43,22 +43,12 @@ interface LoopState {
 	conflicted: boolean;
 }
 
-/** Acks up to `id`. A failure is only reported: reconnecting would redeliver the entry, and the next ack's higher `upTo` covers it. */
-async function ack(client: BusClient, active: ActiveCredentials, id: number, onError: (error: Error) => void): Promise<void> {
-	try {
-		await client.callTool(active.url, active.token, "bus_inbox_ack", { upTo: id });
-	} catch (error) {
-		onError(error instanceof Error ? error : new Error(String(error)));
-	}
-}
-
-/** Delivers and acks each entry of an open stream. */
-async function consume(options: InboxLoopOptions, active: ActiveCredentials, state: LoopState, body: ReadableStream<Uint8Array>): Promise<void> {
+/** Hands every entry of an open stream over to the dispatcher; the ack waits for its consumption. */
+async function consume(options: InboxLoopOptions, state: LoopState, body: ReadableStream<Uint8Array>): Promise<void> {
 	for await (const frame of parseSse(body)) {
 		if (frame.event !== "inbox") continue;
 		const entry = JSON.parse(frame.data) as Entry;
 		options.dispatcher.receive(entry);
-		await ack(options.client, active, entry.id, options.onError);
 		state.delay = INITIAL_DELAY_MS;
 	}
 }
@@ -85,7 +75,7 @@ export async function runInboxLoop(options: InboxLoopOptions): Promise<void> {
 			const response = await client.openStream(active.url, active.token, signal);
 			if (!response.body) throw new Error("inbox stream has no body");
 			state.conflicted = false;
-			await consume(options, active, state, response.body);
+			await consume(options, state, response.body);
 		} catch (error) {
 			if (signal.aborted || (await report(error, options, state))) return;
 		}

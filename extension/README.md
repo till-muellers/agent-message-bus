@@ -107,7 +107,7 @@ Before it invites anybody, the spawn checks the plugin version the worker would 
 Only top-level sessions stream the inbox; subagents don't.
 
 
-The extension holds `GET /v1/inbox/stream` open. For each `inbox` event, it sends a custom message (`customType: "agent-bus"`, displayed) and then calls `bus_inbox_ack {upTo: id}`. The ack permanently deletes the entry on the server. A failed ack is logged as `agent-bus: <message>` and the stream continues: reconnecting would redeliver the entry, and the next ack's higher `upTo` covers it.
+The extension holds `GET /v1/inbox/stream` open. For each `inbox` event it sends a custom message (`customType: "agent-bus"`, displayed) that carries the id of the entry. The entry is acked (`bus_inbox_ack {upTo: id}`) once a model request contains that message: the ack advances over the consumed entries in order, so an entry that is consumed before an older one holds the ack until the older one is consumed too. The ack deletes the acked entries on the server. A failed ack is logged as `agent-bus: <message>`; the entries stay on the server and are replayed on the next connection.
 
 ```text
 [agent-bus] <space> · <where> · from <sender>[ · CRITICAL]

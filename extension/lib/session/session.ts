@@ -10,6 +10,7 @@ import type { CommandResult } from "../shared/command.ts";
 import { acceptInvite, type Joined } from "../commands/accept.ts";
 import { type Connection, createConnection, type SessionView } from "../connection/connection.ts";
 import type { ServerGate } from "../connection/server-gate.ts";
+import type { AckWatermark } from "../delivery/ack-watermark.ts";
 import type { SessionCredentials } from "./session-credentials.ts";
 import { createSessionCredentials } from "./session-credentials.ts";
 import { createSessionIdentity, type IdentityContext, type SessionChange } from "./session-identity.ts";
@@ -51,18 +52,20 @@ export interface SessionDeps {
 	localTools: readonly string[];
 	/** Keeps the extension off a server that is too old. */
 	gate: ServerGate;
+	/** The watermark of the acked entries. */
+	watermark: AckWatermark;
 	/** The sleep the inbox loop waits with. */
 	sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
 
 /** Builds the session of this extension. */
 export function createSession(deps: SessionDeps): Session {
-	const { pi, store, busEnv, dir, client, localTools, gate } = deps;
+	const { pi, store, busEnv, dir, client, localTools, gate, watermark } = deps;
 	const warn = (message: string) => pi.logger.warn(`agent-bus: ${message}`);
 	const credentials = createSessionCredentials(busEnv.credentials);
 	const identity = createSessionIdentity(dir, credentials);
 	const view: SessionView = { sub: false, isIdle: () => true };
-	const connection = createConnection({ pi, client, store, credentials, identity, view, gate, warn, sleep: deps.sleep, localTools });
+	const connection = createConnection({ pi, client, store, credentials, identity, view, gate, watermark, warn, sleep: deps.sleep, localTools });
 	return {
 		...connection,
 		client,
