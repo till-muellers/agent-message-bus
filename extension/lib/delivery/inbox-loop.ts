@@ -1,6 +1,7 @@
 /** Inbox stream consumer: the reconnecting deliver+ack loop. */
 import { BusError, type BusClient } from "../bus/client.ts";
 import type { Entry } from "../bus/entry.ts";
+import type { Dispatcher } from "./dispatcher.ts";
 import type { ActiveCredentials } from "../session/stored-credentials.ts";
 import { parseSse } from "../bus/sse.ts";
 
@@ -8,7 +9,8 @@ export interface InboxLoopOptions {
 	client: BusClient;
 	getActive: () => ActiveCredentials | undefined;
 	signal: AbortSignal;
-	deliver: (entry: Entry) => Promise<void>;
+	/** Receives every entry of the stream; it hands it over to the session. */
+	dispatcher: Dispatcher;
 	onError: (error: Error) => void;
 	/** Another session holds this agent's stream (409): called once per streak of refusals; the loop keeps retrying. */
 	onConflict: (error: BusError) => void | Promise<void>;
@@ -55,7 +57,7 @@ async function consume(options: InboxLoopOptions, active: ActiveCredentials, sta
 	for await (const frame of parseSse(body)) {
 		if (frame.event !== "inbox") continue;
 		const entry = JSON.parse(frame.data) as Entry;
-		await options.deliver(entry);
+		options.dispatcher.receive(entry);
 		await ack(options.client, active, entry.id, options.onError);
 		state.delay = INITIAL_DELAY_MS;
 	}
