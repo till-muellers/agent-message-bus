@@ -4,10 +4,11 @@ Feature: Authentication and leader minting
   So that only agents I minted or that leaders invited can act on the bus
 
   # Tokens:
-  #   - admin:  the single admin token the server is started with; never stored in the database.
+  #   - admin:  the instance admin token the server is started with, which authenticates as the
+  #             bootstrap admin "admin"; never stored in the database.
   #   - leader: minted by the admin with bus_mint_leader; not bound to any space.
   #   - member: minted by accepting an invite code from bus_invite_member; bound to exactly one space.
-  # Agent names are global: one name is either a leader agent or a member agent, never both.
+  # Agent names are global: one name is an admin, a leader or a member agent, never two of them.
   # Tokens carry no expiry; a token stops working only when it is removed
   # (member revoked, member left, or the member's space deleted).
 
@@ -35,9 +36,9 @@ Feature: Authentication and leader minting
       When the bus authenticates the token ""
       Then the call fails with unauthenticated "invalid token"
 
-    Scenario: The admin token authenticates as the admin
+    Scenario: The admin token authenticates as the bootstrap admin
       When the admin asks who it is
-      Then the call returns kind "admin"
+      Then the call returns kind "admin" and name "admin"
 
     Scenario: A leader token authenticates as that leader without a space
       Given the admin minted leader "lead"

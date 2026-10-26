@@ -20,7 +20,7 @@ Download the binary for your OS from the [GitHub releases](https://github.com/ti
 agent-message-bus                # foreground; Ctrl+C or SIGTERM stops gracefully
 agent-message-bus start          # background; waits until healthy, no-op when already running
 agent-message-bus status [--json]
-agent-message-bus admin-token    # prints the admin token (generated on first use)
+agent-message-bus admin-token    # prints the bootstrap admin's token (generated on first use)
 agent-message-bus rotate-token   # new admin token, applied live and saved
 agent-message-bus stop           # graceful via POST /v1/admin/shutdown, kill on fallback
 ```
@@ -47,7 +47,7 @@ docker exec amb /agent-message-bus admin-token
 
 There are three kinds of token, used as `Authorization: Bearer <token>`:
 
-- **Admin** (`AMB_ADMIN_TOKEN` or `<datadir>/admin-token`): mints leader tokens and calls the admin endpoints; nothing else.
+- **Admin** (`AMB_ADMIN_TOKEN` or `<datadir>/admin-token`): authenticates as the bootstrap admin agent `admin`, created on the first start. Mints leader tokens and calls the admin endpoints; nothing else. A database that already holds a leader or member named `admin` refuses to start.
 - **Leader**: creates, joins and deletes spaces, and invites members to spaces it leads.
 - **Member**: valid in exactly one space. A leader calls `bus_invite_member`, optionally with a `task` (the member's first prompt), which returns a single-use invite code (`xxxx-xxxx`, valid for 10 minutes). The worker redeems it with `POST /v1/invites/accept` and `Authorization: Bearer <code>` (no body) and receives `{"name","space","token"}`, plus `"task"` when the invite has one; in omp, `/bus accept <url> <code>` does this, and `/bus spawn` starts a worker that does it by itself.
 

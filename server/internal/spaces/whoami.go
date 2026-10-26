@@ -22,11 +22,10 @@ type WhoamiResult struct {
 
 // Whoami returns p's identity and the spaces it participates in.
 func (s *Service) Whoami(ctx context.Context, p auth.Principal) (WhoamiResult, error) {
-	res := WhoamiResult{Kind: string(p.Kind), Spaces: []SpaceRole{}}
+	res := WhoamiResult{Kind: string(p.Kind), Name: p.AgentName, Spaces: []SpaceRole{}}
 	if p.Kind == auth.Admin {
 		return res, nil
 	}
-	res.Name = p.AgentName
 	if p.Kind == auth.Member {
 		name, err := spaceName(ctx, s.db, p.SpaceID)
 		if err != nil {

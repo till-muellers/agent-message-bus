@@ -35,3 +35,14 @@ func TestWhoami(t *testing.T) {
 		})
 	}
 }
+
+func TestWhoamiAdmin(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, nil, nil)
+	p := auth.Principal{Kind: auth.Admin, AgentID: 9, AgentName: auth.BootstrapName, Bootstrap: true}
+	got, err := e.svc.Whoami(context.Background(), p)
+	want := WhoamiResult{Kind: "admin", Name: "admin", Spaces: []SpaceRole{}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, %v; want %+v", got, err, want)
+	}
+}

@@ -35,7 +35,7 @@ Commands:
                   and wait until healthy; no-op when already running
   stop            shut the running instance down (POST /v1/admin/shutdown, kill on timeout)
   status [--json] print whether an instance is running, with its pid and url
-  admin-token     print the admin token (generates <datadir>/admin-token if missing)
+  admin-token     print the bootstrap admin's token (generates <datadir>/admin-token if missing)
   rotate-token    generate a new admin token, apply it to the running instance and save it
 
 Flags:
@@ -131,6 +131,12 @@ func run(ctx context.Context, cfg config.Config) error {
 func serve(ctx context.Context, cfg config.Config, conn *sql.DB, token string) error {
 	ctx, shutdown := context.WithCancel(ctx)
 	defer shutdown()
+	streamRoot, cancelStreams := context.WithCancel(context.Background())
+	defer cancelStreams()
+	handler, err := server.Build(streamRoot, conn, token, shutdown)
+	if err != nil {
+		return err
+	}
 	ln, err := net.Listen("tcp", cfg.Addr)
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", cfg.Addr, err)
@@ -140,8 +146,6 @@ func serve(ctx context.Context, cfg config.Config, conn *sql.DB, token string) e
 		return errors.Join(err, ln.Close())
 	}
 	defer unpublish()
-	streamRoot, cancelStreams := context.WithCancel(context.Background())
-	defer cancelStreams()
-	srv := &http.Server{Handler: server.Build(streamRoot, conn, token, shutdown), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	return httpserver.Serve(ctx, srv, ln, cancelStreams)
 }

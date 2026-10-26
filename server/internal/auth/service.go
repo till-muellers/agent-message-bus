@@ -14,9 +14,10 @@ import (
 
 // Service authenticates bearer tokens and mints leader and member tokens.
 type Service struct {
-	db        *sql.DB
-	adminHash atomic.Pointer[string]
-	now       func() time.Time
+	db          *sql.DB
+	adminHash   atomic.Pointer[string]
+	bootstrapID atomic.Int64 // agent id of the bootstrap admin, set by Bootstrap
+	now         func() time.Time
 }
 
 // NewService returns a Service using adminToken as the admin credential.
@@ -31,7 +32,7 @@ func NewService(db *sql.DB, adminToken string, now func() time.Time) *Service {
 func (s *Service) Authenticate(ctx context.Context, token string) (Principal, error) {
 	h := Hash(token)
 	if subtle.ConstantTimeCompare([]byte(h), []byte(*s.adminHash.Load())) == 1 {
-		return Principal{Kind: Admin}, nil
+		return s.bootstrapPrincipal(), nil
 	}
 	p, found, err := lookupToken(ctx, s.db, h)
 	if err != nil {
@@ -107,9 +108,17 @@ func (s *Service) agentOfKind(ctx context.Context, q db.DBTX, name string, kind 
 		return 0, false, err
 	}
 	if existing != kind {
-		return 0, false, apperr.New(apperr.Conflict, "agent %s is a %s agent", name, existing)
+		return 0, false, apperr.New(apperr.Conflict, "agent %s is %s %s agent", name, article(existing), existing)
 	}
 	return id, true, nil
+}
+
+// article returns the indefinite article for kind.
+func article(kind Kind) string {
+	if kind == Admin {
+		return "an"
+	}
+	return "a"
 }
 
 // issue stores a fresh token's hash and returns the plaintext token.
