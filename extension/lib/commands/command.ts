@@ -12,6 +12,8 @@ import { errorMessage } from "../bus/errors.ts";
 import { type ServerCli, serverCommand } from "../local-server/server-cli.ts";
 import type { SpawnRequest, SpawnResult } from "../spawn/spawn.ts";
 import { installedSkewWarning } from "../version/installed-plugin.ts";
+import type { ServerGate } from "../connection/server-gate.ts";
+import { MIN_SERVER_PROTOCOL } from "../version/server-protocol.ts";
 
 export interface CommandDeps {
 	store: CredentialStore;
@@ -34,6 +36,8 @@ export interface CommandDeps {
 	pluginVersion: string;
 	/** The version of the installed omp plugin; undefined when it cannot be read. */
 	installedPluginVersion(): Promise<string | undefined>;
+	/** The server's protocol; the status shows it. */
+	gate: ServerGate;
 }
 
 interface Whoami {
@@ -59,6 +63,9 @@ async function status(deps: CommandDeps): Promise<CommandResult> {
 	const me = (await deps.client.callTool(url, token, "bus_whoami", {})) as Whoami;
 	const spaces = me.spaces.map(s => `${s.name} (${s.role})`).join(", ") || "none";
 	const lines = [`${url}: ${me.kind}${me.name ? ` ${me.name}` : ""}; spaces: ${spaces}`];
+	await deps.gate.check(url);
+	const probed = deps.gate.last();
+	lines.push(`server protocol ${probed ? (probed.protocol ?? "none") : "unknown"} (minimum ${MIN_SERVER_PROTOCOL})`);
 	const installed = await deps.installedPluginVersion();
 	lines.push(`extension ${deps.pluginVersion}`, `installed plugin ${installed ?? "unknown"}`);
 	const warning = installedSkewWarning(installed, deps.pluginVersion);

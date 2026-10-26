@@ -29,6 +29,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { agentConfigDir } from "./lib/shared/credential-store.ts";
 import { createClient, type FetchLike } from "./lib/bus/client.ts";
 import { COMMAND_DESCRIPTION, runCommand } from "./lib/commands/command.ts";
+import { createServerGate, type ServerGate } from "./lib/connection/server-gate.ts";
 import { createInviteFlag } from "./lib/commands/invite-flag.ts";
 import { findOnPath, resolveBinary } from "./lib/local-server/binary.ts";
 import { createServerCli, type ServerCli } from "./lib/local-server/server-cli.ts";
@@ -105,6 +106,7 @@ function registerBusCommand(
 	spawn: Spawn,
 	ownVersion: string,
 	installed: () => Promise<string | undefined>,
+	gate: ServerGate,
 ): void {
 	pi.registerCommand("bus", {
 		description: COMMAND_DESCRIPTION,
@@ -125,6 +127,7 @@ function registerBusCommand(
 				spawn: spawnHere,
 				pluginVersion: ownVersion,
 				installedPluginVersion: installed,
+				gate,
 			};
 			const { message, level } = await runCommand(args, deps);
 			ctx.ui.notify(message, level);
@@ -169,6 +172,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		const busEnv = consumeEnv(env);
 		const store = createCredentialStore(env);
 		const client = createClient(options.fetchFn);
+		const gate = createServerGate(options.fetchFn ?? fetch);
 		const session = createSession({
 			pi,
 			store,
@@ -177,6 +181,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 			client,
 			localTools: [SPAWN_TOOL],
 			sleep: options.sleep,
+			gate,
 		});
 		const which = options.which ?? ((name: string) => findOnPath(name, env.PATH));
 		// This plugin's version is the protocol the workers must understand; it is read once at load.
@@ -186,7 +191,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		pi.registerFlag("bus-url", { type: "string", description: "Bus url for --bus-accept" });
 		pi.registerFlag("bus-accept", { type: "string", description: "Invite code to redeem when the session starts" });
 		pi.registerTool(spawnToolDefinition(pi, spawn));
-		registerBusCommand(pi, store, session, localServerCli(busEnv, options, which, env), spawn, ownVersion, installed);
+		registerBusCommand(pi, store, session, localServerCli(busEnv, options, which, env), spawn, ownVersion, installed, gate);
 		registerSessionEvents(pi, store, session);
 	};
 }

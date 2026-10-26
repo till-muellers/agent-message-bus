@@ -12,6 +12,7 @@ import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
 import { INBOX_TOOLS, registerRemoteTools } from "../tools/remote-tools.ts";
+import type { ServerGate } from "./server-gate.ts";
 
 /** What the omp context says about the current session; updated on every event and command. */
 export interface SessionView {
@@ -26,6 +27,8 @@ export interface ConnectionDeps {
 	credentials: Pick<SessionCredentials, "resolve">;
 	identity: Pick<SessionIdentity, "load">;
 	view: SessionView;
+	/** Keeps the extension off a server that is too old; checked before the tools are activated. */
+	gate: ServerGate;
 	warn(message: string): void;
 	sleep?: InboxLoopOptions["sleep"];
 	/** Tools this extension registers itself (`bus_spawn_worker`); they are switched on and off with the server tools. */
@@ -41,7 +44,7 @@ export interface Connection {
 	stop(): void;
 }
 
-export function createConnection({ pi, client, store, credentials, identity, view, warn, sleep, localTools }: ConnectionDeps): Connection {
+export function createConnection({ pi, client, store, credentials, identity, view, gate, warn, sleep, localTools }: ConnectionDeps): Connection {
 	const tools = { registered: false, names: [] as string[] };
 	let active: ActiveCredentials | undefined;
 	const getActive = () => active;
@@ -54,7 +57,16 @@ export function createConnection({ pi, client, store, credentials, identity, vie
 			inbox.stop();
 			await identity.load();
 			active = credentials.resolve(await store.load());
-			if (active) await registerRemoteTools(pi, { client, getActive, state: tools, warn, exclude: view.sub ? INBOX_TOOLS : undefined });
+			if (active) {
+				// A server that is too old gets no tools and no stream.
+				const verdict = await gate.check(active.url);
+				if (verdict !== "ok") {
+					warn(verdict.refused);
+					await deactivateTools(pi, ours());
+					return;
+				}
+				await registerRemoteTools(pi, { client, getActive, state: tools, warn, exclude: view.sub ? INBOX_TOOLS : undefined });
+			}
 			if (active && !view.sub) inbox.start();
 			if (active) await activateBusTools(pi, ours());
 			else await deactivateTools(pi, ours());

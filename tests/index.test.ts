@@ -15,6 +15,7 @@ import {
 	fakeBus,
 	type FakeBusOptions,
 	frame,
+	listSpaces,
 	memberBus,
 	streamOf,
 	type ToolHandler,
@@ -169,6 +170,18 @@ describe("accepted identity", () => {
 		await sub.emit("session_start");
 		expect(callsTo(bus, "/v1/invites/accept")).toEqual([]);
 		expect(toolListAuth(bus)).toEqual(["Bearer acc-tok"]);
+	});
+
+	test("a server that is too old activates no bus tool and warns", async () => {
+		const bus = fakeBus({ protocol: "none", list: [listSpaces] });
+		const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" } });
+		await app.emit("session_start");
+		await app.emit("session_shutdown");
+		expect(app.active()).toEqual(["read", "bus_foreign"]);
+		expect(app.warnings).toEqual([
+			`agent-bus: the server at ${URL_} is too old (protocol none, this plugin needs 2); upgrade the agent-message-bus server`,
+		]);
+		expect(callsTo(bus, "/v1/inbox/stream")).toEqual([]);
 	});
 
 	test("session_switch to a new session drops the accepted token and deactivates exactly the extension's bus tools", async () => {

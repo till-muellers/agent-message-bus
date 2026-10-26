@@ -4,6 +4,10 @@ import { createClient } from "../../extension/lib/bus/client.ts";
 import { createSessionCredentials } from "../../extension/lib/session/session-credentials.ts";
 import type { ActiveCredentials } from "../../extension/lib/session/stored-credentials.ts";
 import { CODE, fakeBus, URL_ } from "../fakes.ts";
+import type { ServerGate } from "../../extension/lib/connection/server-gate.ts";
+
+/** A gate that refuses the server the way a too old one does. */
+const refusingGate: ServerGate = { check: async () => ({ refused: "too old" }), last: () => undefined };
 
 function setup(options: { task?: string; persisted?: boolean } = {}) {
 	const bus = fakeBus({ task: options.task });
@@ -16,7 +20,8 @@ function setup(options: { task?: string; persisted?: boolean } = {}) {
 			return options.persisted ?? true;
 		},
 	};
-	return { bus, saved, session, deps: { client: createClient(bus.fetchFn), session, identity } };
+	const gate: ServerGate = { check: async () => "ok", last: () => undefined };
+	return { bus, saved, session, gate, deps: { client: createClient(bus.fetchFn), session, identity, gate } };
 }
 
 describe("acceptInvite", () => {
@@ -36,6 +41,14 @@ describe("acceptInvite", () => {
 	test("without a session file the reply says the token is not persisted", async () => {
 		const { deps } = setup({ persisted: false });
 		expect((await acceptInvite(deps, URL_, CODE)).result.message).toBe("Joined space demo as member worker. Not persisted: this session has no session file.");
+	});
+
+	test("a server that is too old is refused before the code is posted", async () => {
+		const { bus, saved, deps } = setup();
+		deps.gate = refusingGate;
+		await expect(acceptInvite(deps, URL_, CODE)).rejects.toThrow("too old");
+		expect(bus.calls).toEqual([]);
+		expect(saved).toEqual([]);
 	});
 
 	test("a rejected code saves nothing and keeps the session's credentials", async () => {

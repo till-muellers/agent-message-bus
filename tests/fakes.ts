@@ -100,6 +100,8 @@ export interface FakeBusOptions {
 	list?: RemoteTool[];
 	/** The first prompt `POST /v1/invites/accept` returns with the member token; omitted when undefined. */
 	task?: string;
+	/** The protocol `GET /healthz` reports; "none" answers without the header. */
+	protocol?: number | "none";
 }
 
 /** The fake server's `POST /v1/invites/accept`: `CODE` (any case and dashes) admits member worker of demo with `acc-tok`. */
@@ -110,11 +112,15 @@ function acceptInviteResponse(auth: string | undefined, task: string | undefined
 }
 
 /** Fake bus server following the HTTP contract; records every call. */
-export function fakeBus({ streams = [], tools = {}, list = [], task }: FakeBusOptions = {}) {
+export function fakeBus({ streams = [], tools = {}, list = [], task, protocol = 2 }: FakeBusOptions = {}) {
 	const calls: Call[] = [];
 	const fetchFn: FetchLike = async (url, init) => {
 		const body = init.body ? JSON.parse(init.body) : undefined;
 		calls.push({ url, method: init.method, auth: init.headers.Authorization, body });
+		if (url.endsWith("/healthz")) {
+			const headers = protocol === "none" ? {} : { "Agent-Bus-Protocol": String(protocol) };
+			return new Response("ok", { status: 200, headers });
+		}
 		if (url.endsWith("/v1/inbox/stream")) return streams.shift()?.() ?? errorResponse(401, "unauthenticated", "invalid token");
 		if (url.endsWith("/v1/tools")) return Response.json(list);
 		if (url.endsWith("/v1/invites/accept")) return acceptInviteResponse(init.headers.Authorization, task);
