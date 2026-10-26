@@ -40,7 +40,7 @@ flowchart LR
   sse -- "re-read" --> db
 ```
 
-The omp extension registers the server's tools in the session, provides `/bus login|promote|accept|spawn|status|logout|server|help`, and turns inbox entries into session messages: critical entries are delivered as `steer`, others as `followUp`. `/bus server start|stop|status` drives the local instance commands below.
+The omp extension registers the server's tools in the session, provides `/bus login|promote|accept|spawn|status|logout|server|help`, and turns inbox entries into session messages: the server's delivery class decides the mechanism (`interrupt` → `steer`, `queue` → `aside`, `deferred` → `nextTurn`). `/bus server start|stop|status` drives the local instance commands below.
 
 Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage one instance per data dir via the state file `<datadir>/agent-message-bus.state.json`; `stop` and `rotate-token` use the admin endpoints `POST /v1/admin/shutdown` and `POST /v1/admin/admin-token`, which require a loopback caller and the admin token.
 
