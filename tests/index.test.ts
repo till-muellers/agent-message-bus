@@ -63,12 +63,13 @@ describe("inbox streaming", () => {
 	});
 
 	test("the class and the phase decide the mechanism: an interactive session steers and wakes, a one-shot session waits", async () => {
-		for (const [mode, options] of [
+		const cases: [string, { deliverAs: string; triggerTurn: boolean }[]][] = [
 			["print", [{ deliverAs: "nextTurn", triggerTurn: false }, { deliverAs: "nextTurn", triggerTurn: false }]],
 			["json", [{ deliverAs: "nextTurn", triggerTurn: false }, { deliverAs: "nextTurn", triggerTurn: false }]],
 			["tui", [{ deliverAs: "aside", triggerTurn: false }, { deliverAs: "steer", triggerTurn: true }]],
 			["rpc", [{ deliverAs: "aside", triggerTurn: false }, { deliverAs: "steer", triggerTurn: true }]],
-		] as const) {
+		];
+		for (const [mode, options] of cases) {
 			const { sent } = await runSession(mode);
 			expect({ mode, options: sent.map(s => s.options) }).toEqual({ mode, options });
 		}
