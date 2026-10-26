@@ -8,6 +8,7 @@ Feature: Transports
   #   GET  /v1/tools            bearer auth
   #   POST /v1/tools/{name}     bearer auth
   #   GET  /v1/inbox/stream     bearer auth (see inbox.feature)
+  #   GET  /v1/guide            bearer auth (see guide.feature)
   #   /mcp                      MCP streamable HTTP, bearer auth
   #   POST /v1/admin/*          loopback + admin token (see "Admin endpoints")
   # Error body: {"error":{"code":"<code>","message":"<message>"}}
@@ -191,7 +192,12 @@ Feature: Transports
 
   Rule: MCP at /mcp exposes the same tools
 
-    # Stateless streamable HTTP with JSON responses; tools only.
+    # Stateless streamable HTTP with JSON responses; tools, plus the agent guide as instructions.
+
+    Scenario: initialize returns the agent guide as instructions
+      # Rule and budget in guide.feature.
+      When a client connects to /mcp with a leader token and sends initialize
+      Then the InitializeResult has instructions equal to the embedded guide
 
     Scenario: tools/list returns every registered tool sorted by name
       Given the registry holds tools "whoami" and "forbid"

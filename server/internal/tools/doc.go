@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/till-muellers/agent-message-bus/server/internal/guide"
 )
 
 //go:embed ledger_head.md.tmpl
@@ -24,6 +26,7 @@ func RenderMarkdown(reg *Registry) string {
 	groups := groupTools(ts)
 	var b strings.Builder
 	b.WriteString(strings.ReplaceAll(ledgerHead, "{{count}}", strconv.Itoa(len(ts))))
+	fmt.Fprintf(&b, "## Working on the bus\n\n%s\n", guideSection(guide.Text))
 	writeIndex(&b, groups)
 	for _, g := range groupOrder() {
 		if len(groups[g]) == 0 {
@@ -36,6 +39,19 @@ func RenderMarkdown(reg *Registry) string {
 	}
 	b.WriteString(ledgerTail)
 	return b.String()
+}
+
+// guideSection returns the guide without its title line, every heading one level deeper,
+// so it nests under the ledger's "Working on the bus" heading.
+func guideSection(text string) string {
+	_, body, _ := strings.Cut(text, "\n")
+	lines := strings.Split(strings.TrimLeft(body, "\n"), "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "#") {
+			lines[i] = "#" + l
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // groupTools buckets ts by group, keeping the registry's name order.
