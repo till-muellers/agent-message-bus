@@ -25,10 +25,12 @@ type inboxStore interface {
 	DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
 }
 
-// SpaceInfo summarises a space for listing.
+// SpaceInfo summarises a space for listing. Admins are the joined admins; Members
+// counts role member only.
 type SpaceInfo struct {
 	Name    string   `json:"name"`
 	Leaders []string `json:"leaders"`
+	Admins  []string `json:"admins"`
 	Members int      `json:"members"`
 	Joined  bool     `json:"joined"`
 }
@@ -57,11 +59,8 @@ func NewService(conn *sql.DB, r *Resolver, a memberAccounts, ib inboxStore, now 
 
 func (s *Service) stamp() string { return db.Timestamp(s.now()) }
 
-// List returns the spaces visible to p: all for leaders, its own for members.
+// List returns the spaces visible to p: all for leaders and admins, its own for members.
 func (s *Service) List(ctx context.Context, p auth.Principal) ([]SpaceInfo, error) {
-	if err := requireAgent(p); err != nil {
-		return nil, err
-	}
 	rows, err := listSpaces(ctx, s.db, p.SpaceID)
 	if err != nil {
 		return nil, err
@@ -78,11 +77,14 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]SpaceInfo, erro
 }
 
 func summarize(name string, ps []Participant, caller string) SpaceInfo {
-	info := SpaceInfo{Name: name, Leaders: []string{}}
+	info := SpaceInfo{Name: name, Leaders: []string{}, Admins: []string{}}
 	for _, pt := range ps {
-		if pt.Role == RoleLeader {
+		switch pt.Role {
+		case RoleAdmin:
+			info.Admins = append(info.Admins, pt.Name)
+		case RoleLeader:
 			info.Leaders = append(info.Leaders, pt.Name)
-		} else {
+		default:
 			info.Members++
 		}
 		if pt.Name == caller {
@@ -99,7 +101,8 @@ func requireLeaderRole(m Membership, action string) error {
 	return nil
 }
 
-// Create makes a new space led by p and runs the creation hooks.
+// Create makes a new space with p as its first participant (role leader, or admin for
+// an admin) and runs the creation hooks.
 func (s *Service) Create(ctx context.Context, p auth.Principal, name string) error {
 	if err := requireLeaderPrincipal(p, "create spaces"); err != nil {
 		return err
@@ -125,10 +128,11 @@ func (s *Service) createInTx(ctx context.Context, tx *sql.Tx, p auth.Principal, 
 	if err != nil {
 		return err
 	}
-	if err := insertParticipant(ctx, tx, id, p.AgentID, RoleLeader, ts); err != nil {
+	m := Membership{SpaceID: id, SpaceName: name, AgentID: p.AgentID, AgentName: p.AgentName,
+		Role: joinRole(p), Admin: p.Kind == auth.Admin}
+	if err := insertParticipant(ctx, tx, id, p.AgentID, m.Role, ts); err != nil {
 		return err
 	}
-	m := Membership{SpaceID: id, SpaceName: name, AgentID: p.AgentID, AgentName: p.AgentName, Role: RoleLeader}
 	for _, h := range s.hooks.Creation {
 		if err := h.OnSpaceCreated(ctx, tx, m); err != nil {
 			return fmt.Errorf("running creation hook: %w", err)
@@ -137,32 +141,40 @@ func (s *Service) createInTx(ctx context.Context, tx *sql.Tx, p auth.Principal, 
 	return nil
 }
 
-// Join adds leader p to an existing space as a leader.
+// Join adds leader or admin p to an existing space, with role leader or admin.
 func (s *Service) Join(ctx context.Context, p auth.Principal, name string) error {
 	if err := requireLeaderPrincipal(p, "join spaces"); err != nil {
 		return err
 	}
 	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
-		_, err := s.r.ResolveTx(ctx, tx, p, name)
-		if err == nil {
-			return nil, apperr.New(apperr.Conflict, "already a participant of %s", name)
-		}
-		if kind, _ := apperr.KindOf(err); kind != apperr.Forbidden {
-			return nil, err
-		}
-		id, _, err := spaceIDByName(ctx, tx, name)
+		id, found, err := spaceIDByName(ctx, tx, name)
 		if err != nil {
 			return nil, err
 		}
-		return nil, insertParticipant(ctx, tx, id, p.AgentID, RoleLeader, s.stamp())
+		if !found {
+			return nil, apperr.New(apperr.NotFound, "space %s not found", name)
+		}
+		if _, joined, err := participantRole(ctx, tx, id, p.AgentID); err != nil || joined {
+			if err == nil {
+				err = apperr.New(apperr.Conflict, "already a participant of %s", name)
+			}
+			return nil, err
+		}
+		return nil, insertParticipant(ctx, tx, id, p.AgentID, joinRole(p), s.stamp())
 	})
 }
 
-// Delete removes a space; only its sole remaining leader may do so.
-func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) error {
-	if err := requireAgent(p); err != nil {
-		return err
+// joinRole is the participant role of leader or admin p in a space it creates or joins.
+func joinRole(p auth.Principal) Role {
+	if p.Kind == auth.Admin {
+		return RoleAdmin
 	}
+	return RoleLeader
+}
+
+// Delete removes a space. Admins may delete any space; a leader only once no other
+// leader remains.
+func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) error {
 	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.r.ResolveTx(ctx, tx, p, name)
 		if err != nil {
@@ -170,6 +182,9 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) err
 		}
 		if err := requireLeaderRole(m, "delete spaces"); err != nil {
 			return nil, err
+		}
+		if m.Admin {
+			return nil, deleteSpace(ctx, tx, m.SpaceID)
 		}
 		n, err := countOtherLeaders(ctx, tx, m.SpaceID, m.AgentID)
 		if err != nil {

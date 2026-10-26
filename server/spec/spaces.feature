@@ -67,7 +67,7 @@ Feature: Spaces
       When leader "lead2" creates space "demo"
       Then the call fails with conflict "space demo already exists"
 
-    Scenario Outline: Only leader tokens may create spaces (<caller>)
+    Scenario Outline: Members cannot create spaces (<caller>)
       Given leader "lead" created space "demo"
       And leader "lead" invited member "worker" to space "demo"
       When <caller> creates space "gamma"
@@ -76,7 +76,6 @@ Feature: Spaces
       Examples:
         | caller          |
         | member "worker" |
-        | the admin       |
 
     Scenario Outline: Space names must be valid (<case>)
       When leader "lead" creates space "<space>"
@@ -110,7 +109,7 @@ Feature: Spaces
       When leader "lead" joins space "demo"
       Then the call fails with conflict "already a participant of demo"
 
-    Scenario Outline: Only leader tokens may join spaces (<caller>)
+    Scenario Outline: Members cannot join spaces (<caller>)
       Given leader "lead" created space "demo"
       And leader "lead" invited member "worker" to space "demo"
       When <caller> joins space "demo"
@@ -119,7 +118,6 @@ Feature: Spaces
       Examples:
         | caller          |
         | member "worker" |
-        | the admin       |
 
     Scenario: Joining an unknown space fails
       When leader "lead2" joins space "nope"
@@ -150,9 +148,9 @@ Feature: Spaces
       When leader "lead" lists spaces
       Then the call returns an empty list
 
-    Scenario: The admin cannot list spaces
+    Scenario: The admin lists every space
       When the admin lists spaces
-      Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
+      Then the call returns every space with "joined" false where the admin has not joined
 
     Scenario: Listing spaces takes no arguments
       When leader "lead" lists spaces with the extra argument "x"
@@ -224,9 +222,9 @@ Feature: Spaces
       When leader "stranger" deletes space "alpha"
       Then the call fails with forbidden "not a participant of space alpha"
 
-    Scenario: The admin cannot delete a space
+    Scenario: The admin deletes a space it has not joined
       When the admin deletes space "alpha"
-      Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
+      Then the call succeeds
 
     Scenario: A space with other leaders cannot be deleted
       When leader "lead" deletes space "alpha"

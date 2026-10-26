@@ -39,15 +39,18 @@ func newWorld(t *testing.T) *world {
 	db := dbtest.Open(t)
 	pub := broker.NewMemory(16)
 	w := &world{svc: NewService(db, pub, testNow), pub: pub, db: db, entries: map[string]Entry{}}
-	const lead, worker, alpha, beta = 1, 2, 1, 2
+	const lead, worker, ops, admin, alpha, beta = 1, 2, 3, 4, 1, 2
 	dbtest.SeedAgent(t, db, lead, "lead", "leader")
 	dbtest.SeedAgent(t, db, worker, "worker", "member")
+	dbtest.SeedAgent(t, db, ops, "ops", "admin")
+	dbtest.SeedAgent(t, db, admin, "admin", "admin")
 	dbtest.SeedSpace(t, db, alpha, "alpha", lead)
 	dbtest.SeedSpace(t, db, beta, "beta", lead)
-	w.agents = map[string]int64{"lead": lead, "worker": worker}
+	w.agents = map[string]int64{"lead": lead, "worker": worker, "ops": ops, "admin": admin}
 	w.spaces = map[string]int64{"alpha": alpha, "beta": beta}
 	w.principals = map[string]auth.Principal{
-		"admin":   {Kind: auth.Admin},
+		"admin":   {Kind: auth.Admin, AgentID: admin, AgentName: "admin", Bootstrap: true},
+		"ops":     {Kind: auth.Admin, AgentID: ops, AgentName: "ops"},
 		"leader":  {Kind: auth.Leader, AgentID: lead, AgentName: "lead"},
 		"memberA": {Kind: auth.Member, AgentID: worker, AgentName: "worker", SpaceID: w.spaces["alpha"]},
 		"memberB": {Kind: auth.Member, AgentID: worker, AgentName: "worker", SpaceID: w.spaces["beta"]},
@@ -168,7 +171,6 @@ func TestRead(t *testing.T) {
 		{name: "max limit", who: "leader", limit: 500, want: []string{"l1", "l2"}},
 		{name: "limit above max", who: "leader", limit: 501, wantErr: apperr.Invalid},
 		{name: "negative limit", who: "leader", limit: -1, wantErr: apperr.Invalid},
-		{name: "admin has no inbox", who: "admin", wantErr: apperr.Forbidden},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -262,11 +264,18 @@ func TestAck(t *testing.T) {
 	}
 }
 
-func TestAckAdminForbidden(t *testing.T) {
+func TestAdminInbox(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	_, err := w.svc.Ack(t.Context(), w.principals["admin"], w.entries["l2"].ID)
-	apperrtest.WantKind(t, err, apperr.Forbidden, "admin token has no inbox; mint a leader with bus_mint_leader")
+	w.insert(t, "ops", "alpha", "a")
+	b := w.insert(t, "ops", "beta", "b")
+	if got := w.read(t, "ops"); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("admin inbox = %v, want [a b]", got)
+	}
+	n, err := w.svc.Ack(t.Context(), w.principals["ops"], b.ID)
+	if err != nil || n != 2 {
+		t.Fatalf("Ack = %d, %v; want 2", n, err)
+	}
 }
 
 func TestPublishSignalsEachAgentOnce(t *testing.T) {

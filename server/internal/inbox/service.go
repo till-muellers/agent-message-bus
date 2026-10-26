@@ -72,9 +72,6 @@ func (s *Service) publish(es []Entry) {
 // Read returns p's entries with id > after in id order; members see only their space.
 // limit 0 means 100; otherwise it must be 1..500.
 func (s *Service) Read(ctx context.Context, p auth.Principal, after int64, limit int) ([]Entry, error) {
-	if err := requireAgent(p); err != nil {
-		return nil, err
-	}
 	limit, err := pageSize(limit)
 	if err != nil {
 		return nil, err
@@ -85,22 +82,12 @@ func (s *Service) Read(ctx context.Context, p auth.Principal, after int64, limit
 // Ack deletes p's entries with id <= upTo (members: only their space) and
 // returns how many were deleted. Acked entries are gone for good.
 func (s *Service) Ack(ctx context.Context, p auth.Principal, upTo int64) (int64, error) {
-	if err := requireAgent(p); err != nil {
-		return 0, err
-	}
 	return ackEntries(ctx, s.db, p.AgentID, upTo, spaceFilter(p))
 }
 
 // DeleteSpaceEntries drops every entry of agentID in spaceID through q.
 func (s *Service) DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, spaceID int64) error {
 	return deleteSpaceEntries(ctx, q, agentID, spaceID)
-}
-
-func requireAgent(p auth.Principal) error {
-	if p.Kind == auth.Admin {
-		return apperr.New(apperr.Forbidden, "admin token has no inbox; mint a leader with bus_mint_leader")
-	}
-	return nil
 }
 
 func pageSize(limit int) (int, error) {

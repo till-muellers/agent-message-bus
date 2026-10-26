@@ -6,7 +6,7 @@ const (
 	accessParticipants     = "Participants and admins."
 	accessParticipantsRead = "Participants and admins; no side effects."
 	accessSubscribers      = "Participants (admins join first)."
-	accessLeaders          = "Leaders only."
+	accessLeaders          = "Leaders and admins."
 	accessSpaceLeaders     = "Leaders of the space and admins."
-	accessInbox            = "Leaders and members."
+	accessInbox            = "Leaders, members and admins."
 )

@@ -299,25 +299,15 @@ func TestStreamClosesOnRootCancel(t *testing.T) {
 	stream.expectClosed()
 }
 
-func TestStreamAdminForbidden(t *testing.T) {
+func TestAdminStreamSlot(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/inbox/stream", nil)
-	req = req.WithContext(auth.WithPrincipal(req.Context(), w.principals["admin"]))
-	rec := httptest.NewRecorder()
-	w.svc.StreamHandler(t.Context()).ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", rec.Code)
+	w.svc.heartbeat = time.Millisecond
+	w.insert(t, "ops", "alpha", "o1")
+	ops := startStream(t.Context(), t, w, "ops")
+	if got := ops.entries(1); !slices.Equal(got, []string{"o1"}) {
+		t.Fatalf("admin backlog = %v, want [o1]", got)
 	}
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decoding error body %q: %v", rec.Body.String(), err)
-	}
-	if body.Error.Code != "forbidden" {
-		t.Fatalf("error code = %q, want forbidden", body.Error.Code)
-	}
+	wantConflict(t, openStream(t.Context(), t.Context(), t, w, "ops"), "ops")
+	startStream(t.Context(), t, w, "admin").expectPing()
 }
