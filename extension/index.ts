@@ -42,9 +42,12 @@ import { type DetachedSpawner, spawnDetached } from "./lib/launch/detached.ts";
 import { LAUNCHERS } from "./lib/launch/index.ts";
 import type { LaunchCommand, LaunchContext } from "./lib/launch/launcher.ts";
 import { executeLaunch } from "./lib/launch/run.ts";
-import { pluginArgs } from "./lib/spawn/plugin-args.ts";
+import { forwardedExtension, pluginArgs } from "./lib/spawn/plugin-args.ts";
 import { type Runner, spawnRunner } from "./lib/process/runner.ts";
 import { spawnWorker } from "./lib/spawn/spawn.ts";
+import { workerPluginVersion } from "./lib/spawn/worker-version.ts";
+import { installedPluginVersion } from "./lib/version/installed-plugin.ts";
+import { pluginVersion } from "./lib/version/plugin-version.ts";
 import { SPAWN_TOOL, type Spawn, spawnToolDefinition } from "./lib/spawn/spawn-tool.ts";
 
 export interface BusExtensionOptions {
@@ -78,20 +81,31 @@ function localServerCli(busEnv: BusEnv, options: BusExtensionOptions, which: Lau
 }
 
 /** `/bus spawn` and `bus_spawn_worker`: the first launcher detected in `launchContext` opens the worker. */
-function workerSpawner(launchContext: LaunchContext, options: BusExtensionOptions, session: Session): Spawn {
+function workerSpawner(launchContext: LaunchContext, options: BusExtensionOptions, session: Session, ownVersion: string): Spawn {
 	const launch = { runner: options.runner ?? spawnRunner, spawnDetached: options.spawnDetached ?? spawnDetached };
+	const argv = options.argv ?? process.argv;
 	const deps = {
 		client: session.client,
 		getActive: session.getActive,
 		launchers: LAUNCHERS,
 		launchContext,
-		pluginArgs: pluginArgs(options.argv ?? process.argv),
+		pluginArgs: pluginArgs(argv),
+		ownVersion,
+		workerVersion: () => workerPluginVersion({ forwardedExtension: forwardedExtension(argv), installed: () => installedPluginVersion(launch.runner) }),
 		execute: (cmd: LaunchCommand, signal?: AbortSignal) => executeLaunch(cmd, launch, signal),
 	};
 	return (req, signal) => spawnWorker(deps, req, signal);
 }
 
-function registerBusCommand(pi: ExtensionAPI, store: CredentialStore, session: Session, server: ServerCli, spawn: Spawn): void {
+function registerBusCommand(
+	pi: ExtensionAPI,
+	store: CredentialStore,
+	session: Session,
+	server: ServerCli,
+	spawn: Spawn,
+	ownVersion: string,
+	installed: () => Promise<string | undefined>,
+): void {
 	pi.registerCommand("bus", {
 		description: COMMAND_DESCRIPTION,
 		handler: async (args: string | string[] | undefined, ctx) => {
@@ -99,7 +113,19 @@ function registerBusCommand(pi: ExtensionAPI, store: CredentialStore, session: S
 			const { client, credentials, restart, logout, clearAccepted } = session;
 			const accept = async (url: string, code: string) => session.join(await session.accept(url, code));
 			const spawnHere = (req: { space: string; name: string; task?: string }) => spawn({ ...req, cwd: ctx.cwd });
-			const deps = { store, client, session: credentials, server, restart, stop: logout, accept, clearAccepted, spawn: spawnHere };
+			const deps = {
+				store,
+				client,
+				session: credentials,
+				server,
+				restart,
+				stop: logout,
+				accept,
+				clearAccepted,
+				spawn: spawnHere,
+				pluginVersion: ownVersion,
+				installedPluginVersion: installed,
+			};
 			const { message, level } = await runCommand(args, deps);
 			ctx.ui.notify(message, level);
 		},
@@ -153,11 +179,14 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 			sleep: options.sleep,
 		});
 		const which = options.which ?? ((name: string) => findOnPath(name, env.PATH));
-		const spawn = workerSpawner({ env, platform: options.platform ?? process.platform, which }, options, session);
+		// This plugin's version is the protocol the workers must understand; it is read once at load.
+		const ownVersion = await pluginVersion().catch(() => "unknown");
+		const installed = () => installedPluginVersion(options.runner ?? spawnRunner);
+		const spawn = workerSpawner({ env, platform: options.platform ?? process.platform, which }, options, session, ownVersion);
 		pi.registerFlag("bus-url", { type: "string", description: "Bus url for --bus-accept" });
 		pi.registerFlag("bus-accept", { type: "string", description: "Invite code to redeem when the session starts" });
 		pi.registerTool(spawnToolDefinition(pi, spawn));
-		registerBusCommand(pi, store, session, localServerCli(busEnv, options, which, env), spawn);
+		registerBusCommand(pi, store, session, localServerCli(busEnv, options, which, env), spawn, ownVersion, installed);
 		registerSessionEvents(pi, store, session);
 	};
 }

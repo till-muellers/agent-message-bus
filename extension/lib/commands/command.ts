@@ -11,6 +11,7 @@ import { type CredentialStore, trimUrl } from "../session/stored-credentials.ts"
 import { errorMessage } from "../bus/errors.ts";
 import { type ServerCli, serverCommand } from "../local-server/server-cli.ts";
 import type { SpawnRequest, SpawnResult } from "../spawn/spawn.ts";
+import { installedSkewWarning } from "../version/installed-plugin.ts";
 
 export interface CommandDeps {
 	store: CredentialStore;
@@ -29,6 +30,10 @@ export interface CommandDeps {
 	clearAccepted(): Promise<void>;
 	/** `/bus spawn <space> <name> [task…]`: invites the member and starts it in a new terminal tab (`lib/spawn/spawn.ts`); cwd is the session's. */
 	spawn(req: Omit<SpawnRequest, "cwd">): Promise<SpawnResult>;
+	/** This plugin's version: the protocol it implements. */
+	pluginVersion: string;
+	/** The version of the installed omp plugin; undefined when it cannot be read. */
+	installedPluginVersion(): Promise<string | undefined>;
 }
 
 interface Whoami {
@@ -53,7 +58,12 @@ async function status(deps: CommandDeps): Promise<CommandResult> {
 	if (!url || !token) return { message: `Not logged in.\n${USAGE}`, level: "info" };
 	const me = (await deps.client.callTool(url, token, "bus_whoami", {})) as Whoami;
 	const spaces = me.spaces.map(s => `${s.name} (${s.role})`).join(", ") || "none";
-	return { message: `${url}: ${me.kind}${me.name ? ` ${me.name}` : ""}; spaces: ${spaces}`, level: "info" };
+	const lines = [`${url}: ${me.kind}${me.name ? ` ${me.name}` : ""}; spaces: ${spaces}`];
+	const installed = await deps.installedPluginVersion();
+	lines.push(`extension ${deps.pluginVersion}`, `installed plugin ${installed ?? "unknown"}`);
+	const warning = installedSkewWarning(installed, deps.pluginVersion);
+	if (warning) lines.push(warning);
+	return { message: lines.join("\n"), level: "info" };
 }
 
 async function login(deps: CommandDeps, [rawUrl, token]: string[]): Promise<CommandResult> {

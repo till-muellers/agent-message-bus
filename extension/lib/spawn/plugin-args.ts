@@ -35,3 +35,15 @@ export function pluginArgs(argv: readonly string[], cwd: string = process.cwd())
 	}
 	return out;
 }
+
+/** The extension the leader forwards to a worker (`-e`/`--extension`); undefined when none is forwarded. */
+export function forwardedExtension(argv: readonly string[], cwd: string = process.cwd()): string | undefined {
+	for (let i = 0; i < argv.length; i++) {
+		const arg = argv[i];
+		if (arg === "--") break;
+		const equals = equalsForm(arg);
+		if (equals && (equals[0] === "--extension" || equals[0] === "-e")) return forwardedValue(equals[0], equals[1], cwd);
+		if ((arg === "--extension" || arg === "-e") && i + 1 < argv.length) return forwardedValue(arg, argv[++i], cwd);
+	}
+	return undefined;
+}
