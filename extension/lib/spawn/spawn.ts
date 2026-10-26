@@ -8,6 +8,7 @@ import type { ActiveCredentials } from "../session/stored-credentials.ts";
 import { errorMessage, NOT_LOGGED_IN } from "../bus/errors.ts";
 import type { LaunchCommand, LaunchContext, Launcher } from "../launch/launcher.ts";
 import { pickLauncher } from "../launch/select.ts";
+import { skewError } from "./worker-version.ts";
 
 export interface SpawnDeps {
 	client: BusClient;
@@ -16,6 +17,10 @@ export interface SpawnDeps {
 	launchContext: LaunchContext;
 	/** The leader's extension-loading flags (`plugin-args.ts`), placed right after `omp`. */
 	pluginArgs: readonly string[];
+	/** This plugin's version: the protocol the worker must understand. */
+	ownVersion: string;
+	/** The plugin version the worker will load; undefined when it cannot be read. */
+	workerVersion(): Promise<string | undefined>;
 	execute(cmd: LaunchCommand, signal?: AbortSignal): Promise<void>;
 }
 
@@ -58,6 +63,9 @@ export async function spawnWorker(deps: SpawnDeps, req: SpawnRequest, signal?: A
 	const active = deps.getActive();
 	if (!active) throw new Error(NOT_LOGGED_IN);
 	const launcher = await requireLauncher(deps);
+	// The check runs before the invite: a doomed spawn must not burn an invite code.
+	const skew = skewError(await deps.workerVersion(), deps.ownVersion);
+	if (skew) throw new Error(skew);
 	const code = await invite(deps, active, req);
 	const argv = ["omp", ...deps.pluginArgs, "--cwd", req.cwd, "--bus-url", active.url, "--bus-accept", code] as const;
 	await launch(deps, launcher, argv, req, signal);

@@ -40,6 +40,8 @@ function setup(overrides: Partial<SpawnDeps> = {}) {
 		launchers: [fakeLauncher("off", false), fakeLauncher("on", true), fakeLauncher("later", true)],
 		launchContext,
 		pluginArgs: [],
+		ownVersion: "0.2.0",
+		workerVersion: async () => undefined,
 		execute: async (cmd, signal) => void executed.push({ cmd, signal }),
 		...overrides,
 	};
@@ -86,6 +88,27 @@ describe("spawnWorker", () => {
 		const { deps, calls } = setup({ launchers: [fakeLauncher("off", false)] });
 		await expect(spawnWorker(deps, { space: "demo", name: "worker", cwd: "/w" })).rejects.toThrow("no terminal launcher found for this environment");
 		expect(calls).toEqual([]);
+	});
+
+	test("a worker with an older plugin is refused before the invite, so no code is wasted and no terminal opens", async () => {
+		const { deps, calls, executed } = setup({ ownVersion: "0.2.0", workerVersion: async () => "0.1.0" });
+		await expect(spawnWorker(deps, { space: "demo", name: "worker", cwd: "/w" })).rejects.toThrow(
+			"the worker would load omp plugin 0.1.0, which is older than the protocol 0.2.0; run omp plugin upgrade @till-muellers/omp-agent-message-bus",
+		);
+		expect(calls).toEqual([]);
+		expect(executed).toEqual([]);
+	});
+
+	test("a worker with the same or a newer plugin version is spawned", async () => {
+		for (const version of ["0.2.0", "0.3.0"]) {
+			const { deps, calls } = setup({ ownVersion: "0.2.0", workerVersion: async () => version });
+			expect(await spawnWorker(deps, { space: "demo", name: "worker", cwd: "/w" })).toEqual({
+				name: "worker",
+				space: "demo",
+				launcher: "on",
+			});
+			expect(calls).toEqual([[URL_, "lead-tok", "bus_invite_member", { space: "demo", name: "worker" }]]);
+		}
 	});
 
 	test("an invite result without a code is an invalid response and launches nothing", async () => {

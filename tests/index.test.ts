@@ -392,6 +392,8 @@ describe("worker spawn", () => {
 		const runs: { argv: string[]; options?: RunOptions }[] = [];
 		const runner: Runner = async (command, args, runOptions) => {
 			runs.push({ argv: [command, ...args], options: runOptions });
+			// `omp plugin list --json` reports the installed plugin; the launcher runs answer with nothing.
+			if (args[0] === "plugin") return { code: 0, stdout: JSON.stringify({ npm: [], marketplace: [] }), stderr: "" };
 			return { code: 0, stdout: "", stderr: "" };
 		};
 		const app = await boot({ fetchFn: bus.fetchFn, env, runner, platform: "linux", which: async () => undefined, argv: [], ...options });
@@ -399,13 +401,15 @@ describe("worker spawn", () => {
 		return { app, invites: () => callsTo(bus, "/bus_invite_member"), runs };
 	}
 	const tmuxRun = (cwd: string, ...plugin: string[]) => ["tmux", "new-window", "-n", "worker", "--", "omp", ...plugin, "--cwd", cwd, "--bus-url", URL_, "--bus-accept", CODE];
+	/** The launcher runs, without the `omp plugin list` of the version check. */
+	const launches = (runs: { argv: string[]; options?: RunOptions }[]) => runs.filter(run => run.argv[0] !== "omp");
 
 	test("/bus spawn invites the member with its task and the active token, and opens a tmux window", async () => {
 		const { app, invites, runs } = await leaderInTmux();
 		await app.run("spawn demo worker fix the bug");
 		await app.emit("session_shutdown");
 		expect(invites()).toMatchObject([{ url: `${URL_}/v1/tools/bus_invite_member`, auth: "Bearer lead", body: { space: "demo", name: "worker", task: "fix the bug" } }]);
-		expect(runs.map(r => r.argv)).toEqual([tmuxRun("/w")]);
+		expect(launches(runs).map(run => run.argv)).toEqual([tmuxRun("/w")]);
 		expect(app.notes).toEqual(["Started worker worker in space demo (tmux)."]);
 	});
 
@@ -413,7 +417,7 @@ describe("worker spawn", () => {
 		const { app, runs } = await leaderInTmux(inviteOk, { argv: ["bun", "omp", "--plugin-dir", "/amb", "-e", "/amb/x.ts", "--model", "m"] });
 		await app.run("spawn demo worker");
 		await app.emit("session_shutdown");
-		expect(runs.map(r => r.argv)).toEqual([tmuxRun("/w", "--plugin-dir", "/amb", "-e", "/amb/x.ts")]);
+		expect(launches(runs).map(run => run.argv)).toEqual([tmuxRun("/w", "--plugin-dir", "/amb", "-e", "/amb/x.ts")]);
 	});
 
 	test("bus_spawn_worker resolves cwd against the session's, passes its abort signal to the launcher, and maps bus errors", async () => {
@@ -424,8 +428,8 @@ describe("worker spawn", () => {
 		const out = await tool.execute("id", { space: "demo", name: "worker", cwd: "server" }, signal, undefined, { cwd: "/w" });
 		await tool.execute("id", { space: "demo", name: "worker" }, undefined, undefined, { cwd: "/w" });
 		expect(JSON.parse(out.content[0].text)).toEqual({ name: "worker", space: "demo", launcher: "tmux" });
-		expect(runs.map(r => r.argv)).toEqual([tmuxRun(resolve("/w", "server")), tmuxRun("/w")]);
-		expect(runs[0].options).toEqual({ timeoutMs: 15_000, signal });
+		expect(launches(runs).map(run => run.argv)).toEqual([tmuxRun(resolve("/w", "server")), tmuxRun("/w")]);
+		expect(launches(runs)[0].options).toEqual({ timeoutMs: 15_000, signal });
 		expect(out.content[0].text).not.toContain(CODE);
 		denied = true;
 		await expect(tool.execute("id", { space: "demo", name: "worker" }, undefined, undefined, { cwd: "/w" })).rejects.toThrow("forbidden: only leaders can invite");

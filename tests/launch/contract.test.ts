@@ -192,6 +192,8 @@ describe("launcher contract", () => {
 			launchers: LAUNCHERS,
 			launchContext: nowhere,
 			pluginArgs: [],
+			ownVersion: "0.2.0",
+			workerVersion: async () => undefined,
 			execute: async () => {},
 		};
 		await expect(spawnWorker(deps, { space: "demo", name: "worker", cwd: "/w" })).rejects.toThrow("no terminal launcher found for this environment");
