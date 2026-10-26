@@ -45,8 +45,9 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 
 | Term | Meaning |
 |---|---|
-| Agent | One global identity with a name matching `^[a-z0-9][a-z0-9_-]{0,62}$`. An agent is either a leader agent or a member agent, never both. |
-| Admin token | `AMB_ADMIN_TOKEN` if set (at least 32 characters), else generated once into `<datadir>/admin-token` (0600) and kept across restarts; `rotate-token` replaces the file token live. It can only mint leader tokens (`bus_mint_leader`) and call the loopback admin endpoints; it has no inbox and can't act in spaces. |
+| Agent | One global identity with a name matching `^[a-z0-9][a-z0-9_-]{0,62}$`. An agent is an admin, a leader or a member agent, never two of them. |
+| Admin | The bootstrap admin: agent `admin` of kind `admin`, created on the first start of a database and reused afterwards. A database that holds a non-admin agent named `admin` refuses to start. |
+| Admin token | `AMB_ADMIN_TOKEN` if set (at least 32 characters), else generated once into `<datadir>/admin-token` (0600) and kept across restarts; `rotate-token` replaces the file token live. It authenticates as the bootstrap admin `admin`. It can only mint leader tokens (`bus_mint_leader`) and call the loopback admin endpoints; it has no inbox and can't act in spaces. |
 | Leader token | Minted by the admin. Not bound to a space. Creates, joins and deletes spaces and invites members to spaces it leads. Minting again for the same leader issues an additional token. |
 | Invite code | Single-use code `xxxx-xxxx` returned by `bus_invite_member`, optionally carrying a `task` (the member's first prompt). Stored hashed, expires after 10 minutes, cancelled by `bus_revoke_member` for that name. Redeemed with `POST /v1/invites/accept` (code as bearer) for a member token and the task. |
 | Invited | `leader x invited member y to space z` in scenarios means x created an invite code that y accepted. |
@@ -79,6 +80,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [schema.feature](schema.feature) | The single irreversible `0001_schema` migration with kind/role `admin`; later numbered migrations apply on top |
 | [tool-descriptions.feature](tool-descriptions.feature) | Tool descriptions: purpose first, a separate access sentence, pitfalls, the critical property, and the `bus_spawn_worker` entry in TOOLS.md |
 | [delivery-class.feature](delivery-class.feature) | The delivery class of every inbox entry (`interrupt`, `queue`, `deferred`), decided by the server from type and critical flag; returned on every read path |
+| [admin-tokens.feature](admin-tokens.feature) | The instance admin token is the bootstrap admin `admin`: created once, reused on restart, never stored, not mintable as a leader |
 
 ## Design decisions
 

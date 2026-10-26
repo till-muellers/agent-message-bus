@@ -185,9 +185,9 @@ Feature: Spaces
 
   Rule: Identity (bus_whoami)
 
-    Scenario: The admin has no name and no spaces
+    Scenario: The admin is the bootstrap admin "admin" with no spaces
       When the admin asks who it is
-      Then the call returns kind "admin" and spaces []
+      Then the call returns kind "admin", name "admin" and spaces []
 
     Scenario: A leader sees its name and every space it participates in, ordered by name
       Given leader "lead" created space "beta"

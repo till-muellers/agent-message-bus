@@ -64,7 +64,7 @@ func TestAuthenticate(t *testing.T) {
 		want  Principal
 		err   apperr.Kind
 	}{
-		{"admin", testAdmin, Principal{Kind: Admin}, ""},
+		{"admin", testAdmin, Principal{Kind: Admin, AgentName: BootstrapName, Bootstrap: true}, ""},
 		{"leader additional token", leadTok2, lead, ""},
 		{"member", memberTok, Principal{Kind: Member, AgentID: memberID, AgentName: "worker", SpaceID: spaceID}, ""},
 		{"unknown", "amb_nope", Principal{}, apperr.Unauthenticated},

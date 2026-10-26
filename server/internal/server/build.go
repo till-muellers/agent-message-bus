@@ -16,10 +16,14 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
 
-// Build wires every service onto conn and returns the routed handler.
-// Inbox streams end when streamRoot is cancelled; shutdown is called by POST /v1/admin/shutdown.
-func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown func()) http.Handler {
+// Build wires every service onto conn, ensures the bootstrap admin exists and returns the
+// routed handler. Inbox streams end when streamRoot is cancelled; shutdown is called by
+// POST /v1/admin/shutdown.
+func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown func()) (http.Handler, error) {
 	authSvc := auth.NewService(conn, adminToken, time.Now)
+	if err := authSvc.Bootstrap(streamRoot); err != nil {
+		return nil, err
+	}
 	inboxSvc := inbox.NewService(conn, broker.NewMemory(256), time.Now)
 	resolver := spaces.NewResolver(conn)
 	msgSvc := messaging.NewService(conn, resolver, inboxSvc, time.Now)
@@ -33,5 +37,5 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 	reg := tools.New(tools.Deps{
 		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc, Invites: invSvc,
 	})
-	return Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, shutdown)
+	return Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, shutdown), nil
 }

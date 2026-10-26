@@ -20,9 +20,19 @@ const adminToken = "admin-token-0123456789-0123456789-abcdef"
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := httptest.NewServer(server.Build(ctx, dbtest.Open(t), adminToken, func() {}))
+	srv := httptest.NewServer(mustBuild(ctx, t, func() {}))
 	t.Cleanup(func() { cancel(); srv.Close() })
 	return srv
+}
+
+// mustBuild builds the server on a fresh database and fails the test on error.
+func mustBuild(ctx context.Context, t *testing.T, shutdown func()) http.Handler {
+	t.Helper()
+	h, err := server.Build(ctx, dbtest.Open(t), adminToken, shutdown)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	return h
 }
 
 func do(t *testing.T, srv *httptest.Server, method, path, token, body string) (int, []byte) {
@@ -171,7 +181,7 @@ func TestInboxStreamOnePerAgent(t *testing.T) {
 func TestAdminEndpoints(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	down := make(chan struct{}, 1)
-	srv := httptest.NewServer(server.Build(ctx, dbtest.Open(t), adminToken, func() { down <- struct{}{} }))
+	srv := httptest.NewServer(mustBuild(ctx, t, func() { down <- struct{}{} }))
 	t.Cleanup(func() { cancel(); srv.Close() })
 	next := strings.Repeat("r", 40)
 	if status, body := do(t, srv, http.MethodPost, "/v1/admin/admin-token", adminToken, `{"token":"`+next+`"}`); status != http.StatusOK {
@@ -190,5 +200,15 @@ func TestAdminEndpoints(t *testing.T) {
 	case <-down:
 	default:
 		t.Fatal("shutdown callback not called")
+	}
+}
+
+func TestBuildBootstrapError(t *testing.T) {
+	t.Parallel()
+	conn := dbtest.Open(t)
+	dbtest.SeedAgent(t, conn, 1, "admin", "leader")
+	_, err := server.Build(context.Background(), conn, adminToken, func() {})
+	if err == nil || !strings.Contains(err.Error(), "agent admin is a leader agent") {
+		t.Fatalf("Build err = %v, want the bootstrap conflict", err)
 	}
 }

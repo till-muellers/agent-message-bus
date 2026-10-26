@@ -15,12 +15,14 @@ const (
 	Member Kind = "member"
 )
 
-// Principal is the authenticated caller. SpaceID is set only for members.
+// Principal is the authenticated caller. SpaceID is set only for members; Bootstrap
+// is true only for the instance admin token.
 type Principal struct {
 	Kind      Kind
 	AgentID   int64
 	AgentName string
 	SpaceID   int64
+	Bootstrap bool
 }
 
 type principalKey struct{}

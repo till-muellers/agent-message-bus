@@ -76,7 +76,7 @@ Feature: Local instance management
       Then the output is "agent-message-bus is not running"
       And the command succeeds
 
-  Rule: admin-token prints the admin token
+  Rule: admin-token prints the bootstrap admin's token
 
     Scenario: The token file is generated when missing
       When I run "agent-message-bus admin-token"

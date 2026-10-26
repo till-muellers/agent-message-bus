@@ -19,6 +19,7 @@ Feature: One fresh schema as the service's first iteration
       When the server starts
       Then schema_migrations holds exactly version 1
       And the tables are agents, spaces, tokens, participants, topics, topic_subscriptions, blackboards, threads, posts, thread_subscriptions, inbox and invites
+      And the bootstrap admin "admin" exists
 
     Scenario: agents accept the kinds admin, leader and member
       Given a fresh database
