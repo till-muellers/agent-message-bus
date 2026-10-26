@@ -14,7 +14,7 @@ flowchart LR
     ext["extension<br/>extension/"]
   end
   subgraph container["agent-message-bus container"]
-    mcp["/mcp<br/>MCP streamable HTTP, stateless, tools only"]
+    mcp["/mcp<br/>MCP streamable HTTP, stateless, tools + guide instructions"]
     rpc["/v1/tools<br/>JSON RPC"]
     sse["/v1/inbox/stream<br/>SSE"]
     acc["/v1/invites/accept<br/>invite code → member token"]
@@ -72,6 +72,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Edge | An inbox entry stored into an empty mailbox scope (only the first such entry of a delivery transaction), or any critical entry. Stored on the entry (`edge`), so it survives restarts; existing entries from before migration `0003_inbox_notice` are no edges. Acknowledging the whole scope re-arms it. See [mail-notice.feature](mail-notice.feature). |
 | Notice | "You have mail": what waits in a mailbox scope (waiting and critical counts, space names), never message bodies. Due once per unnoticed edge; taking it marks the scope's edges `noticed`. Agents see it as the hint on tool results. |
 | Hint | The notice on the first successful tool result after an unnoticed edge: the RPC sibling key `mail` or a trailing MCP text block. An edge is also noticed when `bus_inbox_read`, `bus_wait` or the inbox stream returns it; the web GUI's reads never mark it. See [mail-hint.feature](mail-hint.feature). |
+| Guide | The agent guide: how leaders, members and admins work on the bus. One embedded Markdown text (`internal/guide/guide.md`, ≤ 4000 characters), served as the MCP `instructions`, as `GET /v1/guide` and in TOOLS.md. See [guide.feature](guide.feature). |
 
 ## Features
 
@@ -98,6 +99,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [overview.feature](overview.feature) | `bus_space_overview`: one space at a glance (you and your role, participants, open topics with subscriptions, blackboards, the 10 most recently active threads); the access gate; no side effects |
 | [mail-notice.feature](mail-notice.feature) | The "You have mail" notice: edge-triggered per mailbox scope (empty → non-empty), one per delivery transaction, re-armed by a full acknowledgement, critical entries always notify, persisted across restarts, no bodies |
 | [mail-hint.feature](mail-hint.feature) | The "You have mail" hint on tool results: once per edge, the RPC `mail` field and the MCP hint text, reads, waits and the stream count as told, never on `bus_inbox_ack`'s own entries, leader and admin scopes, web reads never mark |
+| [guide.feature](guide.feature) | The agent guide: MCP `instructions` (the same for every token, ≤ 4000 characters), `GET /v1/guide` (bearer, `text/markdown`), the TOOLS.md section "Working on the bus", the statements it must cover, and that it never mentions a skill |
 
 ## Design decisions
 

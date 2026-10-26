@@ -15,6 +15,8 @@ Feature: One agent guide, served by the bus to every client
   # PO ruling: the skill skills/agent-message-bus/ is retired completely, with no connect-only skill.
   # The cutover (what replaces each part of SKILL.md, which files change) is in analysis.md section 6.
   # Draft text: guide-draft.md in this folder.
+  # Built (slice 11): rules :22, :36, :53, :60 and the first half of :94 moved to
+  # server/spec/guide.feature; the "no repo link to SKILL.md" step is left to E8c.
 
   Background:
     Given the bus is running with admin token "admin-token-0123456789-0123456789-abcdef"

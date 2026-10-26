@@ -12,14 +12,17 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/guide"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
 
 // NewHandler returns a bearer-authenticated, stateless MCP HTTP handler serving reg. A
 // successful tool result gains a trailing "You have mail" text block when notices has one.
+// Every client receives the agent guide as the server instructions.
 func NewHandler(reg *tools.Registry, a *auth.Service, notices Noticer) http.Handler {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "agent-message-bus", Version: "1"}, nil)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "agent-message-bus", Version: "1"},
+		&mcp.ServerOptions{Instructions: guide.Text})
 	for _, t := range reg.List() {
 		srv.AddTool(&mcp.Tool{Name: t.Name, Description: t.Description, InputSchema: t.Schema}, handler(t, notices))
 	}

@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/till-muellers/agent-message-bus/server/internal/guide"
 )
 
 func TestToolsLedgerIsCurrent(t *testing.T) {
@@ -13,6 +15,17 @@ func TestToolsLedgerIsCurrent(t *testing.T) {
 	}
 	if RenderMarkdown(New(Deps{})) != string(want) {
 		t.Fatal("TOOLS.md is stale: run go run ./cmd/tooldoc > TOOLS.md")
+	}
+}
+
+func TestToolsLedgerCarriesGuide(t *testing.T) {
+	doc := RenderMarkdown(New(Deps{}))
+	section := guideSection(guide.Text)
+	if !strings.Contains(doc, "\n## Working on the bus\n\n"+section+"\n") {
+		t.Fatal(`TOOLS.md lacks the guide as section "Working on the bus"`)
+	}
+	if !strings.Contains(section, "\n### Mail\n") || strings.Contains(section, "# Working on the agent message bus") {
+		t.Fatal("guide headings are not nested under the section")
 	}
 }
 
