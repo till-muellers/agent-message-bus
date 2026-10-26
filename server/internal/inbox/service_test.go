@@ -117,6 +117,7 @@ func TestInsert(t *testing.T) {
 	post.Blackboard, post.ThreadID, post.ThreadTitle = "plan", 7, "design"
 	closed.Type, closed.Topic = TopicClosed, "news"
 	in := []Entry{post, closed}
+	wantClass := []Class{ClassInterrupt, ClassDeferred}
 	tx, err := w.db.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
@@ -131,7 +132,7 @@ func TestInsert(t *testing.T) {
 	lastSeeded := w.entries["l2"].ID
 	for i := range in {
 		want := in[i]
-		want.ID, want.CreatedAt = got[i].ID, "2026-10-25T07:30:00.123456789Z"
+		want.ID, want.CreatedAt, want.Class = got[i].ID, "2026-10-25T07:30:00.123456789Z", wantClass[i]
 		if got[i].ID <= lastSeeded || (i > 0 && got[i].ID <= got[i-1].ID) {
 			t.Fatalf("entry %d id = %d, want increasing ids after %d", i, got[i].ID, lastSeeded)
 		}

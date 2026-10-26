@@ -25,7 +25,7 @@ Feature: Agent inbox
 
     Scenario: An entry exposes only its public fields
       When member "worker" reads its inbox with its "alpha" token
-      Then every returned entry has the fields "id", "space", "type", "from", "critical" and "createdAt"
+      Then every returned entry has the fields "id", "space", "type", "from", "critical", "class" and "createdAt"
       And the optional fields "topic", "blackboard", "threadId", "threadTitle" and "body" appear only when set
       And no entry exposes the recipient agent id or the space id
 

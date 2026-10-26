@@ -45,7 +45,7 @@ func (s *Service) insert(ctx context.Context, q db.DBTX, es []Entry) ([]Entry, e
 	createdAt := db.Timestamp(s.now())
 	out := make([]Entry, 0, len(es))
 	for _, e := range es {
-		e.CreatedAt = createdAt
+		e.CreatedAt, e.Class = createdAt, ClassOf(e.Type, e.Critical)
 		id, err := insertEntry(ctx, q, e)
 		if err != nil {
 			return nil, err

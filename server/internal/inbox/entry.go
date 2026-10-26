@@ -21,6 +21,7 @@ type Entry struct {
 	Type        Type   `json:"type"`
 	From        string `json:"from"`
 	Critical    bool   `json:"critical"`
+	Class       Class  `json:"class"` // derived by ClassOf from Type and Critical, never set by producers
 	Topic       string `json:"topic,omitempty"`
 	Blackboard  string `json:"blackboard,omitempty"`
 	ThreadID    int64  `json:"threadId,omitempty"`

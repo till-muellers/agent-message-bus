@@ -45,8 +45,9 @@ func startStream(root context.Context, t *testing.T, w *world, who string) *sseR
 }
 
 // openStream serves StreamHandler(root) as the named principal on its own
-// server and sends the stream request under ctx; the body closes at cleanup.
-func openStream(ctx, root context.Context, t *testing.T, w *world, who string) *http.Response {
+// server and sends the stream request under ctx, after applying opts to it;
+// the body closes at cleanup.
+func openStream(ctx, root context.Context, t *testing.T, w *world, who string, opts ...func(*http.Request)) *http.Response {
 	t.Helper()
 	p := w.principals[who]
 	h := w.svc.StreamHandler(root)
@@ -57,6 +58,9 @@ func openStream(ctx, root context.Context, t *testing.T, w *world, who string) *
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
 	if err != nil {
 		t.Fatalf("building request: %v", err)
+	}
+	for _, opt := range opts {
+		opt(req)
 	}
 	resp, err := srv.Client().Do(req)
 	if err != nil {
@@ -255,6 +259,30 @@ func TestStreamDelivery(t *testing.T) {
 			}
 		})
 	}
+	t.Run("new connection replays from the lowest unacked id; Last-Event-ID is ignored", func(t *testing.T) {
+		t.Parallel()
+		w := newWorld(t)
+		w.svc.heartbeat = time.Millisecond
+		root, cancel := context.WithCancel(t.Context())
+		first := startStream(root, t, w, "memberA")
+		if got := first.entries(2); !slices.Equal(got, []string{"a1", "a2"}) {
+			t.Fatalf("first connection streamed %v, want [a1 a2]", got)
+		}
+		if _, err := w.svc.Ack(t.Context(), w.principals["memberA"], w.entries["a1"].ID); err != nil {
+			t.Fatalf("Ack: %v", err)
+		}
+		cancel()
+		first.expectClosed()
+		lastSeen := strconv.FormatInt(w.entries["a2"].ID, 10)
+		resp := openStream(t.Context(), t.Context(), t, w, "memberA", func(r *http.Request) {
+			r.Header.Set("Last-Event-ID", lastSeen)
+		})
+		second := readSSE(t, resp.Body)
+		if got := second.entries(1); !slices.Equal(got, []string{"a2"}) {
+			t.Fatalf("second connection streamed %v, want [a2]", got)
+		}
+		second.expectPing()
+	})
 }
 
 func TestStreamClosesOnRootCancel(t *testing.T) {

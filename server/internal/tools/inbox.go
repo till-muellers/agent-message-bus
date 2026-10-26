@@ -21,7 +21,7 @@ func inboxTools(ib *inbox.Service) []Tool {
 		define("bus_inbox_read", accessInbox,
 			"Returns inbox entries after the given id without removing them; members see only their space. "+
 				"Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks and reading does not acknowledge.",
-			"[{id, space, type, from, critical, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
+			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
 			nil, map[string]any{"after": integer("Return entries with id greater than this; default 0."), "limit": integer("Maximum entries, 1..500; default 100.")},
 			func(ctx context.Context, p auth.Principal, a readArgs) (any, error) {
 				return list(ib.Read(ctx, p, a.After, a.Limit))
