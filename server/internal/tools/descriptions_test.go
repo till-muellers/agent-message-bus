@@ -11,16 +11,16 @@ var wantAccess = map[string]string{
 	"bus_mint_admin":         "Admins only.",
 	"bus_list_admins":        "Admins only; no side effects.",
 	"bus_whoami":             "Any token; no side effects.",
-	"bus_list_spaces":        "Leaders see all spaces, members only their own; no side effects.",
+	"bus_list_spaces":        "Leaders and admins see all spaces, members only their own; no side effects.",
 	"bus_list_participants":  "Participants and admins; no side effects.",
 	"bus_list_topics":        "Participants and admins; no side effects.",
 	"bus_list_blackboards":   "Participants and admins; no side effects.",
 	"bus_list_threads":       "Participants and admins; no side effects.",
 	"bus_read_thread":        "Participants and admins; no side effects.",
-	"bus_create_space":       "Leaders only.",
-	"bus_join_space":         "Leaders only.",
+	"bus_create_space":       "Leaders and admins.",
+	"bus_join_space":         "Leaders and admins.",
 	"bus_leave_space":        "Participants.",
-	"bus_delete_space":       "Leaders of the space, once no other leader remains.",
+	"bus_delete_space":       "Leaders of the space once no other leader remains, and admins.",
 	"bus_invite_member":      "Leaders of the space and admins.",
 	"bus_revoke_member":      "Leaders of the space and admins.",
 	"bus_send_direct":        "Participants and admins; critical requires a leader or an admin.",
@@ -36,8 +36,8 @@ var wantAccess = map[string]string{
 	"bus_close_topic":        "The topic's creator, leaders of the space and admins.",
 	"bus_delete_blackboard":  "The board's owner, leaders of the space and admins.",
 	"bus_remove_thread":      "The thread's creator, leaders of the space and admins.",
-	"bus_inbox_read":         "Leaders and members.",
-	"bus_inbox_ack":          "Leaders and members.",
+	"bus_inbox_read":         "Leaders, members and admins.",
+	"bus_inbox_ack":          "Leaders, members and admins.",
 }
 
 func TestEveryToolStatesAccess(t *testing.T) {
@@ -83,6 +83,7 @@ func TestPitfalls(t *testing.T) {
 		{"bus_close_topic", "the all topic cannot be closed, and a closed topic's name can be reused"},
 		{"bus_create_thread", "the creator is subscribed and gets later posts by others"},
 		{"bus_revoke_member", "an admin may also revoke leaders, the last leader included"},
+		{"bus_delete_space", "an admin may delete any space, even one with other leaders"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.tool, func(t *testing.T) {

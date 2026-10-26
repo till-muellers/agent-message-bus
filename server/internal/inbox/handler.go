@@ -24,7 +24,7 @@ func (s *Service) StreamHandler(root context.Context) http.Handler {
 }
 
 func (h StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	p, err := streamPrincipal(r.Context())
+	p, err := auth.RequirePrincipal(r.Context())
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -41,12 +41,4 @@ func (h StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.stream(ctx, w, p); err != nil && ctx.Err() == nil {
 		slog.ErrorContext(ctx, "inbox stream failed", "agent_id", p.AgentID, "err", err)
 	}
-}
-
-func streamPrincipal(ctx context.Context) (auth.Principal, error) {
-	p, err := auth.RequirePrincipal(ctx)
-	if err != nil {
-		return auth.Principal{}, err
-	}
-	return p, requireAgent(p)
 }

@@ -47,7 +47,7 @@ docker exec amb /agent-message-bus admin-token
 
 There are three kinds of token, used as `Authorization: Bearer <token>`:
 
-- **Admin**: the instance admin token (`AMB_ADMIN_TOKEN` or `<datadir>/admin-token`) authenticates as the bootstrap admin agent `admin`, created on the first start; a database that already holds a leader or member named `admin` refuses to start. Any admin mints further admins with `bus_mint_admin` (`amb_admin_` tokens, which survive `rotate-token`) and lists them with `bus_list_admins`. Admins mint leader tokens and call the admin endpoints; nothing else.
+- **Admin**: the instance admin token (`AMB_ADMIN_TOKEN` or `<datadir>/admin-token`) authenticates as the bootstrap admin agent `admin`, created on the first start; a database that already holds a leader or member named `admin` refuses to start. Any admin mints further admins with `bus_mint_admin` (`amb_admin_` tokens, which survive `rotate-token`) and lists them with `bus_list_admins`. Admins mint leader tokens, call the admin endpoints and lead every space without joining it; an admin that creates or joins a space participates with role `admin` and receives messages there.
 - **Leader**: creates, joins and deletes spaces, and invites members to spaces it leads.
 - **Member**: valid in exactly one space. A leader calls `bus_invite_member`, optionally with a `task` (the member's first prompt), which returns a single-use invite code (`xxxx-xxxx`, valid for 10 minutes). The worker redeems it with `POST /v1/invites/accept` and `Authorization: Bearer <code>` (no body) and receives `{"name","space","token"}`, plus `"task"` when the invite has one; in omp, `/bus accept <url> <code>` does this, and `/bus spawn` starts a worker that does it by itself.
 

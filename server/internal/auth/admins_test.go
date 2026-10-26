@@ -12,6 +12,7 @@ import (
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 )
 
 var adminTokenRE = regexp.MustCompile(`^amb_admin_[A-Za-z0-9_-]{43}$`)
@@ -81,14 +82,23 @@ func TestListAdmins(t *testing.T) {
 	s, root := bootstrapped(t)
 	_, lead := mustLeader(t, s, "lead")
 	mustMintAdmin(t, s, root, "web")
+	opsTok := mustMintAdmin(t, s, root, "ops")
 	mustMintAdmin(t, s, root, "ops")
-	mustMintAdmin(t, s, root, "ops")
-	_, err := s.ListAdmins(ctx, lead)
+	ops, err := s.Authenticate(ctx, opsTok)
+	if err != nil {
+		t.Fatalf("Authenticate ops: %v", err)
+	}
+	for i, space := range []string{"zeta", "demo"} {
+		id := int64(50 + i)
+		dbtest.SeedSpace(t, s.db, id, space, lead.AgentID)
+		dbtest.SeedParticipant(t, s.db, id, ops.AgentID, "admin")
+	}
+	_, err = s.ListAdmins(ctx, lead)
 	apperrtest.WantKind(t, err, apperr.Forbidden, "admin token required")
 	got, err := s.ListAdmins(ctx, root)
 	want := []AdminInfo{
 		{Name: "admin", Bootstrap: true, Tokens: 0, Spaces: []string{}},
-		{Name: "ops", Tokens: 2, Spaces: []string{}},
+		{Name: "ops", Tokens: 2, Spaces: []string{"demo", "zeta"}},
 		{Name: "web", Tokens: 1, Spaces: []string{}},
 	}
 	if err != nil || !reflect.DeepEqual(got, want) {

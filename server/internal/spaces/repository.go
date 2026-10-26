@@ -140,10 +140,10 @@ func deleteParticipant(ctx context.Context, q db.DBTX, spaceID, agentID int64) e
 	return nil
 }
 
-// listParticipants returns participants ordered leaders first, then by name.
+// listParticipants returns participants ordered admins, leaders, members, each by name.
 func listParticipants(ctx context.Context, q db.DBTX, spaceID int64) ([]Participant, error) {
 	rows, err := q.QueryContext(ctx, `SELECT a.name, p.role FROM participants p JOIN agents a ON a.id = p.agent_id
-		WHERE p.space_id = ? ORDER BY CASE p.role WHEN 'leader' THEN 0 ELSE 1 END, a.name`, spaceID)
+		WHERE p.space_id = ? ORDER BY CASE p.role WHEN 'admin' THEN 0 WHEN 'leader' THEN 1 ELSE 2 END, a.name`, spaceID)
 	if err != nil {
 		return nil, fmt.Errorf("listing participants: %w", err)
 	}

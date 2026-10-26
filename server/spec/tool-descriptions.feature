@@ -47,6 +47,7 @@ Feature: Tool descriptions guide the agent on their own
         | bus_close_topic       | the all topic cannot be closed, and a closed topic's name can be reused                   |
         | bus_send_direct       | an agent cannot send a direct message to itself                                           |
         | bus_revoke_member     | an admin may also revoke leaders, the last leader included                                |
+        | bus_delete_space      | an admin may delete any space, even one with other leaders                                |
         | bus_create_thread     | the creator is subscribed and gets later posts by others                                  |
 
     Scenario: The critical flag says what happens on each kind of client
@@ -60,7 +61,7 @@ Feature: Tool descriptions guide the agent on their own
       Examples:
         | tool              | access                           |
         | bus_invite_member | Leaders of the space and admins. |
-        | bus_inbox_read    | Leaders and members.             |
+        | bus_inbox_read    | Leaders, members and admins.     |
         | bus_spawn_worker  | Leaders of the space and admins. |
 
   Rule: The extension's own tool is documented like the server's

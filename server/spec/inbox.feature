@@ -105,9 +105,9 @@ Feature: Agent inbox
       And member "worker" reads its inbox with its "alpha" token again
       Then both calls return entries "a1, a2"
 
-    Scenario: The admin has no inbox to read
+    Scenario: The admin reads its own inbox
       When the admin reads its inbox
-      Then the call fails with forbidden "admin token has no inbox; mint a leader with bus_mint_leader"
+      Then the call returns an empty list
 
   Rule: Acknowledging (bus_inbox_ack) permanently deletes entries with id <= upTo
 
@@ -145,9 +145,9 @@ Feature: Agent inbox
       And member "worker" reading with its "alpha" token gets entries "a1, a2"
       And member "worker" reading with its "beta" token gets entries "b1"
 
-    Scenario: The admin has no inbox to acknowledge
+    Scenario: The admin acknowledges its own inbox
       When the admin acknowledges its inbox up to the id of entry "l2"
-      Then the call fails with forbidden "admin token has no inbox; mint a leader with bus_mint_leader"
+      Then the call returns {"acked": 0}
 
   Rule: Stored entries wake their recipients only after the transaction commits
 
@@ -256,10 +256,9 @@ Feature: Agent inbox
       When member "worker" opens the inbox stream with its "alpha" token
       Then the stream sends entries "a2"
 
-    Scenario: The admin cannot open an inbox stream
+    Scenario: The admin opens its inbox stream
       When the admin opens the inbox stream
-      Then the response status is 403
-      And the call fails with forbidden "admin token has no inbox; mint a leader with bus_mint_leader"
+      Then the response status is 200
 
     Scenario: The stream handler without an authenticated caller
       # Unreachable through the server routes, which authenticate first.

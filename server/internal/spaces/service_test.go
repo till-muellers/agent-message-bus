@@ -32,7 +32,6 @@ func TestCreate(t *testing.T) {
 		{name: "ok", p: lead, space: "beta"},
 		{name: "duplicate", p: lead, space: "alpha", wantKind: apperr.Conflict, wantMsg: "space alpha already exists"},
 		{name: "member", p: member, space: "gamma", wantKind: apperr.Forbidden},
-		{name: "admin", p: admin, space: "gamma", wantKind: apperr.Forbidden},
 		{name: "invalid name", p: lead, space: "", wantKind: apperr.Invalid},
 	}
 	for _, tc := range tests {
@@ -70,7 +69,6 @@ func TestJoin(t *testing.T) {
 		{name: "already participant", p: lead, space: "alpha", wantKind: apperr.Conflict,
 			wantMsg: "already a participant of alpha"},
 		{name: "member", p: member, space: "alpha", wantKind: apperr.Forbidden},
-		{name: "admin", p: admin, space: "alpha", wantKind: apperr.Forbidden},
 		{name: "unknown", p: other, space: "nope", wantKind: apperr.NotFound, wantMsg: "space nope not found"},
 		{name: "ok", p: other, space: "alpha"},
 	}
@@ -101,8 +99,8 @@ func TestList(t *testing.T) {
 	mustCreate(t, e, other, "beta")
 	mustCreate(t, e, lead, "alpha")
 	member, _ := inviteMember(t, e, lead, "alpha", "work")
-	alpha := SpaceInfo{Name: "alpha", Leaders: []string{"lead"}, Members: 1}
-	beta := SpaceInfo{Name: "beta", Leaders: []string{"other"}}
+	alpha := SpaceInfo{Name: "alpha", Leaders: []string{"lead"}, Admins: []string{}, Members: 1}
+	beta := SpaceInfo{Name: "beta", Leaders: []string{"other"}, Admins: []string{}}
 	joined := func(s SpaceInfo) SpaceInfo { s.Joined = true; return s }
 	tests := []struct {
 		name     string
@@ -112,7 +110,6 @@ func TestList(t *testing.T) {
 	}{
 		{name: "leader sees all", p: lead, want: []SpaceInfo{joined(alpha), beta}},
 		{name: "member sees own", p: member, want: []SpaceInfo{joined(alpha)}},
-		{name: "admin", p: admin, wantKind: apperr.Forbidden},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

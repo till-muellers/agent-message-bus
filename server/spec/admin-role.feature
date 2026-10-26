@@ -5,7 +5,8 @@ Feature: The admin is a role that leads every space
 
   # `admin` is an agent kind next to `leader` and `member`. An admin acts as a leader in
   # every space without joining it: read, write, post, critical, `all`, close, remove,
-  # delete boards, invite and revoke.
+  # delete boards, invite and revoke. It also creates, joins, leaves and deletes any space;
+  # creating or joining gives it a participant row with role "admin".
   #
   # Authority vs participation:
   #   - authority: every admin "leads" every space. All leader checks pass for it.
@@ -37,6 +38,18 @@ Feature: The admin is a role that leads every space
 
   Rule: An admin reads every space without joining it
 
+    Scenario: An admin lists every space
+      When admin "ops" lists spaces
+      Then the call returns:
+        | name  | leaders | admins | members | joined |
+        | demo  | lead    |        | 1       | false  |
+        | other | lead2   |        | 0       | false  |
+
+    Scenario: A leader's and a member's space lists are unchanged apart from the admins column
+      When member "worker" lists spaces
+      Then the call returns:
+        | name | leaders | admins | members | joined |
+        | demo | lead    |        | 1       | true   |
 
     Scenario: An admin lists the participants of a space it has not joined
       When admin "ops" lists the participants of space "demo"
@@ -169,9 +182,45 @@ Feature: The admin is a role that leads every space
       When leader "lead" revokes member "lead2" from space "demo"
       Then the call fails with conflict "lead2 is a leader of space demo; leaders cannot be revoked"
 
+    Scenario: An admin cannot revoke an admin with bus_revoke_member
+      Given admin "ops" joined space "demo"
+      And the bootstrap admin minted admin "web"
+      When admin "web" revokes member "ops" from space "demo"
+      Then the call fails with conflict "ops is an admin of space demo; admins cannot be revoked from a space"
+
+    Scenario: Nobody revokes an admin from a space with bus_revoke_member
+      Given admin "ops" joined space "demo"
+      When leader "lead" revokes member "ops" from space "demo"
+      Then the call fails with conflict "ops is an admin of space demo; admins cannot be revoked from a space"
+
     Scenario: An admin name cannot be invited as a member
       When leader "lead" invites member "ops" to space "demo"
       Then the call fails with conflict "agent ops is an admin agent"
+
+  Rule: An admin creates and deletes spaces
+
+    Scenario: An admin creates a space and participates in it as admin
+      When admin "ops" creates space "gamma"
+      Then the call succeeds
+      And the participants of space "gamma" are:
+        | name | role  |
+        | ops  | admin |
+      And the topic "all" of space "gamma" was created by "ops"
+
+    Scenario: An admin deletes a space that has leaders
+      When admin "ops" deletes space "demo"
+      Then the call succeeds
+      And the space "demo" no longer exists
+
+    Scenario: A leader still cannot delete a space that has other leaders
+      Given leader "lead2" joined space "demo"
+      When leader "lead" deletes space "demo"
+      Then the call fails with conflict "space demo has other leaders; they must leave first"
+
+    Scenario: A joined admin does not count as another leader
+      Given admin "ops" joined space "demo"
+      When leader "lead" deletes space "demo"
+      Then the call succeeds
 
   Rule: Admin authority does not leak to other kinds
 

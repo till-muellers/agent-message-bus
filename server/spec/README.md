@@ -46,15 +46,15 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Term | Meaning |
 |---|---|
 | Agent | One global identity with a name matching `^[a-z0-9][a-z0-9_-]{0,62}$`. An agent is an admin, a leader or a member agent, never two of them. |
-| Admin | The bootstrap admin: agent `admin` of kind `admin`, created on the first start of a database and reused afterwards. A database that holds a non-admin agent named `admin` refuses to start. |
-| Admin token | `AMB_ADMIN_TOKEN` if set (at least 32 characters), else generated once into `<datadir>/admin-token` (0600) and kept across restarts; `rotate-token` replaces the file token live. It authenticates as the bootstrap admin `admin`. Admin tokens can only mint leaders and admins, list admins and call the loopback admin endpoints; they have no inbox and can't act in spaces. |
+| Admin | An agent of kind `admin`. The bootstrap admin `admin` is created on the first start of a database and reused afterwards; a database that holds a non-admin agent named `admin` refuses to start. Admins lead every space without joining it; one that creates or joins a space participates with role `admin`. |
+| Admin token | `AMB_ADMIN_TOKEN` if set (at least 32 characters), else generated once into `<datadir>/admin-token` (0600) and kept across restarts; `rotate-token` replaces the file token live. It authenticates as the bootstrap admin `admin`. |
 | Minted admin | An admin agent created by any admin with `bus_mint_admin`; its tokens are `amb_admin_` + 43 base64url characters, stored hashed, not bound to a space. Re-minting issues an additional token. Minted admin tokens survive `rotate-token`, and minted admins can't replace the instance admin token. `bus_list_admins` lists every admin. |
 | Leader token | Minted by the admin. Not bound to a space. Creates, joins and deletes spaces and invites members to spaces it leads. Minting again for the same leader issues an additional token. |
 | Invite code | Single-use code `xxxx-xxxx` returned by `bus_invite_member`, optionally carrying a `task` (the member's first prompt). Stored hashed, expires after 10 minutes, cancelled by `bus_revoke_member` for that name. Redeemed with `POST /v1/invites/accept` (code as bearer) for a member token and the task. |
 | Invited | `leader x invited member y to space z` in scenarios means x created an invite code that y accepted. |
 | Member token | Minted by accepting an invite code. Valid in exactly one space. Accepting a new invite issues an additional token. Deleted when the member leaves or is revoked, or when the space is deleted. |
 | Space | A named workspace. Every space has the topic `all`. |
-| Participant | An agent in a space, with role `leader` or `member`. A space needs at least one leader. |
+| Participant | An agent in a space, with role `admin`, `leader` or `member`, listed in that order. A joined admin is not a leader: it does not count for the last-leader rule. |
 | Topic | A named channel in a space. Subscribers receive its messages; the creator is subscribed automatically. Closing a topic frees its name for reuse. |
 | `all` topic | Created with the space. Every participant receives it; it can't be subscribed, unsubscribed or closed; only leaders and admins may send to it. |
 | Direct message | A message to one participant of the same space. |
@@ -62,7 +62,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Blackboard | A named board in a space, owned by its creator. Holds threads. |
 | Thread / post | A titled discussion on a blackboard; posts are its messages and the only persistent message history. |
 | Subscription | Topic or thread subscription; it controls who receives topic messages and thread notifications. |
-| Inbox entry | One item in an agent's inbox: `direct_message`, `topic_message`, `topic_closed`, `thread_post`, `thread_removed` or `blackboard_removed`. Each entry carries a delivery class (`interrupt`, `queue` or `deferred`, see [delivery-class.feature](delivery-class.feature)). Entries are deleted when acknowledged. |
+| Inbox entry | One item in an agent's inbox: `direct_message`, `topic_message`, `topic_closed`, `thread_post`, `thread_removed` or `blackboard_removed`. Each entry carries a delivery class (`interrupt`, `queue` or `deferred`, see [delivery-class.feature](delivery-class.feature)). Leaders and admins read the entries of every space they participate in; members only those of their token's space. Entries are deleted when acknowledged. |
 
 ## Features
 
@@ -82,8 +82,8 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [tool-descriptions.feature](tool-descriptions.feature) | Tool descriptions: purpose first, a separate access sentence, pitfalls, the critical property, and the `bus_spawn_worker` entry in TOOLS.md |
 | [delivery-class.feature](delivery-class.feature) | The delivery class of every inbox entry (`interrupt`, `queue`, `deferred`), decided by the server from type and critical flag; returned on every read path |
 | [admin-tokens.feature](admin-tokens.feature) | The bootstrap admin `admin` and the instance admin token; minting (`bus_mint_admin`) and listing (`bus_list_admins`) admins, the audit line, rotation, and the admin endpoint guards |
-| [admin-role.feature](admin-role.feature) | An admin leads every space without joining it: reads, sends (incl. `all` and critical), posts, creates, closes, removes, invites and revokes members and leaders |
-| [admin-messaging.feature](admin-messaging.feature) | An admin that has not joined a space cannot be messaged there, gets nothing from `all` and cannot subscribe |
+| [admin-role.feature](admin-role.feature) | An admin leads every space without joining it: reads, sends (incl. `all` and critical), posts, creates, closes, removes, invites and revokes members and leaders; creates, lists and deletes any space |
+| [admin-messaging.feature](admin-messaging.feature) | An admin is reachable only in the spaces it joined (role `admin`): joining, messaging, its own inbox and stream, leaving |
 
 ## Design decisions
 

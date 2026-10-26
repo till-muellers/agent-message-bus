@@ -24,8 +24,10 @@ Feature: Admin agents, the bootstrap admin and admin tokens
       Then the bus holds exactly one agent named "admin" with kind "admin"
 
     Scenario: A restart reuses the bootstrap admin
+      Given the bootstrap admin joined space "demo" created by leader "lead"
       When the server restarts with the same database
       Then the bus still holds exactly one agent named "admin"
+      And the bootstrap admin is still a participant of space "demo"
 
     Scenario: The instance admin token is not stored in the database
       Then no token record holds the SHA-256 of "admin-token-0123456789-0123456789-abcdef"
@@ -118,11 +120,14 @@ Feature: Admin agents, the bootstrap admin and admin tokens
       Given the bootstrap admin minted admin "ops"
       And the bootstrap admin minted admin "ops" again
       And the bootstrap admin minted admin "web"
+      And the bootstrap admin minted leader "lead"
+      And leader "lead" created space "demo"
+      And admin "ops" joined space "demo"
       When admin "ops" calls bus_list_admins
       Then the call returns:
         | name  | bootstrap | tokens | spaces |
         | admin | true      | 0      |        |
-        | ops   | false     | 2      |        |
+        | ops   | false     | 2      | demo   |
         | web   | false     | 1      |        |
 
     Scenario: Leaders and members cannot list admins
@@ -153,11 +158,13 @@ Feature: Admin agents, the bootstrap admin and admin tokens
 
   Rule: Rotating the instance admin token changes only the bootstrap admin's credential
 
-    Scenario: rotate-token keeps the bootstrap admin
+    Scenario: rotate-token keeps the bootstrap admin and its participations
       Given an instance is running with the token from <datadir>/admin-token
+      And the bootstrap admin joined space "demo" created by leader "lead"
       When I run "agent-message-bus rotate-token"
       Then a call with the old token gets 401 unauthenticated
       And the new token authenticates as the bootstrap admin "admin"
+      And the bootstrap admin is still a participant of space "demo"
 
     Scenario: rotate-token does not revoke minted admins
       Given an instance is running with the token from <datadir>/admin-token

@@ -16,17 +16,9 @@ type Resolver struct{ db db.DBTX }
 // NewResolver returns a Resolver reading from db.
 func NewResolver(conn *sql.DB) *Resolver { return &Resolver{db: conn} }
 
-// requireAgent rejects the admin principal where admins have no rights: listing and deleting spaces.
-func requireAgent(p auth.Principal) error {
-	if p.Kind == auth.Admin {
-		return apperr.New(apperr.Forbidden, "admin token cannot act in spaces; mint a leader with bus_mint_leader")
-	}
-	return nil
-}
-
-// requireLeaderPrincipal rejects every principal that is not a leader agent.
+// requireLeaderPrincipal rejects every principal that is neither a leader nor an admin agent.
 func requireLeaderPrincipal(p auth.Principal, action string) error {
-	if p.Kind != auth.Leader {
+	if p.Kind != auth.Leader && p.Kind != auth.Admin {
 		return apperr.New(apperr.Forbidden, "only leaders may %s", action)
 	}
 	return nil
