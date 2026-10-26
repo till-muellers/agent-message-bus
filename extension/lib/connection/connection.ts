@@ -13,13 +13,15 @@ import { createDispatcher, type Dispatcher } from "../delivery/dispatcher.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
-import { INBOX_TOOLS, registerRemoteTools } from "../tools/remote-tools.ts";
+import { registerRemoteTools } from "../tools/remote-tools.ts";
 import type { ServerGate } from "./server-gate.ts";
 
 /** What the omp context says about the current session; updated on every event and command. */
 export interface SessionView {
 	mode?: string;
 	sub: boolean;
+	/** The id of the agent that runs the session (`ctx.agent.id`); the subagent's id in a subagent session. */
+	agentId?: string;
 	/** Whether the agent is idle right now (bound to the latest omp context). */
 	isIdle(): boolean;
 }
@@ -54,6 +56,7 @@ export interface Connection {
 
 export function createConnection({ pi, client, store, credentials, identity, view, gate, watermark, warn, sleep, localTools }: ConnectionDeps): Connection {
 	const tools = { registered: false, names: [] as string[] };
+	let withheld = false;
 	let active: ActiveCredentials | undefined;
 	const getActive = () => active;
 	const dispatcher = createDispatcher({
@@ -70,8 +73,19 @@ export function createConnection({ pi, client, store, credentials, identity, vie
 		async restart() {
 			inbox.stop();
 			await identity.load();
-			active = credentials.resolve(await store.load());
+			const resolved = credentials.resolve(await store.load());
+			active = resolved;
 			if (active) {
+				// A subagent acts as its root session's identity only when that identity is an accepted
+				// invite; with any other source it gets no bus tools at all (one line, then silence).
+				if (view.sub && resolved?.source !== "accepted") {
+					if (!withheld) {
+						withheld = true;
+						warn("bus tools withheld for the subagent: the session's identity is not an accepted invite");
+					}
+					await deactivateTools(pi, ours());
+					return;
+				}
 				// A server that is too old gets no tools and no stream.
 				const verdict = await gate.check(active.url);
 				if (verdict !== "ok") {
@@ -79,7 +93,14 @@ export function createConnection({ pi, client, store, credentials, identity, vie
 					await deactivateTools(pi, ours());
 					return;
 				}
-				await registerRemoteTools(pi, { client, getActive, state: tools, warn, exclude: view.sub ? INBOX_TOOLS : undefined });
+				await registerRemoteTools(pi, {
+					client,
+					getActive,
+					state: tools,
+					warn,
+					kind: view.sub ? "sub" : "main",
+					agentId: view.agentId,
+				});
 			}
 			if (active && !view.sub) inbox.start();
 			if (active) await activateBusTools(pi, ours());

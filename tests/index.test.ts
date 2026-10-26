@@ -468,21 +468,39 @@ describe("tool activation and credentials", () => {
 		}
 	});
 
-	test("a subagent session gets no inbox loop and no inbox tools; the other bus tools register; a main session gets both", async () => {
+	test("a main session gets the bus tools and the local spawn tool; a subagent gets the allow-list only", async () => {
 		const schema = { type: "object" as const, properties: {} };
-		const list = ["bus_inbox_read", "bus_send", "bus_inbox_ack"].map(name => ({ name, description: name, inputSchema: schema }));
+		const list = ["bus_inbox_read", "bus_send", "bus_inbox_ack", "bus_read_thread", "bus_add_post"].map(name => ({
+			name,
+			description: name,
+			inputSchema: schema,
+		}));
 		const results: Record<string, { tools: string[]; streamed: boolean }> = {};
 		for (const kind of ["sub", "main"]) {
 			const bus = fakeBus({ list });
-			const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" } }, { kind });
+			const dir = await tempDir();
+			const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: dir } }, { kind, sessionFile: join(dir, "s.jsonl") });
+			// The subagent acts as its root session's identity: the accepted invite.
+			await app.run(`accept ${URL_} ${CODE}`);
 			await app.emit("session_start");
 			await app.emit("session_shutdown");
 			results[kind] = { tools: app.tools.map(t => t.name), streamed: callsTo(bus, "/v1/inbox/stream").length > 0 };
 		}
 		expect(results).toEqual({
-			sub: { tools: ["bus_spawn_worker", "bus_send"], streamed: false },
-			main: { tools: ["bus_spawn_worker", "bus_inbox_read", "bus_send", "bus_inbox_ack"], streamed: true },
+			sub: { tools: ["bus_read_thread", "bus_add_post"], streamed: false },
+			main: { tools: ["bus_inbox_read", "bus_send", "bus_read_thread", "bus_add_post", "bus_spawn_worker"], streamed: true },
 		});
+	});
+
+	test("a subagent whose identity is not an accepted invite gets no bus tool and one warning", async () => {
+		const schema = { type: "object" as const, properties: {} };
+		const list = ["bus_read_thread", "bus_add_post"].map(name => ({ name, description: name, inputSchema: schema }));
+		const bus = fakeBus({ list });
+		const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" } }, { kind: "sub" });
+		await app.emit("session_start");
+		await app.emit("session_shutdown");
+		expect(app.tools.map(t => t.name)).toEqual([]);
+		expect(app.warnings).toEqual(["agent-bus: bus tools withheld for the subagent: the session's identity is not an accepted invite"]);
 	});
 });
 
