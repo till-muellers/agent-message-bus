@@ -22,7 +22,7 @@ type membershipResolver interface {
 }
 
 type inboxDeliverer interface {
-	Deliver(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) error
+	DeliverReceipts(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) ([]inbox.Receipt, error)
 }
 
 // Service handles direct messages and topics.
@@ -41,7 +41,14 @@ func NewService(conn *sql.DB, r membershipResolver, ib inboxDeliverer, now func(
 // inSpace resolves p in space and runs fn in one delivering transaction.
 func (s *Service) inSpace(ctx context.Context, p auth.Principal, space string,
 	fn func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error)) error {
-	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	_, err := s.inSpaceReceipts(ctx, p, space, fn)
+	return err
+}
+
+// inSpaceReceipts is inSpace returning a receipt per recipient (inbox.DeliverReceipts).
+func (s *Service) inSpaceReceipts(ctx context.Context, p auth.Principal, space string,
+	fn func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error)) ([]inbox.Receipt, error) {
+	return s.ib.DeliverReceipts(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.spaces.ResolveTx(ctx, tx, p, space)
 		if err != nil {
 			return nil, err

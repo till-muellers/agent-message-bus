@@ -11,13 +11,14 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
-// AddPost appends a post and notifies the thread's subscribers except the author.
-func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, id int64, body string) (int64, error) {
+// AddPost appends a post, notifies the thread's subscribers except the author and returns
+// the post id with a receipt per notified subscriber, sorted by name.
+func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, id int64, body string) (int64, []inbox.Receipt, error) {
 	if err := domain.ValidBody(body); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	var postID int64
-	err := s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	rs, err := s.inSpaceReceipts(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
 		t, err := mustFindThread(ctx, tx, m.SpaceID, id)
 		if err != nil {
 			return nil, err
@@ -32,7 +33,7 @@ func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, i
 		tmpl := inbox.Entry{Type: inbox.ThreadPost, Blackboard: t.board, ThreadID: id, ThreadTitle: t.title, Body: body}
 		return m.Notify(ids, tmpl), nil
 	})
-	return postID, err
+	return postID, rs, err
 }
 
 // Subscribe subscribes the caller to a thread; idempotent.

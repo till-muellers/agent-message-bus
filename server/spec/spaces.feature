@@ -167,18 +167,18 @@ Feature: Spaces
       And leader "zed" invited member "abe" to space "alpha"
       When member "bob" lists the participants of space "alpha"
       Then the call returns:
-        | name | role   |
-        | amy  | leader |
-        | zed  | leader |
-        | abe  | member |
-        | bob  | member |
+        | name | role   | connected |
+        | amy  | leader | false     |
+        | zed  | leader | false     |
+        | abe  | member | false     |
+        | bob  | member | false     |
 
     Scenario: The admin lists the participants of a space it has not joined
       Given leader "lead" created space "alpha"
       When the admin lists the participants of space "alpha"
       Then the call returns:
-        | name | role   |
-        | lead | leader |
+        | name | role   | connected |
+        | lead | leader | false     |
 
   Rule: Identity (bus_whoami)
 

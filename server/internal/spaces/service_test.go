@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
@@ -45,7 +46,7 @@ func TestCreate(t *testing.T) {
 				t.Fatalf("create: %v", err)
 			}
 			ps, _ := e.svc.Participants(context.Background(), tc.p, tc.space)
-			if want := []Participant{{"lead", RoleLeader}}; !reflect.DeepEqual(ps, want) {
+			if want := []Participant{{"lead", RoleLeader, false}}; !reflect.DeepEqual(ps, want) {
 				t.Fatalf("participants = %+v", ps)
 			}
 		})
@@ -83,7 +84,7 @@ func TestJoin(t *testing.T) {
 				t.Fatalf("join: %v", err)
 			}
 			ps, _ := e.svc.Participants(context.Background(), tc.p, tc.space)
-			want := []Participant{{"lead", RoleLeader}, {"other", RoleLeader}, {"work", RoleMember}}
+			want := []Participant{{"lead", RoleLeader, false}, {"other", RoleLeader, false}, {"work", RoleMember, false}}
 			if !reflect.DeepEqual(ps, want) {
 				t.Fatalf("participants = %+v, want %+v", ps, want)
 			}
@@ -260,12 +261,61 @@ func TestParticipants(t *testing.T) {
 	member, _ := inviteMember(t, e, lead, "alpha", "bob")
 	inviteMember(t, e, lead, "alpha", "abe")
 	got, err := e.svc.Participants(ctx, member, "alpha")
-	want := []Participant{{"amy", RoleLeader}, {"zed", RoleLeader}, {"abe", RoleMember}, {"bob", RoleMember}}
+	want := []Participant{{"amy", RoleLeader, false}, {"zed", RoleLeader, false}, {"abe", RoleMember, false}, {"bob", RoleMember, false}}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, %v; want %+v", got, err, want)
 	}
 	if _, err = e.svc.Participants(ctx, admin, "alpha"); err != nil {
 		t.Fatalf("admin lists participants: %v", err)
+	}
+}
+
+// presenceStub reports the agents in connected as connected.
+type presenceStub struct {
+	*inbox.Service
+	connected map[int64]bool
+}
+
+func (p presenceStub) Connected(agentID int64) bool { return p.connected[agentID] }
+
+func TestParticipantsConnected(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		connected []string
+		want      map[string]bool
+	}{
+		{name: "nobody", want: map[string]bool{"lead": false, "peer": false, "worker": false}},
+		{name: "peer", connected: []string{"peer"}, want: map[string]bool{"lead": false, "peer": true, "worker": false}},
+		{name: "lead of two spaces", connected: []string{"lead"}, want: map[string]bool{"lead": true, "peer": false, "worker": false}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newEnv(t, nil, nil)
+			stub := presenceStub{Service: e.inbox, connected: map[int64]bool{}}
+			e.svc = NewService(e.db, NewResolver(e.db), e.auth, stub, time.Now, Hooks{})
+			lead := leader(t, e, 1, "lead")
+			mustCreate(t, e, lead, "alpha")
+			mustCreate(t, e, lead, "beta")
+			worker, _ := inviteMember(t, e, lead, "alpha", "worker")
+			peer, _ := inviteMember(t, e, lead, "alpha", "peer")
+			ids := map[string]int64{"lead": lead.AgentID, "worker": worker.AgentID, "peer": peer.AgentID}
+			for _, n := range tc.connected {
+				stub.connected[ids[n]] = true
+			}
+			ps, err := e.svc.Participants(context.Background(), worker, "alpha")
+			if err != nil {
+				t.Fatalf("Participants: %v", err)
+			}
+			got := map[string]bool{}
+			for _, p := range ps {
+				got[p.Name] = p.Connected
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("connected = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

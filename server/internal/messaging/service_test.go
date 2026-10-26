@@ -20,7 +20,8 @@ func create(by, name string) step {
 
 func sendTopic(by, topic, body string, critical bool) step {
 	return func(ctx context.Context, w *world) error {
-		return w.svc.SendTopic(ctx, w.p[by], space, topic, body, critical)
+		_, err := w.svc.SendTopic(ctx, w.p[by], space, topic, body, critical)
+		return err
 	}
 }
 
@@ -38,7 +39,8 @@ func closeT(by, topic string) step {
 
 func direct(by, to, body string, critical bool) step {
 	return func(ctx context.Context, w *world) error {
-		return w.svc.SendDirect(ctx, w.p[by], space, to, body, critical)
+		_, err := w.svc.SendDirect(ctx, w.p[by], space, to, body, critical)
+		return err
 	}
 }
 
@@ -165,7 +167,7 @@ func TestListTopics(t *testing.T) {
 func TestResolveGate(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
-	err := w.svc.SendDirect(context.Background(), w.p["ann"], "nope", "bob", "x", false)
+	_, err := w.svc.SendDirect(context.Background(), w.p["ann"], "nope", "bob", "x", false)
 	apperrtest.WantKind(t, err, apperr.NotFound, "space nope not found")
 }
 

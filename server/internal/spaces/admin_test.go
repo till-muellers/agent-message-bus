@@ -50,7 +50,7 @@ func TestAdminRevokesLeaders(t *testing.T) {
 	wantRevoke(t, e, ops, "lead2", true)
 	wantRevoke(t, e, ops, "lead", true)
 	ps, err := e.svc.Participants(ctx, ops, "alpha")
-	if want := []Participant{{"worker", RoleMember}}; err != nil || !reflect.DeepEqual(ps, want) {
+	if want := []Participant{{"worker", RoleMember, false}}; err != nil || !reflect.DeepEqual(ps, want) {
 		t.Fatalf("participants after revoking the last leader = %+v, %v; want %+v", ps, err, want)
 	}
 	if err := e.svc.Join(ctx, lead, "alpha"); err != nil {

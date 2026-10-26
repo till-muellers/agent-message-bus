@@ -35,17 +35,17 @@ func messageTools(m *messaging.Service) []Tool {
 		define("bus_send_direct", "Participants and admins; critical requires a leader or an admin.",
 			"Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, "+
 				"and an agent cannot send a direct message to itself.",
-			okResult, []string{"space", "to", "body"},
+			receiptsResult, []string{"space", "to", "body"},
 			map[string]any{"space": spaceProp(), "to": str(nameDesc("Recipient participant")), "body": bodyProp(), "critical": criticalProp()},
 			func(ctx context.Context, p auth.Principal, a directArgs) (any, error) {
-				return done(m.SendDirect(ctx, p, a.Space, a.To, a.Body, a.Critical))
+				return sent(m.SendDirect(ctx, p, a.Space, a.To, a.Body, a.Critical))
 			}),
 		define("bus_send_topic", "Participants and admins; only leaders and admins may send to all or send critical.",
 			"Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic.",
-			okResult, []string{"space", "topic", "body"},
+			receiptsResult, []string{"space", "topic", "body"},
 			map[string]any{"space": spaceProp(), "topic": topicProp(), "body": bodyProp(), "critical": criticalProp()},
 			func(ctx context.Context, p auth.Principal, a sendTopicArgs) (any, error) {
-				return done(m.SendTopic(ctx, p, a.Space, a.Topic, a.Body, a.Critical))
+				return sent(m.SendTopic(ctx, p, a.Space, a.Topic, a.Body, a.Critical))
 			}),
 		define("bus_list_topics", accessParticipantsRead, "Lists open topics with the caller's subscription state.",
 			"[{name, createdBy, subscribed}]",

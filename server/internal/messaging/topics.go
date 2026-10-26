@@ -56,9 +56,10 @@ func (s *Service) CreateTopic(ctx context.Context, p auth.Principal, space, name
 	})
 }
 
-// SendTopic delivers body to the topic's recipients except the sender.
-func (s *Service) SendTopic(ctx context.Context, p auth.Principal, space, topic, body string, critical bool) error {
-	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+// SendTopic delivers body to the topic's recipients except the sender and returns a
+// receipt per recipient, sorted by name.
+func (s *Service) SendTopic(ctx context.Context, p auth.Principal, space, topic, body string, critical bool) ([]inbox.Receipt, error) {
+	return s.inSpaceReceipts(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
 		if err := checkMessage(m, body, critical); err != nil {
 			return nil, err
 		}

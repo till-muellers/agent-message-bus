@@ -48,7 +48,7 @@ func TestAdminActsBlackboards(t *testing.T) {
 			return err
 		}, "", ""},
 		{"post to any thread", func(ctx context.Context, f fixture, ops auth.Principal, id int64) error {
-			_, err := f.svc.AddPost(ctx, ops, "alpha", id, "reply")
+			_, _, err := f.svc.AddPost(ctx, ops, "alpha", id, "reply")
 			if err == nil && len(readInbox(t, f.ib, f.m1)) != 1 {
 				t.Error("thread subscriber m1 got no post notification")
 			}

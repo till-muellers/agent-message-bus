@@ -29,11 +29,11 @@ func (h StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
-	if !h.svc.slots.acquire(p.AgentID) {
+	if !h.svc.presence.acquire(p.AgentID) {
 		httpx.WriteError(w, apperr.New(apperr.Conflict, "agent %s already has an active inbox stream", p.AgentName))
 		return
 	}
-	defer h.svc.slots.release(p.AgentID)
+	defer h.svc.presence.release(p.AgentID)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	stop := context.AfterFunc(h.root, cancel)

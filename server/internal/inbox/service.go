@@ -31,13 +31,13 @@ type Service struct {
 	pub       publisher
 	now       func() time.Time
 	heartbeat time.Duration
-	slots     *streamSlots
+	presence  *presence
 }
 
 // NewService builds the inbox; root ends every pending Wait, now stamps CreatedAt on
 // inserted entries.
 func NewService(root context.Context, conn *sql.DB, pub publisher, now func() time.Time) *Service {
-	return &Service{root: root, db: conn, pub: pub, now: now, heartbeat: defaultHeartbeat, slots: newStreamSlots()}
+	return &Service{root: root, db: conn, pub: pub, now: now, heartbeat: defaultHeartbeat, presence: newPresence()}
 }
 
 func topic(agentID int64) string { return fmt.Sprintf("inbox/%d", agentID) }

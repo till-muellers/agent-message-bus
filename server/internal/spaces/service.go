@@ -26,6 +26,7 @@ type accounts interface {
 type inboxStore interface {
 	Deliver(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) error
 	DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
+	Connected(agentID int64) bool
 }
 
 // SpaceInfo summarises a space for listing. Admins are the joined admins; Members
@@ -38,10 +39,12 @@ type SpaceInfo struct {
 	Joined  bool     `json:"joined"`
 }
 
-// Participant is one agent in a space.
+// Participant is one agent in a space; Connected means it holds its inbox stream or
+// is blocked in bus_wait, in any space.
 type Participant struct {
-	Name string `json:"name"`
-	Role Role   `json:"role"`
+	Name      string `json:"name"`
+	Role      Role   `json:"role"`
+	Connected bool   `json:"connected"`
 }
 
 // Service manages spaces and their participants.
@@ -72,7 +75,7 @@ func (s *Service) List(ctx context.Context, p auth.Principal) ([]SpaceInfo, erro
 	}
 	out := make([]SpaceInfo, 0, len(rows))
 	for _, row := range rows {
-		ps, err := listParticipants(ctx, s.db, row.id)
+		ps, _, err := listParticipants(ctx, s.db, row.id)
 		if err != nil {
 			return nil, err
 		}
@@ -275,11 +278,18 @@ func (s *Service) runDepartureHooks(ctx context.Context, tx *sql.Tx, m Membershi
 	return entries, nil
 }
 
-// Participants lists the participants of space, leaders first.
+// Participants lists the participants of space, leaders first, each marked connected.
 func (s *Service) Participants(ctx context.Context, p auth.Principal, space string) ([]Participant, error) {
 	m, err := s.r.Resolve(ctx, p, space)
 	if err != nil {
 		return nil, err
 	}
-	return listParticipants(ctx, s.db, m.SpaceID)
+	ps, ids, err := listParticipants(ctx, s.db, m.SpaceID)
+	if err != nil {
+		return nil, err
+	}
+	for i, id := range ids {
+		ps[i].Connected = s.ib.Connected(id)
+	}
+	return ps, nil
 }

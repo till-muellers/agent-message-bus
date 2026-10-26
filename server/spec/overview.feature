@@ -13,7 +13,7 @@ Feature: Space overview (bus_space_overview)
   #
   # Result:
   #   {space, you: {name, role},                           role null for an admin that has not joined
-  #    participants: [{name, role}],                        admins, then leaders, then members; each by name
+  #    participants: [{name, role, connected}],             admins, then leaders, then members; each by name
   #    topics: [{name, createdBy, subscribed}],             open topics, all first, then by name
   #    blackboards: [{name, owner, threads}],               by name
   #    recentThreads: [{id, blackboard, title, createdBy, posts, lastPostAt, subscribed}]}
@@ -40,10 +40,10 @@ Feature: Space overview (bus_space_overview)
       When member "worker" calls bus_space_overview with {"space":"demo"}
       Then the result has space "demo" and you {"name":"worker","role":"member"}
       And participants are:
-        | name   | role   |
-        | lead   | leader |
-        | peer   | member |
-        | worker | member |
+        | name   | role   | connected |
+        | lead   | leader | false     |
+        | peer   | member | false     |
+        | worker | member | false     |
       And topics are:
         | name  | createdBy | subscribed |
         | all   | lead      | true       |
@@ -81,8 +81,8 @@ Feature: Space overview (bus_space_overview)
       When leader "lead" calls bus_space_overview with {"space":"empty"}
       Then blackboards is [] and recentThreads is []
       And participants are:
-        | name | role   |
-        | lead | leader |
+        | name | role   | connected |
+        | lead | leader | false     |
 
     Scenario: Closed topics are not shown
       Given leader "lead" created topic "old" in space "demo"
