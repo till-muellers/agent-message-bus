@@ -5,9 +5,11 @@ import (
 	"testing"
 )
 
-// wantAccess is the slice-3 access sentence of every tool (contracts.md §3.1).
+// wantAccess is the current access sentence of every tool (contracts.md §3.1).
 var wantAccess = map[string]string{
-	"bus_mint_leader":        "Admin token only.",
+	"bus_mint_leader":        "Admins only.",
+	"bus_mint_admin":         "Admins only.",
+	"bus_list_admins":        "Admins only; no side effects.",
 	"bus_whoami":             "Any token; no side effects.",
 	"bus_list_spaces":        "Leaders see all spaces, members only their own; no side effects.",
 	"bus_list_participants":  "Participants only; no side effects.",

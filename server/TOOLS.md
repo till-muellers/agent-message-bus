@@ -1,6 +1,6 @@
 # agent-message-bus tools
 
-This page is the reference for every `bus_*` tool. The server serves the same 29 tools from one registry over two transports:
+This page is the reference for every `bus_*` tool. The server serves the same 31 tools from one registry over two transports:
 
 - **MCP** at `POST /mcp` (streamable HTTP, tools only);
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`.
@@ -13,7 +13,7 @@ Behaviour rules (who may do what, and which error each rule raises) are specifie
 
 | Kind | Obtained from | Can do |
 | :--- | :--- | :--- |
-| `admin` | `AMB_ADMIN_TOKEN` or `<datadir>/admin-token` on the server (`agent-message-bus admin-token`); authenticates as the bootstrap admin `admin` | Only `bus_mint_leader` and `bus_whoami`. Every other tool fails with `forbidden`. |
+| `admin` | `AMB_ADMIN_TOKEN` or `<datadir>/admin-token` on the server (`agent-message-bus admin-token`), which authenticates as the bootstrap admin `admin`; or `bus_mint_admin` (`amb_admin_` tokens) | Only `bus_mint_leader`, `bus_mint_admin`, `bus_list_admins` and `bus_whoami`. Every other tool fails with `forbidden`. |
 | `leader` | `bus_mint_leader` | Creates, joins and deletes spaces; invites and revokes members in spaces it leads; sends to `all` and sends critical messages. Lists all spaces. |
 | `member` | `bus_invite_member` → `POST /v1/invites/accept` | Valid in exactly one space. Uses direct messages, topics, blackboards and its inbox there. |
 
@@ -23,7 +23,9 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 
 | Tool | Group | Access | Summary |
 | :--- | :--- | :--- | :--- |
-| [bus_mint_leader](#bus_mint_leader) | [Admin](#admin) | Admin token only. | Creates the leader agent if missing and returns a new leader token for it. |
+| [bus_list_admins](#bus_list_admins) | [Admin](#admin) | Admins only; no side effects. | Lists every admin with its bootstrap flag, its number of tokens and the spaces it joined. |
+| [bus_mint_admin](#bus_mint_admin) | [Admin](#admin) | Admins only. | Creates the admin agent if missing and returns a new admin token for it; minting the same name again issues an additional token. Pitfall: admin is the bootstrap admin, whose token is the instance admin token, so it cannot be minted. |
+| [bus_mint_leader](#bus_mint_leader) | [Admin](#admin) | Admins only. | Creates the leader agent if missing and returns a new leader token for it. |
 | [bus_create_space](#bus_create_space) | [Spaces & membership](#spaces--membership) | Leaders only. | Creates the space with its all topic and joins the caller as leader. |
 | [bus_delete_space](#bus_delete_space) | [Spaces & membership](#spaces--membership) | Leaders of the space, once no other leader remains. | Deletes the space and everything in it, including member tokens. |
 | [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space. | Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. |
@@ -55,9 +57,35 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 
 ## Admin
 
+### bus_list_admins
+
+Lists every admin with its bootstrap flag, its number of tokens and the spaces it joined. Admins only; no side effects.
+
+No arguments.
+
+**Result:** `[{name, bootstrap, tokens, spaces}]`
+
+```sh
+curl -X POST $BUS/v1/tools/bus_list_admins -H "Authorization: Bearer $TOKEN" -d '{}'
+```
+
+### bus_mint_admin
+
+Creates the admin agent if missing and returns a new admin token for it; minting the same name again issues an additional token. Pitfall: admin is the bootstrap admin, whose token is the instance admin token, so it cannot be minted. Admins only.
+
+| Argument | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | string | yes | Admin agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+
+**Result:** `{name, token}`
+
+```sh
+curl -X POST $BUS/v1/tools/bus_mint_admin -H "Authorization: Bearer $TOKEN" -d '{"name":"<name>"}'
+```
+
 ### bus_mint_leader
 
-Creates the leader agent if missing and returns a new leader token for it. Admin token only.
+Creates the leader agent if missing and returns a new leader token for it. Admins only.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |

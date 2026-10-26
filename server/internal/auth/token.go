@@ -8,13 +8,19 @@ import (
 	"fmt"
 )
 
-// NewToken returns "amb_" followed by 32 random bytes, RawURL base64 encoded.
-func NewToken() (string, error) {
+// Token prefixes: a label for humans and secret scanners only; authority comes from the agent row.
+const (
+	TokenPrefix      = "amb_"
+	AdminTokenPrefix = "amb_admin_"
+)
+
+// NewToken returns prefix followed by 32 random bytes, RawURL base64 encoded.
+func NewToken(prefix string) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("reading random bytes: %w", err)
 	}
-	return "amb_" + base64.RawURLEncoding.EncodeToString(b), nil
+	return prefix + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // Hash returns the hex SHA-256 of token.

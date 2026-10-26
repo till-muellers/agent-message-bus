@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
@@ -63,4 +64,39 @@ func deleteSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) e
 		return fmt.Errorf("deleting space tokens: %w", err)
 	}
 	return nil
+}
+
+// listAdmins reads every admin agent by name with its token count and joined spaces.
+func listAdmins(ctx context.Context, q db.DBTX) ([]AdminInfo, error) {
+	rows, err := q.QueryContext(ctx, `SELECT a.name,
+		(SELECT COUNT(*) FROM tokens t WHERE t.agent_id = a.id),
+		COALESCE((SELECT group_concat(name, char(31)) FROM (SELECT s.name FROM participants p
+			JOIN spaces s ON s.id = p.space_id WHERE p.agent_id = a.id ORDER BY s.name)), '')
+		FROM agents a WHERE a.kind = 'admin' ORDER BY a.name`)
+	if err != nil {
+		return nil, fmt.Errorf("listing admins: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []AdminInfo{}
+	for rows.Next() {
+		var a AdminInfo
+		var spaces string
+		if err := rows.Scan(&a.Name, &a.Tokens, &spaces); err != nil {
+			return nil, fmt.Errorf("scanning admin: %w", err)
+		}
+		a.Spaces = splitNames(spaces)
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating admins: %w", err)
+	}
+	return out, nil
+}
+
+// splitNames splits the unit-separator joined list s; empty s yields an empty slice.
+func splitNames(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	return strings.Split(s, "\x1f")
 }

@@ -51,10 +51,10 @@ Feature: Transports
 
   Rule: Listing tools (GET /v1/tools)
 
-    Scenario: The list holds all 29 tools sorted by name
+    Scenario: The list holds all 31 tools sorted by name
       When the admin calls GET /v1/tools
       Then the response status is 200
-      And the response is a JSON array of 29 objects with "name", "description" and "inputSchema"
+      And the response is a JSON array of 31 objects with "name", "description" and "inputSchema"
       And the tools are sorted by name with no duplicate names
       And every tool has a non-empty description
       And the first tool's inputSchema has type "object"
@@ -188,7 +188,7 @@ Feature: Transports
 
     Scenario: The production registry over MCP
       When a client lists the MCP tools on the running bus
-      Then it gets the same 29 tools as GET /v1/tools, sorted by name
+      Then it gets the same 31 tools as GET /v1/tools, sorted by name
 
     Scenario: A successful tool call returns JSON text and structured content
       Given leader "lead" connected to /mcp with its token
@@ -232,6 +232,7 @@ Feature: Transports
   Rule: Admin endpoints are loopback-only and need the admin token
 
     # POST /v1/admin/shutdown and POST /v1/admin/admin-token serve the local CLI (stop, rotate-token).
+    # Any admin may shut down; only the bootstrap admin may replace the instance admin token.
     # Behind a reverse proxy every request arrives from loopback, so there the admin token alone protects them.
 
     Scenario Outline: Guard on <route> from <remote> with the <token> token
@@ -240,10 +241,11 @@ Feature: Transports
       And the error is forbidden "<message>"
 
       Examples:
-        | route                 | remote      | token  | message                                         |
-        | /v1/admin/shutdown    | 10.0.0.2    | admin  | admin endpoints are only available from localhost |
-        | /v1/admin/admin-token | 192.168.1.1 | admin  | admin endpoints are only available from localhost |
-        | /v1/admin/shutdown    | 127.0.0.1   | leader | admin token required                            |
+        | route                 | remote      | token        | message                                                       |
+        | /v1/admin/shutdown    | 10.0.0.2    | admin        | admin endpoints are only available from localhost             |
+        | /v1/admin/admin-token | 192.168.1.1 | admin        | admin endpoints are only available from localhost             |
+        | /v1/admin/shutdown    | 127.0.0.1   | leader       | admin token required                                          |
+        | /v1/admin/admin-token | 127.0.0.1   | minted admin | only the bootstrap admin may replace the instance admin token |
 
     Scenario Outline: Shutdown from <remote>
       When a client from <remote> calls POST /v1/admin/shutdown with the admin token
