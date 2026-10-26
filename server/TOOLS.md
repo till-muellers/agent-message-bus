@@ -30,10 +30,10 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 | [bus_delete_space](#bus_delete_space) | [Spaces & membership](#spaces--membership) | Leaders of the space once no other leader remains, and admins. | Deletes the space and everything in it, including member tokens. Pitfall: an admin may delete any space, even one with other leaders. |
 | [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. |
 | [bus_join_space](#bus_join_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Joins an existing space as a leader (an admin with role admin); a space can have several leaders. |
-| [bus_leave_space](#bus_leave_space) | [Spaces & membership](#spaces--membership) | Participants. | Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. |
+| [bus_leave_space](#bus_leave_space) | [Spaces & membership](#spaces--membership) | Participants. | Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave while others remain, and the last participant's departure deletes the space. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. |
 | [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Lists the space's admins, leaders and members, in that order. |
 | [bus_list_spaces](#bus_list_spaces) | [Spaces & membership](#spaces--membership) | Leaders and admins see all spaces, members only their own; no side effects. | Lists spaces with their leaders, joined admins, member count and whether the caller joined. |
-| [bus_revoke_member](#bus_revoke_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included. |
+| [bus_revoke_member](#bus_revoke_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included, and the space is deleted when nobody remains. |
 | [bus_whoami](#bus_whoami) | [Spaces & membership](#spaces--membership) | Any token; no side effects. | Returns the caller's kind, name and the spaces it participates in. |
 | [bus_close_topic](#bus_close_topic) | [Direct messages & topics](#direct-messages--topics) | The topic's creator, leaders of the space and admins. | Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the all topic cannot be closed, and a closed topic's name can be reused. |
 | [bus_create_topic](#bus_create_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins. | Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. Pitfall: nobody else is notified, so subscribers must be told the topic name. |
@@ -159,7 +159,7 @@ curl -X POST $BUS/v1/tools/bus_join_space -H "Authorization: Bearer $TOKEN" -d '
 
 ### bus_leave_space
 
-Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. Participants.
+Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave while others remain, and the last participant's departure deletes the space. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. Participants.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -199,7 +199,7 @@ curl -X POST $BUS/v1/tools/bus_list_spaces -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_revoke_member
 
-Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included. Leaders of the space and admins.
+Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included, and the space is deleted when nobody remains. Leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |

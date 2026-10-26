@@ -125,6 +125,17 @@ func countOtherLeaders(ctx context.Context, q db.DBTX, spaceID, agentID int64) (
 	return n, nil
 }
 
+// countOtherParticipants counts the participants of spaceID other than agentID.
+func countOtherParticipants(ctx context.Context, q db.DBTX, spaceID, agentID int64) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM participants WHERE space_id = ? AND agent_id <> ?`,
+		spaceID, agentID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("counting participants: %w", err)
+	}
+	return n, nil
+}
+
 func deleteSpace(ctx context.Context, q db.DBTX, spaceID int64) error {
 	if _, err := q.ExecContext(ctx, `DELETE FROM spaces WHERE id = ?`, spaceID); err != nil {
 		return fmt.Errorf("deleting space: %w", err)

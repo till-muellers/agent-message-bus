@@ -197,8 +197,8 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) err
 	})
 }
 
-// Leave removes p from space; the last leader cannot leave, and an admin that has not
-// joined has nothing to leave.
+// Leave removes p from space. The last leader cannot leave while other participants
+// remain, and an admin that has not joined has nothing to leave.
 func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) error {
 	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
 		m, err := s.r.ResolveTx(ctx, tx, p, space)
@@ -208,21 +208,57 @@ func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) err
 		if !m.Joined() {
 			return nil, apperr.New(apperr.Forbidden, "not a participant of space %s", space)
 		}
-		if m.Role == RoleLeader {
-			n, err := countOtherLeaders(ctx, tx, m.SpaceID, m.AgentID)
-			if err != nil {
-				return nil, err
-			}
-			if n == 0 {
-				return nil, apperr.New(apperr.Conflict, "last leader cannot leave; delete the space instead")
-			}
+		if err := checkLastLeader(ctx, tx, m); err != nil {
+			return nil, err
 		}
 		return s.removeParticipant(ctx, tx, m)
 	})
 }
 
-// removeParticipant runs departure hooks, then deletes inbox rows, space tokens and the participant.
+// checkLastLeader refuses leader m's departure when it is the last leader and others remain.
+func checkLastLeader(ctx context.Context, tx *sql.Tx, m Membership) error {
+	if m.Role != RoleLeader {
+		return nil
+	}
+	leaders, err := countOtherLeaders(ctx, tx, m.SpaceID, m.AgentID)
+	if err != nil || leaders > 0 {
+		return err
+	}
+	others, err := countOtherParticipants(ctx, tx, m.SpaceID, m.AgentID)
+	if err != nil {
+		return err
+	}
+	if others > 0 {
+		return apperr.New(apperr.Conflict, "last leader cannot leave; delete the space instead")
+	}
+	return nil
+}
+
+// removeParticipant runs departure hooks, then deletes inbox rows, space tokens and the
+// participant. When nobody remains it deletes the space and drops the hooks' entries.
 func (s *Service) removeParticipant(ctx context.Context, tx *sql.Tx, m Membership) ([]inbox.Entry, error) {
+	entries, err := s.runDepartureHooks(ctx, tx, m)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ib.DeleteSpaceEntries(ctx, tx, m.AgentID, m.SpaceID); err != nil {
+		return nil, err
+	}
+	if err := s.accounts.RevokeSpaceTokens(ctx, tx, m.AgentID, m.SpaceID); err != nil {
+		return nil, err
+	}
+	if err := deleteParticipant(ctx, tx, m.SpaceID, m.AgentID); err != nil {
+		return nil, err
+	}
+	remaining, err := countOtherParticipants(ctx, tx, m.SpaceID, 0)
+	if err != nil || remaining > 0 {
+		return entries, err
+	}
+	return nil, deleteSpace(ctx, tx, m.SpaceID)
+}
+
+// runDepartureHooks runs every departure hook for m and collects their entries.
+func (s *Service) runDepartureHooks(ctx context.Context, tx *sql.Tx, m Membership) ([]inbox.Entry, error) {
 	var entries []inbox.Entry
 	for _, h := range s.hooks.Departure {
 		es, err := h.OnDeparture(ctx, tx, m)
@@ -231,13 +267,7 @@ func (s *Service) removeParticipant(ctx context.Context, tx *sql.Tx, m Membershi
 		}
 		entries = append(entries, es...)
 	}
-	if err := s.ib.DeleteSpaceEntries(ctx, tx, m.AgentID, m.SpaceID); err != nil {
-		return nil, err
-	}
-	if err := s.accounts.RevokeSpaceTokens(ctx, tx, m.AgentID, m.SpaceID); err != nil {
-		return nil, err
-	}
-	return entries, deleteParticipant(ctx, tx, m.SpaceID, m.AgentID)
+	return entries, nil
 }
 
 // Participants lists the participants of space, leaders first.

@@ -193,3 +193,10 @@ Feature: An admin is reachable only in the spaces it joined
     Scenario: An admin that has not joined cannot leave
       When admin "ops" leaves space "demo"
       Then the call fails with forbidden "not a participant of space demo"
+
+    Scenario: An admin that is the only participant leaves and the space is deleted
+      # No empty spaces (no-empty-spaces.feature).
+      Given admin "ops" created space "gamma"
+      When admin "ops" leaves space "gamma"
+      Then the call succeeds
+      And the space "gamma" no longer exists

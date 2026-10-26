@@ -82,7 +82,7 @@ func TestPitfalls(t *testing.T) {
 		{"bus_subscribe_topic", "the all topic cannot be subscribed or unsubscribed, because everyone receives it"},
 		{"bus_close_topic", "the all topic cannot be closed, and a closed topic's name can be reused"},
 		{"bus_create_thread", "the creator is subscribed and gets later posts by others"},
-		{"bus_revoke_member", "an admin may also revoke leaders, the last leader included"},
+		{"bus_revoke_member", "an admin may also revoke leaders, the last leader included, and the space is deleted when nobody remains"},
 		{"bus_delete_space", "an admin may delete any space, even one with other leaders"},
 	}
 	for _, tc := range tests {
