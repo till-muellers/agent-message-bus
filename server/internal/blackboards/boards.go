@@ -52,7 +52,7 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, space, name stri
 		if err != nil {
 			return nil, err
 		}
-		if b.ownerID != m.AgentID && m.Role != spaces.RoleLeader {
+		if b.ownerID != m.AgentID && !m.Leads() {
 			return nil, apperr.New(apperr.Forbidden, "only the owner or a leader may delete blackboard %s", name)
 		}
 		return removeBoard(ctx, tx, m, b)

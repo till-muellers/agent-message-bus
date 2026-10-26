@@ -32,8 +32,10 @@ func TestResolve(t *testing.T) {
 		wantKind apperr.Kind
 		wantMsg  string
 	}{
-		{name: "leader", p: lead, space: "alpha", want: Membership{10, "alpha", 1, "lead", RoleLeader}},
-		{name: "member", p: work, space: "alpha", want: Membership{10, "alpha", 2, "work", RoleMember}},
+		{name: "leader", p: lead, space: "alpha",
+			want: Membership{SpaceID: 10, SpaceName: "alpha", AgentID: 1, AgentName: "lead", Role: RoleLeader}},
+		{name: "member", p: work, space: "alpha",
+			want: Membership{SpaceID: 10, SpaceName: "alpha", AgentID: 2, AgentName: "work", Role: RoleMember}},
 		{name: "admin", p: auth.Principal{Kind: auth.Admin}, space: "alpha", wantKind: apperr.Forbidden,
 			wantMsg: "admin token cannot act in spaces; mint a leader with bus_mint_leader"},
 		{name: "unknown space", p: lead, space: "nope", wantKind: apperr.NotFound, wantMsg: "space nope not found"},

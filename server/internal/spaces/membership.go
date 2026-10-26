@@ -11,6 +11,7 @@ import (
 type Role string
 
 const (
+	RoleAdmin  Role = "admin" // participant row of a joined admin
 	RoleLeader Role = "leader"
 	RoleMember Role = "member"
 )
@@ -21,8 +22,15 @@ type Membership struct {
 	SpaceName string
 	AgentID   int64
 	AgentName string
-	Role      Role
+	Role      Role // participant role; "" when an admin has not joined
+	Admin     bool // caller is an admin principal (authority without participation)
 }
+
+// Leads reports whether m has leader authority in the space; every authority check uses it.
+func (m Membership) Leads() bool { return m.Admin || m.Role == RoleLeader }
+
+// Joined reports whether m holds a participant row in the space.
+func (m Membership) Joined() bool { return m.Role != "" }
 
 // DepartureHook cleans feature state when a participant leaves or is revoked.
 // It runs inside the departure transaction; returned entries are inserted there

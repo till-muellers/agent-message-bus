@@ -54,7 +54,7 @@ func checkMessage(m spaces.Membership, body string, critical bool) error {
 	if err := domain.ValidBody(body); err != nil {
 		return err
 	}
-	if critical && m.Role != spaces.RoleLeader {
+	if critical && !m.Leads() {
 		return apperr.New(apperr.Forbidden, "only leaders may send critical messages")
 	}
 	return nil
