@@ -3,6 +3,7 @@ import { type BusClient, BusError } from "../../extension/lib/bus/client.ts";
 import { LAUNCHERS } from "../../extension/lib/launch/index.ts";
 import type { LaunchCommand, LaunchContext, Launcher } from "../../extension/lib/launch/launcher.ts";
 import { type SpawnDeps, spawnWorker } from "../../extension/lib/spawn/spawn.ts";
+import GOLDEN_ARGV from "./spawn.argv.golden.json";
 
 const URL_ = "http://127.0.0.1:8080";
 const CODE = "k7m2-x9pq";
@@ -130,5 +131,34 @@ describe("LAUNCHERS", () => {
 			"linux-terminal",
 			"windows-console",
 		]);
+	});
+});
+
+describe("the worker argv", () => {
+	/** A launcher that records the argv spawnWorker handed it, so the golden file holds the argv spawnWorker composed. */
+	function recordingSetup(): { deps: SpawnDeps; argv: string[][] } {
+		const argv: string[][] = [];
+		const launcher: Launcher = {
+			id: "on",
+			detect: async () => true,
+			command: async spec => {
+				argv.push([...spec.argv]);
+				return { command: "on", args: [...spec.argv], detached: false };
+			},
+		};
+		const { deps } = setup({ launchers: [launcher], pluginArgs: ["--plugin-dir", "D:/amb", "-e", "x.ts"] });
+		return { deps, argv };
+	}
+
+	test("is exactly the recorded argv: omp, the leader's flags, then --cwd, --bus-url and --bus-accept", async () => {
+		const { deps, argv } = recordingSetup();
+		await spawnWorker(deps, { space: "demo", name: "worker", cwd: "/w" });
+		expect(argv).toEqual([GOLDEN_ARGV]);
+	});
+
+	test("never shows the invite code in the result", async () => {
+		const { deps } = setup();
+		const result = await spawnWorker(deps, { space: "demo", name: "worker", cwd: "/w" });
+		expect(JSON.stringify(result)).not.toContain(CODE);
 	});
 });

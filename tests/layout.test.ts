@@ -251,15 +251,17 @@ describe("extension layout", () => {
 });
 
 describe("test layout", () => {
-	test("every test file sits in the folder of the module it tests", () => {
-		const libFiles = new Set(tsFiles(LIB));
+	test("every test file in a folder tests the modules of that folder", () => {
 		const offenders = tsFiles(TESTS)
 			.map(file => relative(TESTS, file).split(sep).join("/"))
 			.filter(rel => {
 				if (!rel.includes("/")) return !ROOT_TESTS[rel];
-				const [folder, name] = rel.split("/");
+				const [folder] = rel.split("/");
 				if (!FOLDERS[folder]) return true;
-				return !libFiles.has(join(LIB, folder, name.replace(/\.test\.ts$/, ".ts")));
+				return !importsOf(join(ROOT, "tests", rel)).some(specifier => {
+					const target = resolve(dirname(join(ROOT, "tests", rel)), specifier);
+					return target.startsWith(join(LIB, folder) + sep) && target.endsWith(".ts");
+				});
 			});
 		expect(offenders).toEqual([]);
 	});

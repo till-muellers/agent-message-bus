@@ -1,0 +1,13 @@
+[
+	"omp",
+	"--plugin-dir",
+	"D:/amb",
+	"-e",
+	"x.ts",
+	"--cwd",
+	"/w",
+	"--bus-url",
+	"http://127.0.0.1:8080",
+	"--bus-accept",
+	"k7m2-x9pq"
+]
