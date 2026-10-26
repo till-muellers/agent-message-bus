@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { type BusExtensionOptions, createBusExtension } from "../extension/index.ts";
-import type { FetchLike, RemoteTool } from "../extension/lib/client.ts";
-import type { CredentialStore, StoredCredentials } from "../extension/lib/credentials.ts";
-import type { Entry } from "../extension/lib/inbox.ts";
-import type { JsonSchema, Zod } from "../extension/lib/schema.ts";
+import type { FetchLike, RemoteTool } from "../extension/lib/bus/client.ts";
+import type { CredentialStore, StoredCredentials } from "../extension/lib/session/stored-credentials.ts";
+import type { Entry } from "../extension/lib/bus/entry.ts";
+import type { JsonSchema, Zod } from "../extension/lib/bus/schema.ts";
 
 /**
  * Recording stand-in for `pi.zod` (no zod package in this repo): nodes keep enough state to rebuild JSON schema.
