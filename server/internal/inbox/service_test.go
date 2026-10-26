@@ -38,7 +38,7 @@ func newWorld(t *testing.T) *world {
 	t.Helper()
 	db := dbtest.Open(t)
 	pub := broker.NewMemory(16)
-	w := &world{svc: NewService(db, pub, testNow), pub: pub, db: db, entries: map[string]Entry{}}
+	w := &world{svc: NewService(t.Context(), db, pub, testNow), pub: pub, db: db, entries: map[string]Entry{}}
 	const lead, worker, ops, admin, alpha, beta = 1, 2, 3, 4, 1, 2
 	dbtest.SeedAgent(t, db, lead, "lead", "leader")
 	dbtest.SeedAgent(t, db, worker, "worker", "member")

@@ -56,10 +56,10 @@ Feature: Transports
 
   Rule: Listing tools (GET /v1/tools)
 
-    Scenario: The list holds all 32 tools sorted by name
+    Scenario: The list holds all 33 tools sorted by name
       When the admin calls GET /v1/tools
       Then the response status is 200
-      And the response is a JSON array of 32 objects with "name", "description" and "inputSchema"
+      And the response is a JSON array of 33 objects with "name", "description" and "inputSchema"
       And the tools are sorted by name with no duplicate names
       And every tool has a non-empty description
       And the first tool's inputSchema has type "object"
@@ -193,7 +193,7 @@ Feature: Transports
 
     Scenario: The production registry over MCP
       When a client lists the MCP tools on the running bus
-      Then it gets the same 32 tools as GET /v1/tools, sorted by name
+      Then it gets the same 33 tools as GET /v1/tools, sorted by name
 
     Scenario: A successful tool call returns JSON text and structured content
       Given leader "lead" connected to /mcp with its token

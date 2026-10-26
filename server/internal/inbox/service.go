@@ -26,6 +26,7 @@ type publisher interface {
 
 // Service stores, reads and acknowledges inbox entries and pushes them live.
 type Service struct {
+	root      context.Context // ends every Wait at shutdown
 	db        *sql.DB
 	pub       publisher
 	now       func() time.Time
@@ -33,9 +34,10 @@ type Service struct {
 	slots     *streamSlots
 }
 
-// NewService builds the inbox; now stamps CreatedAt on inserted entries.
-func NewService(conn *sql.DB, pub publisher, now func() time.Time) *Service {
-	return &Service{db: conn, pub: pub, now: now, heartbeat: defaultHeartbeat, slots: newStreamSlots()}
+// NewService builds the inbox; root ends every pending Wait, now stamps CreatedAt on
+// inserted entries.
+func NewService(root context.Context, conn *sql.DB, pub publisher, now func() time.Time) *Service {
+	return &Service{root: root, db: conn, pub: pub, now: now, heartbeat: defaultHeartbeat, slots: newStreamSlots()}
 }
 
 func topic(agentID int64) string { return fmt.Sprintf("inbox/%d", agentID) }

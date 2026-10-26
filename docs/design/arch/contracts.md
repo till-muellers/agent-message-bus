@@ -104,7 +104,6 @@ Descriptions state only shipped behaviour. Slice 3 ships interim texts; each lat
 
 | Clause (final text) | Slice 3 interim | Added by |
 |---|---|---|
-| `bus_inbox_read`: "it never blocks (use bus_wait to wait)" | "it never blocks" | 9 |
 | `bus_inbox_ack`: "acknowledging everything lets the next mail notify again" | — (omitted) | 13a |
 
 Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-69`); the rest [AD-13].

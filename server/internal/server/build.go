@@ -24,7 +24,7 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 	if err := authSvc.Bootstrap(streamRoot); err != nil {
 		return nil, err
 	}
-	inboxSvc := inbox.NewService(conn, broker.NewMemory(256), time.Now)
+	inboxSvc := inbox.NewService(streamRoot, conn, broker.NewMemory(256), time.Now)
 	resolver := spaces.NewResolver(conn)
 	msgSvc := messaging.NewService(conn, resolver, inboxSvc, time.Now)
 	bbSvc := blackboards.NewService(conn, resolver, inboxSvc, time.Now)

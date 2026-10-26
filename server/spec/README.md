@@ -18,7 +18,7 @@ flowchart LR
     rpc["/v1/tools<br/>JSON RPC"]
     sse["/v1/inbox/stream<br/>SSE"]
     acc["/v1/invites/accept<br/>invite code → member token"]
-    reg["tool registry (32 bus_* tools)"]
+    reg["tool registry (33 bus_* tools)"]
     feat["auth · spaces · invites · messaging · blackboards · inbox"]
     broker["in-process broker<br/>topic inbox/&lt;agentID&gt;"]
     db[("SQLite<br/>/data/agent-message-bus.db")]
@@ -84,6 +84,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [admin-tokens.feature](admin-tokens.feature) | The bootstrap admin `admin` and the instance admin token; minting (`bus_mint_admin`), listing (`bus_list_admins`) and revoking (`bus_revoke_admin`) admins, the audit lines, rotation, and the admin endpoint guards |
 | [admin-role.feature](admin-role.feature) | An admin leads every space without joining it: reads, sends (incl. `all` and critical), posts, creates, closes, removes, invites and revokes members and leaders; creates, lists and deletes any space |
 | [admin-messaging.feature](admin-messaging.feature) | An admin is reachable only in the spaces it joined (role `admin`): joining, messaging, its own inbox and stream, leaving |
+| [bus-wait.feature](bus-wait.feature) | `bus_wait`: the one long-poll call; filters, scope, timeout, shutdown and disconnect, never acknowledges, never takes the stream slot |
 
 ## Design decisions
 
@@ -96,6 +97,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 - **One identity per agent.** Each agent identity belongs to one live session. The server enforces this with one inbox stream slot per agent: a second `GET /v1/inbox/stream` for an agent that already has a live stream gets 409 `conflict` "agent <name> already has an active inbox stream", and the first stream keeps working. The slot frees when that stream ends (client disconnect, server shutdown or a dropped subscription). Tool calls aren't restricted. The extension treats the 409 as non-fatal and keeps retrying, and `/bus promote` holds the leader token in that session's memory only, so other sessions don't inherit the identity.
 - **Local instance via a state file.** `start` spawns the foreground server detached and waits for `/healthz`; the server writes `agent-message-bus.state.json` (pid, url, start time) and removes it on exit. A state file whose url doesn't answer is stale and is removed. `stop` prefers the graceful `POST /v1/admin/shutdown` and kills only on fallback. Admin endpoints check the loopback address and the admin token; behind a reverse proxy every request looks like loopback, so there only the token protects them.
 - **No empty spaces.** Every departure (leave, revoke) ends in `removeParticipant`, which counts the remaining participants in the same transaction and deletes the space when none remain; the cascades remove its topics, boards, invites, member tokens and inbox rows, and entries the departure hooks produced for it are dropped. So the last leader may leave when it is alone, but not while others remain.
+- **One long-poll seam.** `bus_wait` is the only call that blocks. Like the stream it subscribes to `inbox/<agentID>` before it reads, then re-reads on every wake-up; it ends on the first matching entry, the timeout, a disconnect, server shutdown or a dropped subscription (one more read). It never acknowledges and never takes the stream slot. The API server sets no read, write or idle timeout so a 300-second wait is never cut.
 - **No thread claiming and no UI.** Both are out of scope.
 
 ## Known limitations

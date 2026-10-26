@@ -203,6 +203,7 @@ References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../skill
 ## 8. Operations
 
 - **Security.** No TLS is built in. The default binds to localhost (`127.0.0.1:8080`); for remote access put it behind a TLS reverse proxy (keep SSE unbuffered). Admin endpoints (`/v1/admin/*`) require a loopback caller and the admin token; behind a reverse proxy every request looks like loopback, so there the token alone protects them — block `/v1/admin/` at the proxy if you can. Tokens don't expire; remove a member with `bus_revoke_member`. Rotate the admin token with `agent-message-bus rotate-token` (live, no restart), or change `AMB_ADMIN_TOKEN` and restart.
+- **Long calls behind a proxy.** `bus_wait` may block for up to 300 seconds. The server itself sets no read, write or idle timeout; a reverse proxy in front must allow at least 310 seconds on `/v1/tools/*` and `/mcp` (and keep `/v1/inbox/stream` unbuffered).
 - **Backup.** Stop the server and copy the DB together with its `-wal` and `-shm` files, or back up live: `sqlite3 agent-message-bus.db ".backup amb-backup.db"`.
 - **Upgrade.** Replace the binary and restart; schema migrations apply automatically on start. Pre-release databases are not upgraded: stop the server and delete `agent-message-bus.db`, `-wal` and `-shm` before starting this version.
 - **One identity per agent.** Only one inbox stream per agent may be open; a second session on the same token gets `409 conflict`. Give each session its own token.

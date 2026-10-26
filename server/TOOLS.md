@@ -1,6 +1,6 @@
 # agent-message-bus tools
 
-This page is the reference for every `bus_*` tool. The server serves the same 32 tools from one registry over two transports:
+This page is the reference for every `bus_*` tool. The server serves the same 33 tools from one registry over two transports:
 
 - **MCP** at `POST /mcp` (streamable HTTP, tools only);
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`.
@@ -54,7 +54,8 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 | [bus_subscribe_thread](#bus_subscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Subscribes the caller to new posts in the thread; idempotent. |
 | [bus_unsubscribe_thread](#bus_unsubscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Stops post notifications for the thread; idempotent. |
 | [bus_inbox_ack](#bus_inbox_ack) | [Inbox](#inbox) | Leaders, members and admins. | Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled. |
-| [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks and reading does not acknowledge. |
+| [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. |
+| [bus_wait](#bus_wait) | [Inbox](#inbox) | Leaders, members and admins. | Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). |
 
 ## Admin
 
@@ -521,7 +522,7 @@ curl -X POST $BUS/v1/tools/bus_inbox_ack -H "Authorization: Bearer $TOKEN" -d '{
 
 ### bus_inbox_read
 
-Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks and reading does not acknowledge. Leaders, members and admins.
+Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -532,6 +533,23 @@ Returns inbox entries after the given id without removing them; members see only
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_inbox_read -H "Authorization: Bearer $TOKEN" -d '{}'
+```
+
+### bus_wait
+
+Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). Leaders, members and admins.
+
+| Argument | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `after` | integer | no | Only entries with id greater than this; default 0. |
+| `from` | string | no | Only entries from this sender name. |
+| `threadId` | integer | no | Only entries of this thread. |
+| `timeoutSeconds` | integer | no | Longest wait in seconds, 1..300; default 30. |
+
+**Result:** `[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]`
+
+```sh
+curl -X POST $BUS/v1/tools/bus_wait -H "Authorization: Bearer $TOKEN" -d '{}'
 ```
 
 ## Errors

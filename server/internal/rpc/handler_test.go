@@ -165,7 +165,40 @@ func TestListTools(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if res.StatusCode != http.StatusOK || len(got) != 32 || got[0].InputSchema["type"] != "object" {
+	if res.StatusCode != http.StatusOK || len(got) != 33 || got[0].InputSchema["type"] != "object" {
 		t.Fatalf("status %d, %d tools", res.StatusCode, len(got))
+	}
+}
+
+func TestListToolsIncludesWaitAndAck(t *testing.T) {
+	srv := newServer(t)
+	lead := setUpSpace(t, srv)
+	var inv struct{ Code string }
+	mustCall(t, srv, lead, "bus_invite_member", `{"space":"proj","name":"worker"}`, &inv)
+	var mem struct{ Token string }
+	post(t, srv, "/v1/invites/accept", inv.Code, "", &mem)
+	for name, token := range map[string]string{"admin": adminToken, "leader": lead, "member": mem.Token} {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/tools", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []struct {
+			Name        string         `json:"name"`
+			InputSchema map[string]any `json:"inputSchema"`
+		}
+		err = json.NewDecoder(res.Body).Decode(&got)
+		_ = res.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := map[string]bool{}
+		for _, tl := range got {
+			seen[tl.Name] = tl.InputSchema != nil
+		}
+		if !seen["bus_wait"] || !seen["bus_inbox_ack"] {
+			t.Fatalf("%s token: tool list lacks bus_wait or bus_inbox_ack with a schema", name)
+		}
 	}
 }
