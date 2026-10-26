@@ -9,8 +9,8 @@ import type { ServerGate } from "../../extension/lib/connection/server-gate.ts";
 /** A gate that refuses the server the way a too old one does. */
 const refusingGate: ServerGate = { check: async () => ({ refused: "too old" }), last: () => undefined };
 
-function setup(options: { task?: string; persisted?: boolean } = {}) {
-	const bus = fakeBus({ task: options.task });
+function setup(options: { persisted?: boolean } = {}) {
+	const bus = fakeBus();
 	const saved: ActiveCredentials[] = [];
 	const session = createSessionCredentials({ url: URL_, token: "env-tok" });
 	session.promote({ url: URL_, token: "lead-tok" });
@@ -31,11 +31,6 @@ describe("acceptInvite", () => {
 		expect(bus.calls.map(c => c.url)).toEqual([`${URL_}/v1/invites/accept`]);
 		expect(saved).toEqual([{ url: URL_, token: "acc-tok" }]);
 		expect(session.resolve(undefined)).toBeUndefined();
-	});
-
-	test("returns the first prompt that travelled with the invite", async () => {
-		const { deps } = setup({ task: "fix the bug" });
-		expect((await acceptInvite(deps, URL_, CODE)).task).toBe("fix the bug");
 	});
 
 	test("without a session file the reply says the token is not persisted", async () => {

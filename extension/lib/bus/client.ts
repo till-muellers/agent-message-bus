@@ -27,12 +27,11 @@ export interface RemoteTool {
 	inputSchema: JsonSchema;
 }
 
-/** What redeeming an invite code yields: the member's name, its space, its member token and the first prompt a leader gave it. */
+/** What redeeming an invite code yields: the member's name, its space and its member token. */
 export interface AcceptedInvite {
 	name: string;
 	space: string;
 	token: string;
-	task?: string;
 }
 
 export interface BusClient {
@@ -56,12 +55,10 @@ async function toBusError(response: Response): Promise<BusError> {
 }
 
 function toAcceptedInvite(body: unknown): AcceptedInvite {
-	const { name, space, token, task } = (body ?? {}) as Partial<Record<keyof AcceptedInvite, unknown>>;
+	const { name, space, token } = (body ?? {}) as Partial<Record<keyof AcceptedInvite, unknown>>;
 	if (typeof name !== "string" || typeof space !== "string" || typeof token !== "string")
 		throw new BusError("invalid_response", "accept: response has no token");
-	if (task === undefined) return { name, space, token };
-	if (typeof task !== "string") throw new BusError("invalid_response", "accept: task must be a string");
-	return { name, space, token, task };
+	return { name, space, token };
 }
 
 export function createClient(fetchFn: FetchLike = fetch): BusClient {

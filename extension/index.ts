@@ -68,6 +68,8 @@ export interface BusExtensionOptions {
 	arch?: string;
 	/** This omp process's argv, whose extension-loading flags a spawned worker gets; default `process.argv`. */
 	argv?: readonly string[];
+	/** How long a one-shot run waits for the inbox backlog after it redeemed an invite; 5 s by default. */
+	backlogTimeoutMs?: number;
 }
 
 /** The local agent-message-bus CLI: `AGENT_BUS_BIN`, else PATH, else the verified release download. */
@@ -187,6 +189,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 			sleep: options.sleep,
 			gate,
 			watermark,
+			backlogTimeoutMs: options.backlogTimeoutMs,
 		});
 		// Every model request acks the entries it carried.
 		const acker = createAcker({ client, getActive: session.getActive, warn: session.warn });

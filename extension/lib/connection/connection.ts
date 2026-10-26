@@ -9,7 +9,7 @@ import type { SessionCredentials } from "../session/session-credentials.ts";
 import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
 import type { AckWatermark } from "../delivery/ack-watermark.ts";
 import { phaseOf } from "../delivery/delivery-class.ts";
-import { createDispatcher } from "../delivery/dispatcher.ts";
+import { createDispatcher, type Dispatcher } from "../delivery/dispatcher.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
@@ -43,6 +43,8 @@ export interface ConnectionDeps {
 
 export interface Connection {
 	getActive(): ActiveCredentials | undefined;
+	/** The dispatcher of this connection; it knows what it handed over. */
+	dispatcher: Dispatcher;
 	/** Re-resolves the credentials, registers the server tools once, restarts the inbox loop and switches the tools on or off to match. */
 	restart(): Promise<void>;
 	/** Stops the loop, drops the credentials and deactivates every bus tool; registered tools stay and fail until the next login. */
@@ -63,6 +65,7 @@ export function createConnection({ pi, client, store, credentials, identity, vie
 	const ours = () => [...tools.names, ...localTools];
 	return {
 		getActive,
+		dispatcher,
 		stop: inbox.stop,
 		async restart() {
 			inbox.stop();
