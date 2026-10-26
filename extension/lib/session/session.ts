@@ -14,7 +14,7 @@ import type { AckWatermark } from "../delivery/ack-watermark.ts";
 import type { SessionCredentials } from "./session-credentials.ts";
 import { createSessionCredentials } from "./session-credentials.ts";
 import { createSessionIdentity, type IdentityContext, type SessionChange } from "./session-identity.ts";
-import type { CredentialStore } from "./stored-credentials.ts";
+import type { ActiveCredentials, CredentialStore } from "./stored-credentials.ts";
 import type { BusEnv } from "./env.ts";
 
 /** The parts of the omp context a session reads: mode, agent kind, idleness and the session file. */
@@ -56,6 +56,26 @@ export interface SessionDeps {
 	watermark: AckWatermark;
 	/** The sleep the inbox loop waits with. */
 	sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+	/** How long a one-shot run waits for the inbox backlog after an invite; 5 s by default. */
+	backlogTimeoutMs?: number;
+}
+
+/** How long a one-shot run waits for the inbox backlog after it redeemed an invite. */
+const BACKLOG_TIMEOUT_MS = 5_000;
+
+/** The highest id in the session's inbox; undefined when the inbox is empty or unreadable. */
+async function highestInboxId(client: BusClient, active: ActiveCredentials | undefined): Promise<number | undefined> {
+	if (!active) return undefined;
+	try {
+		const result = await client.callTool(active.url, active.token, "bus_inbox_read", {});
+		if (!Array.isArray(result)) return undefined;
+		const ids = result
+			.map(entry => (entry as { id?: unknown }).id)
+			.filter((id): id is number => typeof id === "number");
+		return ids.length ? Math.max(...ids) : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 /** Builds the session of this extension. */
@@ -66,6 +86,19 @@ export function createSession(deps: SessionDeps): Session {
 	const identity = createSessionIdentity(dir, credentials);
 	const view: SessionView = { sub: false, isIdle: () => true };
 	const connection = createConnection({ pi, client, store, credentials, identity, view, gate, watermark, warn, sleep: deps.sleep, localTools });
+	const backlogTimeoutMs = deps.backlogTimeoutMs ?? BACKLOG_TIMEOUT_MS;
+	/**
+	 * A one-shot run starts its own prompt right after the session start, so the entries of the
+	 * redeemed invite must be queued before it. The wait ends when the stream handed them over,
+	 * or after the timeout.
+	 */
+	async function waitForBacklog(): Promise<void> {
+		if (view.mode !== "print" && view.mode !== "json") return;
+		const maxId = await highestInboxId(client, connection.getActive());
+		if (maxId === undefined) return;
+		const delivered = await connection.dispatcher.handedUpTo(maxId, backlogTimeoutMs);
+		if (!delivered) warn(`inbox backlog not delivered within ${backlogTimeoutMs / 1000} s; continuing`);
+	}
 	return {
 		...connection,
 		client,
@@ -76,7 +109,7 @@ export function createSession(deps: SessionDeps): Session {
 		accept: (url, code) => acceptInvite({ client, session: credentials, identity, gate }, url, code),
 		async join(joined) {
 			await connection.restart();
-			if (joined.task) pi.sendUserMessage(joined.task);
+			await waitForBacklog();
 			return joined.result;
 		},
 		shutdown() {

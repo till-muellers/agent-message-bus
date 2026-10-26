@@ -18,10 +18,9 @@ export interface AcceptDeps {
 	gate: ServerGate;
 }
 
-/** A redeemed invite: the reply to show and the first prompt the inviting leader gave the member, if any. */
+/** A redeemed invite: the reply to show. The first prompt of the inviting leader arrives as a direct message. */
 export interface Joined {
 	result: CommandResult;
-	task?: string;
 }
 
 /** The accepted token replaces the promoted and env credentials, which would otherwise win over it. */
@@ -35,5 +34,5 @@ export async function acceptInvite(deps: AcceptDeps, rawUrl: string, code: strin
 	deps.session.inviteAccepted();
 	const note = persisted ? "" : " Not persisted: this session has no session file.";
 	const result: CommandResult = { message: `Joined space ${invite.space} as member ${invite.name}.${note}`, level: "info" };
-	return invite.task === undefined ? { result } : { result, task: invite.task };
+	return { result };
 }

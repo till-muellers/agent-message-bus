@@ -4,7 +4,7 @@ import { BusError } from "../../extension/lib/bus/client.ts";
 import { createInviteFlag } from "../../extension/lib/commands/invite-flag.ts";
 import { CODE, URL_ } from "../fakes.ts";
 
-const joined: Joined = { result: { message: "Joined space demo as member worker.", level: "info" }, task: "fix the bug" };
+const joined: Joined = { result: { message: "Joined space demo as member worker.", level: "info" } };
 
 function host(flags: Record<string, unknown>, options: { sub?: boolean; storedUrl?: string; fail?: boolean } = {}) {
 	const accepts: string[][] = [];

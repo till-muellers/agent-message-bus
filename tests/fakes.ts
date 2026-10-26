@@ -98,21 +98,19 @@ export interface FakeBusOptions {
 	tools?: Record<string, ToolHandler>;
 	/** What `GET /v1/tools` lists. */
 	list?: RemoteTool[];
-	/** The first prompt `POST /v1/invites/accept` returns with the member token; omitted when undefined. */
-	task?: string;
 	/** The protocol `GET /healthz` reports; "none" answers without the header. */
 	protocol?: number | "none";
 }
 
 /** The fake server's `POST /v1/invites/accept`: `CODE` (any case and dashes) admits member worker of demo with `acc-tok`. */
-function acceptInviteResponse(auth: string | undefined, task: string | undefined): Response {
+function acceptInviteResponse(auth: string | undefined): Response {
 	const code = (auth ?? "").replace("Bearer ", "").toLowerCase().replace(/[^a-z0-9]/g, "");
 	if (code !== CODE.replace("-", "")) return errorResponse(401, "unauthenticated", "invalid or expired invite code");
-	return Response.json({ name: "worker", space: "demo", token: "acc-tok", ...(task === undefined ? {} : { task }) });
+	return Response.json({ name: "worker", space: "demo", token: "acc-tok" });
 }
 
 /** Fake bus server following the HTTP contract; records every call. */
-export function fakeBus({ streams = [], tools = {}, list = [], task, protocol = 2 }: FakeBusOptions = {}) {
+export function fakeBus({ streams = [], tools = {}, list = [], protocol = 2 }: FakeBusOptions = {}) {
 	const calls: Call[] = [];
 	const fetchFn: FetchLike = async (url, init) => {
 		const body = init.body ? JSON.parse(init.body) : undefined;
@@ -123,7 +121,7 @@ export function fakeBus({ streams = [], tools = {}, list = [], task, protocol = 
 		}
 		if (url.endsWith("/v1/inbox/stream")) return streams.shift()?.() ?? errorResponse(401, "unauthenticated", "invalid token");
 		if (url.endsWith("/v1/tools")) return Response.json(list);
-		if (url.endsWith("/v1/invites/accept")) return acceptInviteResponse(init.headers.Authorization, task);
+		if (url.endsWith("/v1/invites/accept")) return acceptInviteResponse(init.headers.Authorization);
 		const handler = tools[url.slice(url.lastIndexOf("/") + 1)];
 		return handler ? handler(body ?? {}, init.headers.Authorization) : Response.json({ result: { acked: 1 } });
 	};

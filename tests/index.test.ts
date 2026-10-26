@@ -185,11 +185,11 @@ describe("accepted identity", () => {
 		await expect(stat(join(dir, "sessions"))).rejects.toThrow();
 	});
 
-	test("the first prompt that travelled with the invite is sent once the session has joined", async () => {
-		const { app } = await worker({}, memberBus({ task: "fix the bug" }));
+	test("an accept sends no user message: the task arrives as an inbox entry of the inviter", async () => {
+		const { app } = await worker({}, memberBus());
 		await app.run(`accept ${URL_} ${CODE}`);
 		await app.emit("session_shutdown");
-		expect(app.userMessages).toEqual(["fix the bug"]);
+		expect(app.userMessages).toEqual([]);
 		expect(app.active()).toContain("bus_list_spaces");
 	});
 
@@ -283,9 +283,9 @@ describe("accepted identity", () => {
 		expect(callsTo(bus, "/v1/inbox/stream").every(c => c.auth === "Bearer acc-tok")).toBe(true);
 	});
 
-	test("--bus-accept with --bus-url is redeemed on session_start, sends the invite's task, and is not redeemed again", async () => {
+	test("--bus-accept with --bus-url is redeemed on session_start, sends no user message, and is not redeemed again", async () => {
 		const session: BootSession = { flags: { "bus-url": URL_, "bus-accept": CODE } };
-		const { app, bus, dir } = await worker(session, memberBus({ task: "fix the bug" }));
+		const { app, bus, dir } = await worker(session, memberBus());
 		session.sessionFile = join(dir, "w.jsonl");
 		await app.emit("session_start");
 		await app.emit("session_switch", { type: "session_switch", reason: "new", previousSessionFile: undefined });
@@ -293,8 +293,50 @@ describe("accepted identity", () => {
 		await app.emit("session_shutdown");
 		expect(callsTo(bus, "/v1/invites/accept")).toHaveLength(1);
 		expect(app.notes).toEqual(["Joined space demo as member worker."]);
-		expect(app.userMessages).toEqual(["fix the bug"]);
+		expect(app.userMessages).toEqual([]);
 		expect(toolListAuth(bus)).toEqual(["Bearer acc-tok"]);
+	});
+
+	test("a one-shot session waits for the inbox backlog of the redeemed invite", async () => {
+		const bus = memberBus({
+			streams: [() => new Response(streamOf([frame(entry(5, { from: "lead", body: "fix the bug" }))]))],
+			tools: { bus_inbox_read: () => Response.json({ result: [{ id: 5 }] }) },
+		});
+		const session: BootSession = { mode: "print", flags: { "bus-url": URL_, "bus-accept": CODE } };
+		const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir() } }, session);
+		await app.emit("session_start");
+		await app.emit("session_shutdown");
+		expect(app.sent).toHaveLength(1);
+		expect(app.sent[0].message.content).toContain("fix the bug");
+		expect(app.warnings).not.toContain("agent-bus: inbox backlog not delivered within 5 s; continuing");
+	});
+
+	test("a one-shot session gives up on the backlog after the timeout and says so", async () => {
+		const bus = memberBus({ tools: { bus_inbox_read: () => Response.json({ result: [{ id: 5 }] }) } });
+		const session: BootSession = { mode: "print", flags: { "bus-url": URL_, "bus-accept": CODE } };
+		const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir() }, backlogTimeoutMs: 50 }, session);
+		await app.emit("session_start");
+		await app.emit("session_shutdown");
+		expect(app.warnings).toContain("agent-bus: inbox backlog not delivered within 0.05 s; continuing");
+	});
+
+	test("an interactive session does not wait for the backlog", async () => {
+		const bus = memberBus({ tools: { bus_inbox_read: () => Response.json({ result: [{ id: 5 }] }) } });
+		const session: BootSession = { mode: "tui", flags: { "bus-url": URL_, "bus-accept": CODE } };
+		const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir() }, backlogTimeoutMs: 50 }, session);
+		await app.emit("session_start");
+		await app.emit("session_shutdown");
+		expect(app.warnings).not.toContain("agent-bus: inbox backlog not delivered within 0.05 s; continuing");
+	});
+
+	test("a one-shot session with stored credentials does not wait for the backlog", async () => {
+		const bus = memberBus({ tools: { bus_inbox_read: () => Response.json({ result: [{ id: 5 }] }) } });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir() };
+		await createCredentialStore(env).save({ url: URL_, token: "acc-tok" });
+		const app = await boot({ fetchFn: bus.fetchFn, env, backlogTimeoutMs: 50 }, { mode: "print" });
+		await app.emit("session_start");
+		await app.emit("session_shutdown");
+		expect(app.warnings).not.toContain("agent-bus: inbox backlog not delivered within 0.05 s; continuing");
 	});
 
 	test("--bus-accept falls back to the stored url", async () => {

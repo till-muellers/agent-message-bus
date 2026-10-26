@@ -26,15 +26,14 @@ describe("client", () => {
 		await expect(client.acceptInvite(URL_, "nope-nope")).rejects.toMatchObject({ code: "unauthenticated", message: "invalid or expired invite code" });
 	});
 
-	test("acceptInvite returns the first prompt the invite carries", async () => {
-		const client = createClient(fakeBus({ task: "fix the bug" }).fetchFn);
-		expect(await client.acceptInvite(URL_, CODE)).toEqual({ name: "worker", space: "demo", token: "acc-tok", task: "fix the bug" });
+	test("acceptInvite returns the member, its space and its token", async () => {
+		const client = createClient(fakeBus().fetchFn);
+		expect(await client.acceptInvite(URL_, CODE)).toEqual({ name: "worker", space: "demo", token: "acc-tok" });
 	});
 
-	test("acceptInvite rejects a response without name, space and token, or with a task that is not a string", async () => {
+	test("acceptInvite rejects a response without name, space and token", async () => {
 		for (const [body, message] of [
 			[{ name: "worker", space: "demo" }, "accept: response has no token"],
-			[{ name: "worker", space: "demo", token: "acc-tok", task: 7 }, "accept: task must be a string"],
 		] as const) {
 			const error = await createClient(async () => Response.json(body))
 				.acceptInvite(URL_, CODE)
