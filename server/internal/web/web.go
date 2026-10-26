@@ -1,6 +1,7 @@
 // Package web is the backend of the web GUI: the embedded application, cookie sessions
-// that are re-validated on every request, and the JSON reads under /web/api/.
-// It is a transport like internal/rpc: it reads through the feature services and owns no SQL.
+// that are re-validated on every request, the JSON reads under /web/api/ and the admin
+// area, whose writes need the session's CSRF token. It is a transport like internal/rpc:
+// it reads through the feature services, writes through the tool registry and owns no SQL.
 // It is served on its own listener (AMB_WEB_ADDR), never on the API listener.
 package web
 
@@ -58,8 +59,9 @@ func New(d Deps) *Web {
 		tools: d.Tools, assets: assets{dist: d.Dist}, sessions: newSessions(d.Now), limit: newLimiter(d.Now)}
 }
 
-// Mount registers the GUI routes on mux. Every route is GET-only except /web/session, so
-// other methods get the mux's 405. Wrap the mux with Headers.
+// Mount registers the GUI routes on mux. Reads are GET-only; the mutating routes are the
+// session routes and the admin area, which need X-CSRF-Token. Other methods get the
+// mux's 405. Wrap the mux with Headers.
 func (g *Web) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /web/", g.assets.index)
 	mux.HandleFunc("GET /web/assets/", g.assets.file)
@@ -70,15 +72,28 @@ func (g *Web) Mount(mux *http.ServeMux) {
 	mux.Handle("GET /web/api/spaces/{space}/blackboards/{board}/threads", g.api(g.threads))
 	mux.Handle("GET /web/api/spaces/{space}/threads/{id}", g.api(g.thread))
 	mux.Handle("GET /web/api/inbox", g.api(g.readInbox))
+	mux.Handle("GET /web/api/admins", g.api(g.listAdmins))
+	mux.Handle("POST /web/api/admins", g.mutation(g.mintAdmin))
+	mux.Handle("POST /web/api/admins/{name}/revoke", g.mutation(g.revokeAdmin))
 	mux.Handle("GET /web/api/", noStore(g.authn(http.NotFoundHandler())))
 }
 
-// read answers one JSON read for the signed-in principal p.
-type read func(r *http.Request, p auth.Principal) (any, error)
+// endpoint answers one JSON request for the signed-in principal p.
+type endpoint func(r *http.Request, p auth.Principal) (any, error)
 
-// api serves fn behind the session: its result as 200 JSON, its error in the bus envelope.
-func (g *Web) api(fn read) http.Handler {
-	return noStore(g.authn(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// api serves the read fn behind the session.
+func (g *Web) api(fn endpoint) http.Handler {
+	return noStore(g.authn(serve(fn)))
+}
+
+// mutation serves fn behind the session and its CSRF token.
+func (g *Web) mutation(fn endpoint) http.Handler {
+	return noStore(g.authn(csrf(serve(fn))))
+}
+
+// serve writes fn's result as 200 JSON and its error in the bus envelope (behind authn).
+func serve(fn endpoint) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cur, ok := current(r.Context())
 		if !ok {
 			httpx.WriteError(w, apperr.New(apperr.Unauthenticated, "session required"))
@@ -90,5 +105,5 @@ func (g *Web) api(fn read) http.Handler {
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, out)
-	})))
+	})
 }

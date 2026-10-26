@@ -79,6 +79,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Guide | The agent guide: how leaders, members and admins work on the bus. One embedded Markdown text (`internal/guide/guide.md`, ≤ 4000 characters), served as the MCP `instructions`, as `GET /v1/guide` and in TOOLS.md. See [guide.feature](guide.feature). |
 | Web GUI | The browser application served on its own listener `AMB_WEB_ADDR` (default `127.0.0.1:8081`, empty or `off` disables it); the API listener `AMB_ADDR` serves no `/web` route. Read-only in the first milestone. See [web/gui-access.feature](web/gui-access.feature). |
 | Web session | What signing in to the web GUI with a token (`POST /web/session`, any kind) creates: an opaque `amb_session` cookie (`Path=/web`, HttpOnly, SameSite=Strict, Secure over TLS) that maps to the token's hash in memory for at most 8 hours. The token is re-validated on every request, so rotating or revoking it ends the session. A cookie is never a bearer on `/v1/*`. |
+| CSRF token | The `csrf` value of a web session (sign-in and `GET /web/session` return it; it stays the same for the session's life). Every mutating `/web/api` request sends it as `X-CSRF-Token`; a missing or foreign one is 403 `invalid CSRF token` with no side effect. Signing out needs none. See [web/gui-admins.feature](web/gui-admins.feature). |
 | Web state | `GET /web/api/state`: what the web GUI polls. Without `?space=` the visible spaces (with the open-invite count where the session has leader rights); with `?space=` that space's overview (the `bus_space_overview` result) plus its open invites for leader-rights sessions. Both carry the session's whoami and its waiting inbox count, never a message body or an invite code. See [web/live-updates.feature](web/live-updates.feature). |
 
 ## Features
@@ -114,6 +115,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [web/invites.feature](web/invites.feature) | Open invites in the web GUI: name, inviter and expiry, never the code; redeemed, expired and revoked codes are gone; counts on the space list; leader-rights sessions only |
 | [web/live-updates.feature](web/live-updates.feature) | The web GUI refreshes by polling `GET /web/api/state` (space list or one space); no bodies, no codes; the GUI never holds an inbox stream |
 | [web/gui-inbox.feature](web/gui-inbox.feature) | `GET /web/api/inbox`: the signed-in agent's own mailbox scope, read-only (never acks, never marks noticed, never takes the stream slot; 405 on mutating methods) |
+| [web/gui-admins.feature](web/gui-admins.feature) | The web GUI's admin area: listing, minting (the token shown once) and revoking admins through the admin tools; admin sessions only (403 otherwise), 401 without a session, the CSRF token on every write |
 
 ## Design decisions
 

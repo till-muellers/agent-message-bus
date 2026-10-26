@@ -34,13 +34,18 @@ func (g *Web) thread(r *http.Request, p auth.Principal) (any, error) {
 
 // call runs tool name with args as p.
 func (g *Web) call(r *http.Request, p auth.Principal, name string, args map[string]any) (any, error) {
-	t, ok := g.tools.Get(name)
-	if !ok {
-		return nil, fmt.Errorf("tool %s is not registered", name)
-	}
 	raw, err := json.Marshal(args)
 	if err != nil {
 		return nil, fmt.Errorf("encoding %s arguments: %w", name, err)
+	}
+	return g.callRaw(r, p, name, raw)
+}
+
+// callRaw runs tool name with the JSON arguments raw as p, decoded exactly like /v1/tools.
+func (g *Web) callRaw(r *http.Request, p auth.Principal, name string, raw []byte) (any, error) {
+	t, ok := g.tools.Get(name)
+	if !ok {
+		return nil, fmt.Errorf("tool %s is not registered", name)
 	}
 	return t.Call(r.Context(), p, raw)
 }
