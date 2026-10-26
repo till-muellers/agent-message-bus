@@ -97,6 +97,11 @@ func (s *Service) DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, sp
 	return deleteSpaceEntries(ctx, q, agentID, spaceID)
 }
 
+// Count returns how many entries wait in p's mailbox scope; it never marks or acks.
+func (s *Service) Count(ctx context.Context, p auth.Principal) (int, error) {
+	return countEntries(ctx, s.db, p.AgentID, spaceFilter(p))
+}
+
 func pageSize(limit int) (int, error) {
 	if limit == 0 {
 		return defaultLimit, nil

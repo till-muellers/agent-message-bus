@@ -111,6 +111,7 @@ Feature: Web GUI access and sessions
       When the operator signs in with the token of leader "lead"
       Then the response status is 200
       And the response sets a session cookie
+      And the session shows only the spaces of leader "lead"
 
     Scenario Outline: An unusable token is rejected (<case>)
       When the operator signs in with <token>
@@ -131,6 +132,11 @@ Feature: Web GUI access and sessions
 
   Rule: A session is re-validated on every request
 
+    Scenario: An active session sees the web GUI
+      Given the operator signed in with the instance admin token
+      When the operator requests GET /web/api/state
+      Then the response status is 200
+
     Scenario: Rotating the instance token ends the bootstrap admin's sessions only
       Given the operator signed in with the instance admin token
       And the admin minted admin "ops"
@@ -138,6 +144,8 @@ Feature: Web GUI access and sessions
       And the admin token was rotated
       When the operator requests GET /web/api/state
       Then the response status is 401
+      When the second operator requests GET /web/api/state
+      Then the response status is 200
 
     Scenario: Revoking an admin ends that admin's sessions
       Given the admin minted admin "ops"

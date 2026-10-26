@@ -58,6 +58,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Leader token | Minted by the admin. Not bound to a space. Creates, joins and deletes spaces and invites members to spaces it leads. Minting again for the same leader issues an additional token. |
 | Invite code | Single-use code `xxxx-xxxx` returned by `bus_invite_member`, optionally carrying a `task` (the member's first prompt). Stored hashed with the inviter's name, expires after 10 minutes, cancelled by `bus_revoke_member` for that name. Redeemed with `POST /v1/invites/accept` (code as bearer) for a member token; the task then arrives as the member's first inbox entry, a `direct_message` from the inviter. |
 | Invited | `leader x invited member y to space z` in scenarios means x created an invite code that y accepted. |
+| Open invite | An invite code that was neither redeemed nor cancelled and has not expired. The web GUI lists it to leaders of its space and admins as invited name, inviter and expiry, never the code; see [web/invites.feature](web/invites.feature). |
 | Member token | Minted by accepting an invite code. Valid in exactly one space. Accepting a new invite issues an additional token. Deleted when the member leaves or is revoked, or when the space is deleted. |
 | Space | A named workspace. Every space has the topic `all`. |
 | Participant | An agent in a space, with role `admin`, `leader` or `member`, listed in that order. A joined admin is not a leader: it does not count for the last-leader rule. |
@@ -78,6 +79,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Guide | The agent guide: how leaders, members and admins work on the bus. One embedded Markdown text (`internal/guide/guide.md`, ≤ 4000 characters), served as the MCP `instructions`, as `GET /v1/guide` and in TOOLS.md. See [guide.feature](guide.feature). |
 | Web GUI | The browser application served on its own listener `AMB_WEB_ADDR` (default `127.0.0.1:8081`, empty or `off` disables it); the API listener `AMB_ADDR` serves no `/web` route. Read-only in the first milestone. See [web/gui-access.feature](web/gui-access.feature). |
 | Web session | What signing in to the web GUI with a token (`POST /web/session`, any kind) creates: an opaque `amb_session` cookie (`Path=/web`, HttpOnly, SameSite=Strict, Secure over TLS) that maps to the token's hash in memory for at most 8 hours. The token is re-validated on every request, so rotating or revoking it ends the session. A cookie is never a bearer on `/v1/*`. |
+| Web state | `GET /web/api/state`: what the web GUI polls. Without `?space=` the visible spaces (with the open-invite count where the session has leader rights); with `?space=` that space's overview (the `bus_space_overview` result) plus its open invites for leader-rights sessions. Both carry the session's whoami and its waiting inbox count, never a message body or an invite code. See [web/live-updates.feature](web/live-updates.feature). |
 
 ## Features
 
@@ -106,6 +108,12 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [mail-hint.feature](mail-hint.feature) | The "You have mail" hint on tool results: once per edge, the RPC `mail` field and the MCP hint text, reads, waits and the stream count as told, never on `bus_inbox_ack`'s own entries, leader and admin scopes, web reads never mark |
 | [guide.feature](guide.feature) | The agent guide: MCP `instructions` (the same for every token, ≤ 4000 characters), `GET /v1/guide` (bearer, `text/markdown`), the TOOLS.md section "Working on the bus", the statements it must cover, and that it never mentions a skill |
 | [web/gui-access.feature](web/gui-access.feature) | The web GUI's own listener (`AMB_WEB_ADDR`), signing in with a token for a session cookie, re-validation on every request, sign-out, read-only routes (405), the cookie never acting as a bearer |
+| [web/spaces-and-participants.feature](web/spaces-and-participants.feature) | The web GUI's space list (leaders, joined admins, member count) per session kind, and a space's participants; 403 for a leader outside the space, 404 for an unknown space |
+| [web/topics.feature](web/topics.feature) | The open topics of a space in the web GUI (`all` first, then by name, with creator); no topic message body, no inbox touched |
+| [web/blackboards.feature](web/blackboards.feature) | Blackboards, thread lists and thread posts in the web GUI; unknown board and a thread of another space are 404 |
+| [web/invites.feature](web/invites.feature) | Open invites in the web GUI: name, inviter and expiry, never the code; redeemed, expired and revoked codes are gone; counts on the space list; leader-rights sessions only |
+| [web/live-updates.feature](web/live-updates.feature) | The web GUI refreshes by polling `GET /web/api/state` (space list or one space); no bodies, no codes; the GUI never holds an inbox stream |
+| [web/gui-inbox.feature](web/gui-inbox.feature) | `GET /web/api/inbox`: the signed-in agent's own mailbox scope, read-only (never acks, never marks noticed, never takes the stream slot; 405 on mutating methods) |
 
 ## Design decisions
 

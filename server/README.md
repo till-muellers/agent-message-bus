@@ -82,7 +82,13 @@ Every tool's arguments, result shape, example call and error codes are listed in
 |`POST /web/session`|bearer (any kind)|Sign in: 200 `{"kind","name","space"?,"csrf"}` and cookie `amb_session` (`Path=/web`, HttpOnly, SameSite=Strict, `Max-Age=28800`, Secure over TLS). Bad token: 401, no cookie. More than 5 failed sign-ins per IP and minute: 429 `rate_limited`.|
 |`GET /web/session`|session cookie|The signed-in session again (same `csrf`); 401 `session required` without one.|
 |`DELETE /web/session`|session cookie|Sign out: 200 `{"ok":true}`, cookie cleared.|
-|`GET /web/api/*`|session cookie|The GUI's reads (from slice W1b on); 401 without a session.|
+|`GET /web/api/state`|session cookie|`{"you": <bus_whoami>, "spaces": [<bus_list_spaces row> + "invites"?], "inbox": {"waiting"}}`; `invites` (open-invite count) only for spaces where the session has leader rights (leader of the space, or admin).|
+|`GET /web/api/state?space=demo`|session cookie|`{"you": <bus_whoami>, "overview": <bus_space_overview>, "invites"?: [{"name","invitedBy","expiresAt"}], "inbox": {"waiting"}}`; `invites` (soonest expiry first) only for leader-rights sessions. No message bodies, never an invite code. Unknown space 404, leader outside the space 403.|
+|`GET /web/api/spaces/{space}/blackboards/{board}/threads`|session cookie|The `bus_list_threads` result.|
+|`GET /web/api/spaces/{space}/threads/{id}`|session cookie|The `bus_read_thread` result; a thread of another space is 404.|
+|`GET /web/api/inbox?after=&limit=`|session cookie|The signed-in agent's own entries, like `bus_inbox_read` (`limit` 1..500, default 100), but it never acknowledges, never marks mail noticed and never takes the inbox stream slot.|
+
+Every `/web/api/*` route answers 401 without a session; any other `/web/api/<path>` is 404. Tools run in-process with the session's principal, so access rules and error bodies are those of `/v1/tools`; the `mail` hint never reaches the GUI.
 
 Sessions live in memory (a restart signs everybody out) for at most 8 hours and keep only the token's hash; the token is re-checked on every request, so `rotate-token`, `bus_revoke_admin` or `bus_revoke_member` end the sessions of that token at once. The cookie never authenticates `/v1/*`. Other methods on GUI routes get 405. Every `/web` response carries a strict `Content-Security-Policy`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
 

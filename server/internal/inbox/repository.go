@@ -34,6 +34,9 @@ const matchSQL = `SELECT i.id, i.agent_id, i.space_id, s.name, i.type, i.from_na
 // ackSQL takes agent_id, upTo, space filter (twice; 0 = all spaces).
 const ackSQL = `DELETE FROM inbox WHERE agent_id = ? AND id <= ? AND (? = 0 OR space_id = ?)`
 
+// countSQL takes agent_id, space filter (twice; 0 = all spaces).
+const countSQL = `SELECT COUNT(*) FROM inbox WHERE agent_id = ? AND (? = 0 OR space_id = ?)`
+
 const deleteSpaceSQL = `DELETE FROM inbox WHERE agent_id = ? AND space_id = ?`
 
 // scopeOccupiedSQL takes agent_id, space_id, agent_id: does the agent's mailbox scope
@@ -75,6 +78,15 @@ func selectEntries(ctx context.Context, q db.DBTX, agentID, after, space int64, 
 	}
 	defer func() { _ = rows.Close() }()
 	return scanEntries(rows)
+}
+
+// countEntries counts agentID's entries in space (0 = all).
+func countEntries(ctx context.Context, q db.DBTX, agentID, space int64) (int, error) {
+	var n int
+	if err := q.QueryRowContext(ctx, countSQL, agentID, space, space).Scan(&n); err != nil {
+		return 0, fmt.Errorf("counting inbox of agent %d: %w", agentID, err)
+	}
+	return n, nil
 }
 
 // selectMatching reads agentID's entries in space (0 = all) selected by q, at most waitLimit.
