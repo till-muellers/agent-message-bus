@@ -39,6 +39,7 @@ var wantAccess = map[string]string{
 	"bus_remove_thread":      "The thread's creator, leaders of the space and admins.",
 	"bus_inbox_read":         "Leaders, members and admins.",
 	"bus_inbox_ack":          "Leaders, members and admins.",
+	"bus_wait":               "Leaders, members and admins.",
 }
 
 func TestEveryToolStatesAccess(t *testing.T) {
@@ -69,7 +70,9 @@ func TestPitfalls(t *testing.T) {
 	t.Parallel()
 	tests := []struct{ tool, pitfall string }{
 		{"bus_inbox_read", "omp sessions receive entries automatically and need not poll"},
-		{"bus_inbox_read", "it never blocks and reading does not acknowledge"},
+		{"bus_inbox_read", "it never blocks (use bus_wait to wait) and reading does not acknowledge"},
+		{"bus_wait", "it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, " +
+			"filters with from/threadId and does not acknowledge (omp acknowledges for you)"},
 		{"bus_inbox_ack", "it deletes every entry with id up to upTo, so never acknowledge past what was handled"},
 		{"bus_create_topic", "nobody else is notified, so subscribers must be told the topic name"},
 		{"bus_create_blackboard", "a member's boards are deleted when it leaves or is revoked"},

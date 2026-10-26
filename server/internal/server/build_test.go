@@ -225,3 +225,12 @@ func TestHealthzProtocolHeader(t *testing.T) {
 		t.Fatalf("Agent-Bus-Protocol = %q, want 2", got)
 	}
 }
+
+func TestHTTPServerKeepsLongCalls(t *testing.T) {
+	t.Parallel()
+	srv := server.NewHTTPServer(http.NotFoundHandler())
+	if srv.WriteTimeout != 0 || srv.ReadTimeout != 0 || srv.IdleTimeout != 0 || srv.ReadHeaderTimeout != 10*time.Second {
+		t.Fatalf("server timeouts = write %v read %v idle %v header %v; want only a 10s header timeout",
+			srv.WriteTimeout, srv.ReadTimeout, srv.IdleTimeout, srv.ReadHeaderTimeout)
+	}
+}

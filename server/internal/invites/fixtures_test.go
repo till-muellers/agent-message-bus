@@ -35,7 +35,7 @@ func newEnv(t *testing.T) env {
 	now := func() time.Time { return clock }
 	a := auth.NewService(conn, "admin-secret", now)
 	pub := broker.NewMemory(64)
-	ib := inbox.NewService(conn, pub, now)
+	ib := inbox.NewService(t.Context(), conn, pub, now)
 	hooks := spaces.Hooks{Revocation: []spaces.RevocationHook{Revocation{}}}
 	sp := spaces.NewService(conn, spaces.NewResolver(conn), a, ib, now, hooks)
 	dbtest.SeedAgent(t, conn, 1, "lead", "leader")

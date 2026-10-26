@@ -8,8 +8,8 @@ Feature: Tool descriptions guide the agent on their own
   # tools as "discoverable": the model first sees a short summary, so the opening words of a
   # description matter most.
   #
-  # Descriptions state only shipped behaviour. Later slices extend them: bus_wait and its
-  # pitfall (slice 9) and the bus_inbox_ack notify clause (slice 13a).
+  # Descriptions state only shipped behaviour. A later slice extends them: the
+  # bus_inbox_ack notify clause (slice 13a).
 
   Rule: Descriptions open with the purpose; the access rule follows
 
@@ -30,7 +30,8 @@ Feature: Tool descriptions guide the agent on their own
 
       Examples:
         | tool                  | pitfall                                                                                  |
-        | bus_inbox_read        | omp sessions receive entries automatically and need not poll; it never blocks and reading does not acknowledge |
+        | bus_inbox_read        | omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge |
+        | bus_wait              | it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you) |
         | bus_inbox_ack         | it deletes every entry with id up to upTo, so never acknowledge past what was handled    |
         | bus_create_topic      | nobody else is notified, so subscribers must be told the topic name                       |
         | bus_create_blackboard | a member's boards are deleted when it leaves or is revoked                               |
@@ -61,6 +62,7 @@ Feature: Tool descriptions guide the agent on their own
         | tool              | access                           |
         | bus_invite_member | Leaders of the space and admins. |
         | bus_inbox_read    | Leaders, members and admins.     |
+        | bus_wait          | Leaders, members and admins.     |
         | bus_spawn_worker  | Leaders of the space and admins. |
 
   Rule: The extension's own tool is documented like the server's

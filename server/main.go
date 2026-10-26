@@ -146,6 +146,5 @@ func serve(ctx context.Context, cfg config.Config, conn *sql.DB, token string) e
 		return errors.Join(err, ln.Close())
 	}
 	defer unpublish()
-	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	return httpserver.Serve(ctx, srv, ln, cancelStreams)
+	return httpserver.Serve(ctx, server.NewHTTPServer(handler), ln, cancelStreams)
 }
