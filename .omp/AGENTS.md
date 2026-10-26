@@ -30,11 +30,11 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ## Architecture
 - `server/main.go`: wiring and CLI dispatch only, no logic: config, CLI dispatch, DB, migrations, `server.Build`, `httpserver.Serve`.
-- `server/internal/<feature>/`: one folder per feature (`auth`, `inbox`, `spaces`, `invites`, `messaging`, `blackboards`).
+- `server/internal/<feature>/`: one folder per feature (`auth`, `inbox`, `spaces`, `invites`, `messaging`, `blackboards`, `overview`).
   - `service.go`: business logic
   - `repository.go`: all SQL of the feature (interfaces defined where they are used)
   - `*_test.go`: table-driven tests next to the code, real SQLite via `internal/platform/db/dbtest`
-- **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`, `spaces.RevocationHook`, passed together in the `spaces.Hooks` parameter object) and service methods, inside the caller's transaction.
+- **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`, `spaces.RevocationHook`, passed together in the `spaces.Hooks` parameter object) and service methods, inside the caller's transaction. `internal/overview` is a read composition: it owns no table, reads only through the spaces, messaging and blackboards services, and only `internal/tools` and the `internal/server` wiring import it.
 - Transports are thin: `internal/tools` (the handler layer: one registry of `bus_*` tools), `internal/rpc`, `internal/mcpserver`, `internal/admin`; `internal/server` composes everything (`Build`, routes).
 - `internal/domain/`: business rules shared by features (names, body and title limits).
 - `internal/platform/`: shared infra (apperr, db, broker, httpx, httpserver, config, instance, detach); only for things used by 2+ packages.

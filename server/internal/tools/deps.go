@@ -6,6 +6,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/invites"
 	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
+	"github.com/till-muellers/agent-message-bus/server/internal/overview"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
@@ -17,6 +18,7 @@ type Deps struct {
 	Blackboards *blackboards.Service
 	Inbox       *inbox.Service
 	Invites     *invites.Service
+	Overview    *overview.Service
 }
 
 // New builds the registry of every bus tool. Services are only used inside
@@ -25,6 +27,7 @@ func New(d Deps) *Registry {
 	var ts []Tool
 	ts = append(ts, inGroup(GroupAdmin, adminTools(d.Auth, d.Spaces))...)
 	ts = append(ts, inGroup(GroupSpaces, append(spaceTools(d.Spaces), inviteTools(d.Invites)...))...)
+	ts = append(ts, inGroup(GroupSpaces, overviewTools(d.Overview))...)
 	ts = append(ts, inGroup(GroupMessaging, topicTools(d.Messaging))...)
 	ts = append(ts, inGroup(GroupBlackboards, blackboardTools(d.Blackboards))...)
 	ts = append(ts, inGroup(GroupInbox, inboxTools(d.Inbox))...)

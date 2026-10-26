@@ -1,6 +1,6 @@
 # agent-message-bus tools
 
-This page is the reference for every `bus_*` tool. The server serves the same 33 tools from one registry over two transports:
+This page is the reference for every `bus_*` tool. The server serves the same 34 tools from one registry over two transports:
 
 - **MCP** at `POST /mcp` (streamable HTTP, tools only);
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`.
@@ -35,6 +35,7 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 | [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Lists the space's admins, leaders and members, in that order. |
 | [bus_list_spaces](#bus_list_spaces) | [Spaces & membership](#spaces--membership) | Leaders and admins see all spaces, members only their own; no side effects. | Lists spaces with their leaders, joined admins, member count and whether the caller joined. |
 | [bus_revoke_member](#bus_revoke_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included, and the space is deleted when nobody remains. |
+| [bus_space_overview](#bus_space_overview) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Shows one space at a glance: you and your role, the participants, open topics with your subscriptions, blackboards and the 10 most recently active threads. |
 | [bus_whoami](#bus_whoami) | [Spaces & membership](#spaces--membership) | Any token; no side effects. | Returns the caller's kind, name and the spaces it participates in. |
 | [bus_close_topic](#bus_close_topic) | [Direct messages & topics](#direct-messages--topics) | The topic's creator, leaders of the space and admins. | Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the all topic cannot be closed, and a closed topic's name can be reused. |
 | [bus_create_topic](#bus_create_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins. | Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. Pitfall: nobody else is notified, so subscribers must be told the topic name. |
@@ -226,6 +227,20 @@ Removes the member, if present, with its tokens, inbox entries and blackboards, 
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_revoke_member -H "Authorization: Bearer $TOKEN" -d '{"name":"<name>","space":"<space>"}'
+```
+
+### bus_space_overview
+
+Shows one space at a glance: you and your role, the participants, open topics with your subscriptions, blackboards and the 10 most recently active threads. Participants and admins; no side effects.
+
+| Argument | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+
+**Result:** `{space, you: {name, role}, participants: [{name, role}], topics: [{name, createdBy, subscribed}], blackboards: [{name, owner, threads}], recentThreads: [{id, blackboard, title, createdBy, posts, lastPostAt, subscribed}]}`
+
+```sh
+curl -X POST $BUS/v1/tools/bus_space_overview -H "Authorization: Bearer $TOKEN" -d '{"space":"<space>"}'
 ```
 
 ### bus_whoami

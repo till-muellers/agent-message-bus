@@ -11,6 +11,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/invites"
 	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
+	"github.com/till-muellers/agent-message-bus/server/internal/overview"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
@@ -36,6 +37,7 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 	invSvc := invites.NewService(conn, spaceSvc, inboxSvc, time.Now)
 	reg := tools.New(tools.Deps{
 		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc, Invites: invSvc,
+		Overview: overview.NewService(resolver, spaceSvc, msgSvc, bbSvc),
 	})
 	return Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, shutdown), nil
 }
