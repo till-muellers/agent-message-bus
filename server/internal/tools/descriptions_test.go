@@ -12,30 +12,30 @@ var wantAccess = map[string]string{
 	"bus_list_admins":        "Admins only; no side effects.",
 	"bus_whoami":             "Any token; no side effects.",
 	"bus_list_spaces":        "Leaders see all spaces, members only their own; no side effects.",
-	"bus_list_participants":  "Participants only; no side effects.",
-	"bus_list_topics":        "Participants only; no side effects.",
-	"bus_list_blackboards":   "Participants only; no side effects.",
-	"bus_list_threads":       "Participants only; no side effects.",
-	"bus_read_thread":        "Participants only; no side effects.",
+	"bus_list_participants":  "Participants and admins; no side effects.",
+	"bus_list_topics":        "Participants and admins; no side effects.",
+	"bus_list_blackboards":   "Participants and admins; no side effects.",
+	"bus_list_threads":       "Participants and admins; no side effects.",
+	"bus_read_thread":        "Participants and admins; no side effects.",
 	"bus_create_space":       "Leaders only.",
 	"bus_join_space":         "Leaders only.",
-	"bus_leave_space":        "Participants only.",
+	"bus_leave_space":        "Participants.",
 	"bus_delete_space":       "Leaders of the space, once no other leader remains.",
-	"bus_invite_member":      "Leaders of the space.",
-	"bus_revoke_member":      "Leaders of the space.",
-	"bus_send_direct":        "Participants only; critical requires a leader.",
-	"bus_send_topic":         "Participants only; only leaders may send to all or send critical.",
-	"bus_create_topic":       "Participants only.",
-	"bus_create_blackboard":  "Participants only.",
-	"bus_create_thread":      "Participants only.",
-	"bus_add_post":           "Participants only.",
-	"bus_subscribe_topic":    "Participants only.",
-	"bus_unsubscribe_topic":  "Participants only.",
-	"bus_subscribe_thread":   "Participants only.",
-	"bus_unsubscribe_thread": "Participants only.",
-	"bus_close_topic":        "The topic's creator or a leader of the space.",
-	"bus_delete_blackboard":  "The board's owner or a leader of the space.",
-	"bus_remove_thread":      "The thread's creator or a leader of the space.",
+	"bus_invite_member":      "Leaders of the space and admins.",
+	"bus_revoke_member":      "Leaders of the space and admins.",
+	"bus_send_direct":        "Participants and admins; critical requires a leader or an admin.",
+	"bus_send_topic":         "Participants and admins; only leaders and admins may send to all or send critical.",
+	"bus_create_topic":       "Participants and admins.",
+	"bus_create_blackboard":  "Participants and admins.",
+	"bus_create_thread":      "Participants and admins.",
+	"bus_add_post":           "Participants and admins.",
+	"bus_subscribe_topic":    "Participants (admins join first).",
+	"bus_unsubscribe_topic":  "Participants (admins join first).",
+	"bus_subscribe_thread":   "Participants (admins join first).",
+	"bus_unsubscribe_thread": "Participants (admins join first).",
+	"bus_close_topic":        "The topic's creator, leaders of the space and admins.",
+	"bus_delete_blackboard":  "The board's owner, leaders of the space and admins.",
+	"bus_remove_thread":      "The thread's creator, leaders of the space and admins.",
 	"bus_inbox_read":         "Leaders and members.",
 	"bus_inbox_ack":          "Leaders and members.",
 }
@@ -82,6 +82,7 @@ func TestPitfalls(t *testing.T) {
 		{"bus_subscribe_topic", "the all topic cannot be subscribed or unsubscribed, because everyone receives it"},
 		{"bus_close_topic", "the all topic cannot be closed, and a closed topic's name can be reused"},
 		{"bus_create_thread", "the creator is subscribed and gets later posts by others"},
+		{"bus_revoke_member", "an admin may also revoke leaders, the last leader included"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.tool, func(t *testing.T) {
@@ -95,7 +96,7 @@ func TestPitfalls(t *testing.T) {
 
 func TestCriticalProperty(t *testing.T) {
 	t.Parallel()
-	const want = "Leaders only. omp recipients are interrupted (steer); other clients see critical: true."
+	const want = "Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true."
 	for _, name := range []string{"bus_send_direct", "bus_send_topic"} {
 		props := toolNamed(t, name).Schema["properties"].(map[string]any)
 		if got := props["critical"].(map[string]any)["description"]; got != want {
@@ -110,7 +111,7 @@ func TestLedgerIndexUsesAccess(t *testing.T) {
 	for _, want := range []string{
 		"| [bus_whoami](#bus_whoami) | [Spaces & membership](#spaces--membership) | Any token; no side effects. | " +
 			"Returns the caller's kind, name and the spaces it participates in. |\n",
-		"| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants only. | " +
+		"| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants and admins. | " +
 			"Appends a post and notifies the thread's subscribers except the author. |\n",
 	} {
 		if !strings.Contains(doc, want) {
@@ -124,7 +125,7 @@ func TestLedgerDocumentsSpawnWorker(t *testing.T) {
 	doc := RenderMarkdown(New(Deps{}))
 	for _, want := range []string{
 		"### bus_spawn_worker\n\nStarts a worker agent",
-		"Leaders of the space.",
+		"Leaders of the space and admins.",
 		"| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |",
 		"| `name` | string | yes |",
 		"| `task` | string | no |",

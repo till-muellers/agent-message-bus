@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
@@ -31,6 +32,15 @@ func (m Membership) Leads() bool { return m.Admin || m.Role == RoleLeader }
 
 // Joined reports whether m holds a participant row in the space.
 func (m Membership) Joined() bool { return m.Role != "" }
+
+// RequireJoined fails with Forbidden unless m holds a participant row; only participants
+// receive messages, so subscribing needs joining.
+func (m Membership) RequireJoined() error {
+	if !m.Joined() {
+		return apperr.New(apperr.Forbidden, "join space %s first; only participants receive messages", m.SpaceName)
+	}
+	return nil
+}
 
 // DepartureHook cleans feature state when a participant leaves or is revoked.
 // It runs inside the departure transaction; returned entries are inserted there

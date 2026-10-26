@@ -336,18 +336,15 @@ Feature: Topics
 
   Rule: Every topic operation is gated by space membership
 
-    Scenario Outline: The admin cannot use topics
+    Scenario Outline: An admin that has not joined cannot subscribe (<action>)
+      Given member "ann" created topic "dev" in space "demo"
       When the admin <action> in space "demo"
-      Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
+      Then the call fails with forbidden "join space demo first; only participants receive messages"
 
       Examples:
         | action                        |
-        | lists the topics              |
-        | creates topic "dev"           |
-        | sends "x" to topic "all"      |
         | subscribes to topic "dev"     |
         | unsubscribes from topic "dev" |
-        | closes topic "dev"            |
 
     Scenario Outline: Topic operations require an existing space
       When leader "lead" <action> in space "nope"

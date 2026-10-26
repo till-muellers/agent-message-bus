@@ -73,6 +73,9 @@ func (s *Service) CreateThread(ctx context.Context, p auth.Principal, space, nam
 		if _, err = insertPost(ctx, tx, id, m.AgentID, body, at); err != nil {
 			return nil, err
 		}
+		if !m.Joined() {
+			return nil, nil // only participants are subscribed; an admin that has not joined is not
+		}
 		return nil, subscribe(ctx, tx, id, m.AgentID)
 	})
 	return id, err

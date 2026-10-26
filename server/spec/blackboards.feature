@@ -25,7 +25,6 @@ Feature: Blackboards, threads and posts
 
     Examples:
       | caller            | space | code      | message                                                              |
-      | the admin         | demo  | forbidden | admin token cannot act in spaces; mint a leader with bus_mint_leader |
       | leader "lead"     | ghost | not_found | space ghost not found                                                |
       | member "outsider" | demo  | forbidden | token is not valid for space demo                                    |
       | leader "lead2"    | demo  | forbidden | not a participant of space demo                                      |

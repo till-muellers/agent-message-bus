@@ -172,7 +172,6 @@ func TestAuthorizeInvite(t *testing.T) {
 		wantMsg  string
 	}{
 		{name: "member caller", p: member, space: "alpha", invitee: "x", wantKind: apperr.Forbidden},
-		{name: "admin", p: admin, space: "alpha", invitee: "x", wantKind: apperr.Forbidden},
 		{name: "leader name", p: lead, space: "alpha", invitee: "boss", wantKind: apperr.Conflict,
 			wantMsg: "agent boss is a leader agent"},
 		{name: "invalid name", p: lead, space: "alpha", invitee: "Bad Name", wantKind: apperr.Invalid},
@@ -267,8 +266,9 @@ func TestParticipants(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, %v; want %+v", got, err, want)
 	}
-	_, err = e.svc.Participants(ctx, admin, "alpha")
-	apperrtest.WantKind(t, err, apperr.Forbidden, "")
+	if _, err = e.svc.Participants(ctx, admin, "alpha"); err != nil {
+		t.Fatalf("admin lists participants: %v", err)
+	}
 }
 
 // recordingHook records departures and notifies a fixed recipient.

@@ -38,6 +38,9 @@ func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, i
 // Subscribe subscribes the caller to a thread; idempotent.
 func (s *Service) Subscribe(ctx context.Context, p auth.Principal, space string, id int64) error {
 	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+		if err := m.RequireJoined(); err != nil {
+			return nil, err
+		}
 		if _, err := mustFindThread(ctx, tx, m.SpaceID, id); err != nil {
 			return nil, err
 		}
@@ -48,6 +51,9 @@ func (s *Service) Subscribe(ctx context.Context, p auth.Principal, space string,
 // Unsubscribe removes the caller's subscription to a thread; idempotent.
 func (s *Service) Unsubscribe(ctx context.Context, p auth.Principal, space string, id int64) error {
 	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+		if err := m.RequireJoined(); err != nil {
+			return nil, err
+		}
 		if _, err := mustFindThread(ctx, tx, m.SpaceID, id); err != nil {
 			return nil, err
 		}

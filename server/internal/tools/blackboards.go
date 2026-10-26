@@ -44,7 +44,7 @@ func boardTools(b *blackboards.Service) []Tool {
 		boardOp("bus_create_blackboard", accessParticipants,
 			"Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked.",
 			b, (*blackboards.Service).Create),
-		boardOp("bus_delete_blackboard", "The board's owner or a leader of the space.",
+		boardOp("bus_delete_blackboard", "The board's owner, leaders of the space and admins.",
 			"Deletes the blackboard with its threads and notifies thread subscribers.", b, (*blackboards.Service).Delete),
 		define("bus_list_threads", accessParticipantsRead, "Lists the blackboard's threads, most recently active first.",
 			"[{id, title, createdBy, posts, lastPostAt}]",
@@ -52,7 +52,8 @@ func boardTools(b *blackboards.Service) []Tool {
 				return list(b.ListThreads(ctx, p, a.Space, a.Blackboard))
 			}),
 		define("bus_create_thread", accessParticipants,
-			"Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others.",
+			"Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others, "+
+				"unless it is an admin that has not joined the space.",
 			"{threadId}", []string{"space", "blackboard", "title", "body"},
 			map[string]any{"space": spaceProp(), "blackboard": boardProp(), "title": titleProp(), "body": bodyProp()},
 			func(ctx context.Context, p auth.Principal, a createThreadArgs) (any, error) {
@@ -80,11 +81,11 @@ func threadTools(b *blackboards.Service) []Tool {
 			threadReq(), threadProps(), func(ctx context.Context, p auth.Principal, a threadArgs) (any, error) {
 				return b.ReadThread(ctx, p, a.Space, a.ThreadID)
 			}),
-		threadOp("bus_remove_thread", "The thread's creator or a leader of the space.",
+		threadOp("bus_remove_thread", "The thread's creator, leaders of the space and admins.",
 			"Deletes the thread and notifies its subscribers.", b, (*blackboards.Service).RemoveThread),
-		threadOp("bus_subscribe_thread", accessParticipants,
+		threadOp("bus_subscribe_thread", accessSubscribers,
 			"Subscribes the caller to new posts in the thread; idempotent.", b, (*blackboards.Service).Subscribe),
-		threadOp("bus_unsubscribe_thread", accessParticipants,
+		threadOp("bus_unsubscribe_thread", accessSubscribers,
 			"Stops post notifications for the thread; idempotent.", b, (*blackboards.Service).Unsubscribe),
 		define("bus_add_post", accessParticipants,
 			"Appends a post and notifies the thread's subscribers except the author.",

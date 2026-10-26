@@ -134,7 +134,7 @@ Facts that are not obvious from the code and that cost time to find out:
 - Subagents only get the tools their parent passes on (`filterActiveTools` drops parent-owned tools), and they have no inbox stream of their own.
 
 **Bus permissions to remember when writing test prompts**
-- Only leaders may send to `all` or send critical messages. A member that tries gets `forbidden`.
+- Only leaders and admins may send to `all` or send critical messages. A member that tries gets `forbidden`.
 - A worker should report with `bus_send_direct` to its leader or on a workstream topic.
 
 ## Generated files

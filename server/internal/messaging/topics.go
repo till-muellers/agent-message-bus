@@ -27,7 +27,7 @@ func (s *Service) ListTopics(ctx context.Context, p auth.Principal, space string
 	if err != nil {
 		return nil, err
 	}
-	return listTopics(ctx, s.db, m.SpaceID, m.AgentID)
+	return listTopics(ctx, s.db, m.SpaceID, m.AgentID, m.Joined())
 }
 
 // CreateTopic opens topic name in space and subscribes the creator.
@@ -48,6 +48,9 @@ func (s *Service) CreateTopic(ctx context.Context, p auth.Principal, space, name
 		id, err := insertTopic(ctx, tx, m.SpaceID, name, m.AgentID, db.Timestamp(s.now()))
 		if err != nil {
 			return nil, err
+		}
+		if !m.Joined() {
+			return nil, nil // only participants are subscribed; an admin that has not joined is not
 		}
 		return nil, subscribe(ctx, tx, id, m.AgentID)
 	})
@@ -103,6 +106,9 @@ func (s *Service) changeSubscription(ctx context.Context, p auth.Principal, spac
 		return apperr.New(apperr.Invalid, "the all topic cannot be subscribed or unsubscribed")
 	}
 	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+		if err := m.RequireJoined(); err != nil {
+			return nil, err
+		}
 		t, err := requireTopic(ctx, tx, m, topic)
 		if err != nil {
 			return nil, err

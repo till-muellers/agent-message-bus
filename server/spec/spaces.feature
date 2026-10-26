@@ -14,10 +14,7 @@ Feature: Spaces
 
   Rule: Space access gate for every space-scoped operation
 
-    Scenario: The admin token cannot act in spaces
-      Given leader "lead" created space "demo"
-      When the admin lists the participants of space "demo"
-      Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
+    # An admin passes the gate in every space without joining it (admin-role.feature).
 
     Scenario: An unknown space is not found
       When leader "lead" lists the participants of space "nope"
@@ -178,10 +175,12 @@ Feature: Spaces
         | abe  | member |
         | bob  | member |
 
-    Scenario: The admin cannot list participants
+    Scenario: The admin lists the participants of a space it has not joined
       Given leader "lead" created space "alpha"
       When the admin lists the participants of space "alpha"
-      Then the call fails with forbidden "admin token cannot act in spaces; mint a leader with bus_mint_leader"
+      Then the call returns:
+        | name | role   |
+        | lead | leader |
 
   Rule: Identity (bus_whoami)
 

@@ -36,8 +36,6 @@ func TestResolve(t *testing.T) {
 			want: Membership{SpaceID: 10, SpaceName: "alpha", AgentID: 1, AgentName: "lead", Role: RoleLeader}},
 		{name: "member", p: work, space: "alpha",
 			want: Membership{SpaceID: 10, SpaceName: "alpha", AgentID: 2, AgentName: "work", Role: RoleMember}},
-		{name: "admin", p: auth.Principal{Kind: auth.Admin}, space: "alpha", wantKind: apperr.Forbidden,
-			wantMsg: "admin token cannot act in spaces; mint a leader with bus_mint_leader"},
 		{name: "unknown space", p: lead, space: "nope", wantKind: apperr.NotFound, wantMsg: "space nope not found"},
 		{name: "member other space", p: work, space: "beta", wantKind: apperr.Forbidden,
 			wantMsg: "token is not valid for space beta"},
