@@ -42,13 +42,18 @@ func NewService(root context.Context, conn *sql.DB, pub publisher, now func() ti
 
 func topic(agentID int64) string { return fmt.Sprintf("inbox/%d", agentID) }
 
-// insert stores es through q and returns copies with CreatedAt and ID set.
+// insert stores es through q, marking each edge (isEdge), and returns copies with
+// CreatedAt and ID set.
 func (s *Service) insert(ctx context.Context, q db.DBTX, es []Entry) ([]Entry, error) {
 	createdAt := db.Timestamp(s.now())
 	out := make([]Entry, 0, len(es))
 	for _, e := range es {
 		e.CreatedAt, e.Class = createdAt, ClassOf(e.Type, e.Critical)
-		id, err := insertEntry(ctx, q, e)
+		edge, err := isEdge(ctx, q, e)
+		if err != nil {
+			return nil, err
+		}
+		id, err := insertEntry(ctx, q, e, edge)
 		if err != nil {
 			return nil, err
 		}

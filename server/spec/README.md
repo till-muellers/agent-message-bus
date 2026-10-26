@@ -66,6 +66,9 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Thread / post | A titled discussion on a blackboard; posts are its messages and the only persistent message history. |
 | Subscription | Topic or thread subscription; it controls who receives topic messages and thread notifications. |
 | Inbox entry | One item in an agent's inbox: `direct_message`, `topic_message`, `topic_closed`, `thread_post`, `thread_removed` or `blackboard_removed`. Each entry carries a delivery class (`interrupt`, `queue` or `deferred`, see [delivery-class.feature](delivery-class.feature)). Leaders and admins read the entries of every space they participate in; members only those of their token's space. Entries are deleted when acknowledged. |
+| Mailbox scope | What one token sees with `bus_inbox_read`: a leader's or admin's entries in every space, a member's entries in its token's space. |
+| Edge | An inbox entry stored into an empty mailbox scope (only the first such entry of a delivery transaction), or any critical entry. Stored on the entry (`edge`), so it survives restarts; existing entries from before migration `0003_inbox_notice` are no edges. Acknowledging the whole scope re-arms it. See [mail-notice.feature](mail-notice.feature). |
+| Notice | "You have mail": what waits in a mailbox scope (waiting and critical counts, space names), never message bodies. Due once per unnoticed edge; taking it marks the scope's edges `noticed`. Server-internal until the tool-result hint (slice 13b). |
 
 ## Features
 
@@ -89,6 +92,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [admin-messaging.feature](admin-messaging.feature) | An admin is reachable only in the spaces it joined (role `admin`): joining, messaging, its own inbox and stream, leaving |
 | [bus-wait.feature](bus-wait.feature) | `bus_wait`: the one long-poll call; filters, scope, timeout, shutdown and disconnect, never acknowledges, never takes the stream slot |
 | [overview.feature](overview.feature) | `bus_space_overview`: one space at a glance (you and your role, participants, open topics with subscriptions, blackboards, the 10 most recently active threads); the access gate; no side effects |
+| [mail-notice.feature](mail-notice.feature) | The "You have mail" notice: edge-triggered per mailbox scope (empty → non-empty), one per delivery transaction, re-armed by a full acknowledgement, critical entries always notify, persisted across restarts, no bodies |
 
 ## Design decisions
 
