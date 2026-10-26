@@ -14,9 +14,11 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/mcpserver"
 	"github.com/till-muellers/agent-message-bus/server/internal/rpc"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
+	"github.com/till-muellers/agent-message-bus/server/internal/web"
 )
 
-// Routes mounts health, MCP, RPC, invite acceptance, inbox stream, guide and localhost admin endpoints.
+// Routes mounts health, MCP, RPC, invite acceptance, inbox stream, guide and localhost admin
+// endpoints: the API listener (AMB_ADDR). It has no /web route; the GUI is WebRoutes.
 // shutdown is invoked by POST /v1/admin/shutdown. Invite acceptance skips the auth
 // middleware because the invite code itself is the bearer.
 func Routes(streamRoot context.Context, a *auth.Service, ib *inbox.Service, inv *invites.Service,
@@ -32,6 +34,14 @@ func Routes(streamRoot context.Context, a *auth.Service, ib *inbox.Service, inv 
 	mux.Handle("GET /v1/guide", a.Middleware(http.HandlerFunc(serveGuide)))
 	admin.Mount(mux, a.Middleware, a, shutdown)
 	return mux
+}
+
+// WebRoutes mounts the web GUI on its own mux for the GUI listener (AMB_WEB_ADDR); it serves
+// only /web/*, everything else is 404.
+func WebRoutes(gui *web.Web) http.Handler {
+	mux := http.NewServeMux()
+	gui.Mount(mux)
+	return web.Headers(mux)
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {

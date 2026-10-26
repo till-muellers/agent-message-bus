@@ -36,7 +36,7 @@ func TestDefaultDataDir(t *testing.T) {
 func TestLoadDefaultDBPath(t *testing.T) {
 	t.Parallel()
 	env := map[string]string{"AMB_ADMIN_TOKEN": strings.Repeat("a", 32), "XDG_DATA_HOME": "X"}
-	c, err := load(func(k string) string { return env[k] }, "linux", func() (string, error) { return "H", nil })
+	c, err := load(lookupIn(env), "linux", func() (string, error) { return "H", nil })
 	if err != nil {
 		t.Fatal(err)
 	}

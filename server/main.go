@@ -18,7 +18,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/config"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/detach"
-	"github.com/till-muellers/agent-message-bus/server/internal/platform/httpserver"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/instance"
 	"github.com/till-muellers/agent-message-bus/server/internal/server"
 	"github.com/till-muellers/agent-message-bus/server/migrations"
@@ -26,7 +25,8 @@ import (
 
 const usage = `Usage: agent-message-bus [command]
 
-Serves the agent message bus (MCP at /mcp, RPC at /v1/tools, SSE at /v1/inbox/stream, /healthz).
+Serves the agent message bus (MCP at /mcp, RPC at /v1/tools, SSE at /v1/inbox/stream, /healthz)
+and the web GUI at /web/ on its own address (AMB_WEB_ADDR).
 One instance runs per data dir.
 
 Commands:
@@ -44,7 +44,9 @@ Flags:
 Environment:
   AMB_ADMIN_TOKEN  optional admin token override (at least 32 characters); default is the
                    generated <datadir>/admin-token file
-  AMB_ADDR         listen address (default 127.0.0.1:8080)
+  AMB_ADDR         API listen address (default 127.0.0.1:8080)
+  AMB_WEB_ADDR     web GUI listen address (default 127.0.0.1:8081; empty or off disables
+                   the GUI; must differ from AMB_ADDR)
   AMB_DB_PATH      SQLite file (default <datadir>/agent-message-bus.db, where <datadir> is
                    Windows: %LOCALAPPDATA%\agent-message-bus
                    macOS:   ~/Library/Application Support/agent-message-bus
@@ -65,7 +67,7 @@ func main() {
 }
 
 func dispatch(args []string) error {
-	cfg, err := config.Load(os.Getenv)
+	cfg, err := config.Load(os.LookupEnv)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -133,18 +135,45 @@ func serve(ctx context.Context, cfg config.Config, conn *sql.DB, token string) e
 	defer shutdown()
 	streamRoot, cancelStreams := context.WithCancel(context.Background())
 	defer cancelStreams()
-	handler, err := server.Build(streamRoot, conn, token, shutdown)
+	h, err := server.Build(streamRoot, conn, token, shutdown)
 	if err != nil {
 		return err
 	}
-	ln, err := net.Listen("tcp", cfg.Addr)
+	apiLn, webLn, err := listen(cfg)
 	if err != nil {
-		return fmt.Errorf("listen %s: %w", cfg.Addr, err)
+		return err
 	}
-	unpublish, err := instance.Publish(cfg.DataDir(), ln.Addr().String(), time.Now())
+	unpublish, err := instance.Publish(cfg.DataDir(), apiLn.Addr().String(), time.Now())
 	if err != nil {
-		return errors.Join(err, ln.Close())
+		return errors.Join(err, closeListeners(apiLn, webLn))
 	}
 	defer unpublish()
-	return httpserver.Serve(ctx, server.NewHTTPServer(handler), ln, cancelStreams)
+	var gui *http.Server
+	if webLn != nil {
+		gui = server.NewHTTPServer(h.Web)
+	}
+	return server.Run(ctx, server.NewHTTPServer(h.API), gui, apiLn, webLn, cancelStreams)
+}
+
+// listen opens the API listener and, unless the GUI is disabled, the GUI listener.
+func listen(cfg config.Config) (api, web net.Listener, err error) {
+	api, err = net.Listen("tcp", cfg.Addr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("listen %s: %w", cfg.Addr, err)
+	}
+	if cfg.WebAddr == "" {
+		return api, nil, nil
+	}
+	web, err = net.Listen("tcp", cfg.WebAddr)
+	if err != nil {
+		return nil, nil, errors.Join(fmt.Errorf("listen AMB_WEB_ADDR %s: %w", cfg.WebAddr, err), api.Close())
+	}
+	return api, web, nil
+}
+
+func closeListeners(api, web net.Listener) error {
+	if web == nil {
+		return api.Close()
+	}
+	return errors.Join(api.Close(), web.Close())
 }

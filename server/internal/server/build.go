@@ -15,15 +15,23 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
+	"github.com/till-muellers/agent-message-bus/server/internal/web"
 )
 
+// Handlers are the two listeners' handlers: the API (AMB_ADDR) and the web GUI (AMB_WEB_ADDR).
+type Handlers struct{ API, Web http.Handler }
+
 // Build wires every service onto conn, ensures the bootstrap admin exists and returns the
-// routed handler. Inbox streams end when streamRoot is cancelled; shutdown is called by
+// routed handlers. Inbox streams end when streamRoot is cancelled; shutdown is called by
 // POST /v1/admin/shutdown.
-func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown func()) (http.Handler, error) {
+func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown func()) (Handlers, error) {
 	authSvc := auth.NewService(conn, adminToken, time.Now)
 	if err := authSvc.Bootstrap(streamRoot); err != nil {
-		return nil, err
+		return Handlers{}, err
+	}
+	dist, err := web.Dist()
+	if err != nil {
+		return Handlers{}, err
 	}
 	inboxSvc := inbox.NewService(streamRoot, conn, broker.NewMemory(256), time.Now)
 	resolver := spaces.NewResolver(conn)
@@ -39,5 +47,6 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc, Invites: invSvc,
 		Overview: overview.NewService(resolver, spaceSvc, msgSvc, bbSvc),
 	})
-	return Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, shutdown), nil
+	gui := web.New(web.Deps{Auth: authSvc, Who: spaceSvc, Dist: dist, Now: time.Now})
+	return Handlers{API: Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, shutdown), Web: WebRoutes(gui)}, nil
 }

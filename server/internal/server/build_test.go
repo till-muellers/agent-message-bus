@@ -25,14 +25,14 @@ func newServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// mustBuild builds the server on a fresh database and fails the test on error.
+// mustBuild builds the server on a fresh database, fails the test on error and returns the API handler.
 func mustBuild(ctx context.Context, t *testing.T, shutdown func()) http.Handler {
 	t.Helper()
 	h, err := server.Build(ctx, dbtest.Open(t), adminToken, shutdown)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	return h
+	return h.API
 }
 
 func do(t *testing.T, srv *httptest.Server, method, path, token, body string) (int, []byte) {

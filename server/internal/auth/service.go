@@ -33,7 +33,12 @@ func NewService(db *sql.DB, adminToken string, now func() time.Time) *Service {
 
 // Authenticate resolves token to a Principal.
 func (s *Service) Authenticate(ctx context.Context, token string) (Principal, error) {
-	h := Hash(token)
+	return s.AuthenticateHash(ctx, Hash(token))
+}
+
+// AuthenticateHash resolves the Hash of a token to a Principal, so callers that keep only
+// the hash (web sessions) can re-validate it on every request.
+func (s *Service) AuthenticateHash(ctx context.Context, h string) (Principal, error) {
 	if subtle.ConstantTimeCompare([]byte(h), []byte(*s.adminHash.Load())) == 1 {
 		return s.bootstrapPrincipal(), nil
 	}

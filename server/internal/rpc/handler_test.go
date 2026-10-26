@@ -22,7 +22,7 @@ func newServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	srv := httptest.NewServer(h)
+	srv := httptest.NewServer(h.API)
 	t.Cleanup(func() { cancel(); srv.Close() })
 	return srv
 }
