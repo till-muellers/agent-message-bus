@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { type JsonSchema, toZod } from "../extension/lib/bus/schema.ts";
-import { type FakeNode, fakeZ, toJson, z } from "./fakes.ts";
+import { type JsonSchema, toZod } from "../../extension/lib/bus/schema.ts";
+import { type FakeNode, fakeZ, toJson, z } from "../fakes.ts";
 
 describe("toZod", () => {
 	const schema: JsonSchema = {

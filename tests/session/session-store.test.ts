@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createSessionStore, sessionKey } from "../extension/lib/session/session-store.ts";
-import { URL_, useTempDirs } from "./fakes.ts";
+import { createSessionStore, sessionKey } from "../../extension/lib/session/session-store.ts";
+import { URL_, useTempDirs } from "../fakes.ts";
 
 describe("session store", () => {
 	const tempDir = useTempDirs();

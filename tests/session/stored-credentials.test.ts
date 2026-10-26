@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { configDir, createCredentialStore, resolveActive } from "../extension/lib/session/stored-credentials.ts";
-import { consumeEnv } from "../extension/lib/session/env.ts";
-import { URL_, useTempDirs } from "./fakes.ts";
+import { configDir, createCredentialStore, resolveActive } from "../../extension/lib/session/stored-credentials.ts";
+import { consumeEnv } from "../../extension/lib/session/env.ts";
+import { URL_, useTempDirs } from "../fakes.ts";
 
 describe("credentials", () => {
 	const tempDir = useTempDirs();

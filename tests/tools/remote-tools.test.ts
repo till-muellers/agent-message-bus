@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { createClient, type FetchLike, type RemoteTool } from "../extension/lib/bus/client.ts";
-import type { JsonSchema } from "../extension/lib/bus/schema.ts";
-import { INBOX_TOOLS, registerRemoteTools, type RemoteToolsOptions } from "../extension/lib/tools/remote-tools.ts";
-import { errorResponse, URL_, z } from "./fakes.ts";
+import { createClient, type FetchLike, type RemoteTool } from "../../extension/lib/bus/client.ts";
+import type { JsonSchema } from "../../extension/lib/bus/schema.ts";
+import { INBOX_TOOLS, registerRemoteTools, type RemoteToolsOptions } from "../../extension/lib/tools/remote-tools.ts";
+import { errorResponse, URL_, z } from "../fakes.ts";
 
 type FakeTool = { name: string; label: string; execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }> };
 const listTool = (name: string, inputSchema: JsonSchema = { type: "object", properties: {} }): RemoteTool => ({ name, description: name, inputSchema });

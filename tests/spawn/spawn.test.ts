@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { type BusClient, BusError } from "../extension/lib/bus/client.ts";
-import { LAUNCHERS } from "../extension/lib/launch/index.ts";
-import type { LaunchCommand, LaunchContext, Launcher } from "../extension/lib/launch/launcher.ts";
-import { type SpawnDeps, spawnWorker } from "../extension/lib/spawn/spawn.ts";
+import { type BusClient, BusError } from "../../extension/lib/bus/client.ts";
+import { LAUNCHERS } from "../../extension/lib/launch/index.ts";
+import type { LaunchCommand, LaunchContext, Launcher } from "../../extension/lib/launch/launcher.ts";
+import { type SpawnDeps, spawnWorker } from "../../extension/lib/spawn/spawn.ts";
 
 const URL_ = "http://127.0.0.1:8080";
 const CODE = "k7m2-x9pq";

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { BusError, createClient } from "../extension/lib/bus/client.ts";
-import { CODE, errorResponse, fakeBus, URL_ } from "./fakes.ts";
+import { BusError, createClient } from "../../extension/lib/bus/client.ts";
+import { CODE, errorResponse, fakeBus, URL_ } from "../fakes.ts";
 
 describe("client", () => {
 	test("callTool posts JSON with bearer auth and unwraps result; errors become BusError", async () => {
