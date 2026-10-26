@@ -39,6 +39,17 @@ type Post struct {
 	CreatedAt string `json:"createdAt"`
 }
 
+// RecentThread is a thread of any board in a space with the caller's subscription state.
+type RecentThread struct {
+	ID         int64  `json:"id"`
+	Blackboard string `json:"blackboard"`
+	Title      string `json:"title"`
+	CreatedBy  string `json:"createdBy"`
+	Posts      int    `json:"posts"`
+	LastPostAt string `json:"lastPostAt"`
+	Subscribed bool   `json:"subscribed"`
+}
+
 // ListThreads returns a board's threads ordered by latest post, newest first.
 func (s *Service) ListThreads(ctx context.Context, p auth.Principal, space, name string) ([]ThreadInfo, error) {
 	m, err := s.spaces.Resolve(ctx, p, space)
@@ -50,6 +61,16 @@ func (s *Service) ListThreads(ctx context.Context, p auth.Principal, space, name
 		return nil, err
 	}
 	return listThreads(ctx, s.db, b.id)
+}
+
+// RecentThreads returns at most limit threads across all boards of space, latest post
+// first, each with whether the caller is subscribed.
+func (s *Service) RecentThreads(ctx context.Context, p auth.Principal, space string, limit int) ([]RecentThread, error) {
+	m, err := s.spaces.Resolve(ctx, p, space)
+	if err != nil {
+		return nil, err
+	}
+	return recentThreads(ctx, s.db, m.SpaceID, m.AgentID, limit)
 }
 
 // CreateThread inserts a thread with its first post and subscribes the creator.

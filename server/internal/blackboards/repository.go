@@ -155,6 +155,33 @@ func listThreads(ctx context.Context, q db.DBTX, boardID int64) ([]ThreadInfo, e
 	return out, nil
 }
 
+// recentThreads lists at most limit threads of every board in spaceID, latest post first,
+// with agentID's subscription state.
+func recentThreads(ctx context.Context, q db.DBTX, spaceID, agentID int64, limit int) ([]RecentThread, error) {
+	rows, err := q.QueryContext(ctx, `SELECT t.id, b.name, t.title, a.name, COUNT(p.id),
+		COALESCE(MAX(p.created_at), t.created_at) AS last,
+		EXISTS (SELECT 1 FROM thread_subscriptions s WHERE s.thread_id = t.id AND s.agent_id = ?)
+		FROM threads t JOIN blackboards b ON b.id = t.blackboard_id JOIN agents a ON a.id = t.created_by
+		LEFT JOIN posts p ON p.thread_id = t.id
+		WHERE b.space_id = ? GROUP BY t.id ORDER BY last DESC, MAX(p.id) DESC LIMIT ?`, agentID, spaceID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("listing recent threads: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []RecentThread{}
+	for rows.Next() {
+		var t RecentThread
+		if err := rows.Scan(&t.ID, &t.Blackboard, &t.Title, &t.CreatedBy, &t.Posts, &t.LastPostAt, &t.Subscribed); err != nil {
+			return nil, fmt.Errorf("scanning recent thread: %w", err)
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating recent threads: %w", err)
+	}
+	return out, nil
+}
+
 func listPosts(ctx context.Context, q db.DBTX, threadID int64) ([]Post, error) {
 	rows, err := q.QueryContext(ctx, `SELECT p.id, a.name, p.body, p.created_at FROM posts p
 		JOIN agents a ON a.id = p.author_id WHERE p.thread_id = ? ORDER BY p.id`, threadID)

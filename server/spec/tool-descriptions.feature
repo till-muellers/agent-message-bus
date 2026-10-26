@@ -59,11 +59,12 @@ Feature: Tool descriptions guide the agent on their own
       Then the access of <tool> reads "<access>"
 
       Examples:
-        | tool              | access                           |
-        | bus_invite_member | Leaders of the space and admins. |
-        | bus_inbox_read    | Leaders, members and admins.     |
-        | bus_wait          | Leaders, members and admins.     |
-        | bus_spawn_worker  | Leaders of the space and admins. |
+        | tool               | access                                    |
+        | bus_space_overview | Participants and admins; no side effects. |
+        | bus_invite_member  | Leaders of the space and admins.          |
+        | bus_inbox_read     | Leaders, members and admins.              |
+        | bus_wait           | Leaders, members and admins.              |
+        | bus_spawn_worker   | Leaders of the space and admins.          |
 
   Rule: The extension's own tool is documented like the server's
 

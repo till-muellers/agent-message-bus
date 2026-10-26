@@ -14,6 +14,7 @@ var wantAccess = map[string]string{
 	"bus_whoami":             "Any token; no side effects.",
 	"bus_list_spaces":        "Leaders and admins see all spaces, members only their own; no side effects.",
 	"bus_list_participants":  "Participants and admins; no side effects.",
+	"bus_space_overview":     "Participants and admins; no side effects.",
 	"bus_list_topics":        "Participants and admins; no side effects.",
 	"bus_list_blackboards":   "Participants and admins; no side effects.",
 	"bus_list_threads":       "Participants and admins; no side effects.",

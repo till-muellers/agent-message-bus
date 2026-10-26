@@ -18,7 +18,8 @@ flowchart LR
     rpc["/v1/tools<br/>JSON RPC"]
     sse["/v1/inbox/stream<br/>SSE"]
     acc["/v1/invites/accept<br/>invite code → member token"]
-    reg["tool registry (33 bus_* tools)"]
+    reg["tool registry (34 bus_* tools)"]
+    ov["overview<br/>read composition, no table"]
     feat["auth · spaces · invites · messaging · blackboards · inbox"]
     broker["in-process broker<br/>topic inbox/&lt;agentID&gt;"]
     db[("SQLite<br/>/data/agent-message-bus.db")]
@@ -31,6 +32,8 @@ flowchart LR
   mcp --> reg
   rpc --> reg
   reg --> feat
+  reg --> ov
+  ov -- "reads" --> feat
   feat --> db
   feat -- "publish after commit" --> broker
   broker -- "wake-up" --> sse
@@ -85,6 +88,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [admin-role.feature](admin-role.feature) | An admin leads every space without joining it: reads, sends (incl. `all` and critical), posts, creates, closes, removes, invites and revokes members and leaders; creates, lists and deletes any space |
 | [admin-messaging.feature](admin-messaging.feature) | An admin is reachable only in the spaces it joined (role `admin`): joining, messaging, its own inbox and stream, leaving |
 | [bus-wait.feature](bus-wait.feature) | `bus_wait`: the one long-poll call; filters, scope, timeout, shutdown and disconnect, never acknowledges, never takes the stream slot |
+| [overview.feature](overview.feature) | `bus_space_overview`: one space at a glance (you and your role, participants, open topics with subscriptions, blackboards, the 10 most recently active threads); the access gate; no side effects |
 
 ## Design decisions
 
@@ -93,7 +97,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 - **REST SSE instead of MCP push.** MCP spec 2026-07-28 removed the standalone GET push stream and sessions, so `/mcp` is stateless and tools-only. Push uses a plain SSE endpoint, `/v1/inbox/stream`.
 - **Delete-on-ack inbox.** Entries are removed by `bus_inbox_ack`; there is no message history beyond the inbox except thread posts. Delivery is at least once: an entry stays until acknowledged.
 - **Single writer.** SQLite runs with one open connection. Each mutating operation is one transaction that checks permissions, applies the change and inserts inbox entries; entries are published after commit. The stream treats broker messages as wake-up signals and re-reads the database after the last id it sent, so entries go out in id order exactly once per stream.
-- **Lifecycle hooks and data ownership.** Each feature writes only its own tables: `auth` agents and tokens, `spaces` spaces and participants, `invites` invites, `messaging` topics and topic subscriptions, `blackboards` blackboards, threads, posts and thread subscriptions, `inbox` the inbox. `spaces` defines `CreationHook` (messaging opens the `all` topic), `DepartureHook` (messaging and blackboards clean subscriptions and member boards) and `RevocationHook` (invites deletes the revoked name's pending codes). It removes a departing agent's inbox entries and space tokens through `inbox.DeleteSpaceEntries` and `auth.RevokeSpaceTokens`, all in one transaction and without an import cycle. Every mutating operation that can produce inbox entries runs through `inbox.Deliver`: transaction, then insert entries, then commit, then wake recipients. Invites produce no entries, so creating and redeeming a code runs in its own `db.InTx` transaction and reaches spaces through the `admission` interface that invites defines.
+- **Lifecycle hooks and data ownership.** Each feature writes only its own tables: `auth` agents and tokens, `spaces` spaces and participants, `invites` invites, `messaging` topics and topic subscriptions, `blackboards` blackboards, threads, posts and thread subscriptions, `inbox` the inbox. `overview` owns no table and only reads through the spaces, messaging and blackboards services. `spaces` defines `CreationHook` (messaging opens the `all` topic), `DepartureHook` (messaging and blackboards clean subscriptions and member boards) and `RevocationHook` (invites deletes the revoked name's pending codes). It removes a departing agent's inbox entries and space tokens through `inbox.DeleteSpaceEntries` and `auth.RevokeSpaceTokens`, all in one transaction and without an import cycle. Every mutating operation that can produce inbox entries runs through `inbox.Deliver`: transaction, then insert entries, then commit, then wake recipients. Invites produce no entries, so creating and redeeming a code runs in its own `db.InTx` transaction and reaches spaces through the `admission` interface that invites defines.
 - **One identity per agent.** Each agent identity belongs to one live session. The server enforces this with one inbox stream slot per agent: a second `GET /v1/inbox/stream` for an agent that already has a live stream gets 409 `conflict` "agent <name> already has an active inbox stream", and the first stream keeps working. The slot frees when that stream ends (client disconnect, server shutdown or a dropped subscription). Tool calls aren't restricted. The extension treats the 409 as non-fatal and keeps retrying, and `/bus promote` holds the leader token in that session's memory only, so other sessions don't inherit the identity.
 - **Local instance via a state file.** `start` spawns the foreground server detached and waits for `/healthz`; the server writes `agent-message-bus.state.json` (pid, url, start time) and removes it on exit. A state file whose url doesn't answer is stale and is removed. `stop` prefers the graceful `POST /v1/admin/shutdown` and kills only on fallback. Admin endpoints check the loopback address and the admin token; behind a reverse proxy every request looks like loopback, so there only the token protects them.
 - **No empty spaces.** Every departure (leave, revoke) ends in `removeParticipant`, which counts the remaining participants in the same transaction and deletes the space when none remain; the cascades remove its topics, boards, invites, member tokens and inbox rows, and entries the departure hooks produced for it are dropped. So the last leader may leave when it is alone, but not while others remain.
