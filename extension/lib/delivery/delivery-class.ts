@@ -1,7 +1,7 @@
 /** Delivery policy: how an inbox entry enters the session. */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { formatEntry } from "./format.ts";
-import type { Entry } from "./inbox.ts";
+import { formatEntry } from "../render/envelope.ts";
+import type { Entry } from "../bus/entry.ts";
 
 export interface DeliveryOptions {
 	deliverAs: "steer" | "followUp";

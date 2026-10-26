@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { createDeliver, deliveryOptions } from "../extension/lib/deliver.ts";
-import { formatEntry } from "../extension/lib/format.ts";
+import { createDeliver, deliveryOptions } from "../extension/lib/delivery/delivery-class.ts";
+import { formatEntry } from "../extension/lib/render/envelope.ts";
 import { parseSse } from "../extension/lib/bus/sse.ts";
 import { entry, streamOf } from "./fakes.ts";
 

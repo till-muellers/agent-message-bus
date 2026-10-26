@@ -6,9 +6,9 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { activateBusTools, deactivateBusTools, deactivateTools } from "./activation.ts";
 import type { BusClient } from "../bus/client.ts";
 import { type ActiveCredentials, type CredentialStore, resolveActive, type SessionCredentials } from "../session/stored-credentials.ts";
-import { createDeliver } from "../deliver.ts";
-import type { InboxLoopOptions } from "../inbox.ts";
-import { createInboxRunner } from "../inbox-runner.ts";
+import { createDeliver } from "../delivery/delivery-class.ts";
+import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
+import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
 import { INBOX_TOOLS, registerRemoteTools } from "../tools.ts";
 

@@ -33,7 +33,7 @@ import { type Connection, createConnection, type SessionView } from "./lib/conne
 import { type CredentialStore, configDir, createCredentialStore, type SessionCredentials } from "./lib/session/stored-credentials.ts";
 import { type BusEnv, consumeEnv } from "./lib/session/env.ts";
 import { errorMessage } from "./lib/bus/errors.ts";
-import type { InboxLoopOptions } from "./lib/inbox.ts";
+import type { InboxLoopOptions } from "./lib/delivery/inbox-loop.ts";
 import { createInviteFlag } from "./lib/invite-flag.ts";
 import { type DetachedSpawner, spawnDetached } from "./lib/launch/detached.ts";
 import { LAUNCHERS } from "./lib/launch/index.ts";

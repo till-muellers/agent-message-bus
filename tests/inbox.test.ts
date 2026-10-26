@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { BusError } from "../extension/lib/bus/client.ts";
 import { createClient } from "../extension/lib/bus/client.ts";
 import { conflictWarning } from "../extension/lib/connection/conflict.ts";
-import { type Entry, runInboxLoop } from "../extension/lib/inbox.ts";
+import { runInboxLoop } from "../extension/lib/delivery/inbox-loop.ts";
+import type { Entry } from "../extension/lib/bus/entry.ts";
 import { callsTo, entry, errorResponse, fakeBus, frame, streamOf, type ToolHandler, URL_ } from "./fakes.ts";
 
 const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");

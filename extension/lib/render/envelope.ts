@@ -1,5 +1,5 @@
 /** Renders an inbox entry as the `[agent-bus]` session message text. */
-import type { Entry } from "./inbox.ts";
+import type { Entry } from "../bus/entry.ts";
 
 function where(e: Entry): string {
 	switch (e.type) {

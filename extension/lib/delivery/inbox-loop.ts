@@ -1,23 +1,8 @@
-/** Inbox stream consumer: the wire entry type and the reconnecting deliver+ack loop. */
-import { BusError, type BusClient } from "./bus/client.ts";
-import type { ActiveCredentials } from "./session/stored-credentials.ts";
-import { parseSse } from "./bus/sse.ts";
-
-export type EntryType = "direct_message" | "topic_message" | "topic_closed" | "thread_post" | "thread_removed" | "blackboard_removed";
-
-export interface Entry {
-	id: number;
-	space: string;
-	type: EntryType;
-	from: string;
-	critical: boolean;
-	topic?: string;
-	blackboard?: string;
-	threadId?: number;
-	threadTitle?: string;
-	body?: string;
-	createdAt: string;
-}
+/** Inbox stream consumer: the reconnecting deliver+ack loop. */
+import { BusError, type BusClient } from "../bus/client.ts";
+import type { Entry } from "../bus/entry.ts";
+import type { ActiveCredentials } from "../session/stored-credentials.ts";
+import { parseSse } from "../bus/sse.ts";
 
 export interface InboxLoopOptions {
 	client: BusClient;
