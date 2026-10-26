@@ -373,7 +373,7 @@ export function waitToolDefinition(pi: ExtensionAPI, deps: {
 - Order: `takeHeld(filter)` → non-empty returns at once; else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`).
 - Without a stream (409 conflict, or stream not open) → `forward` to `POST /v1/tools/bus_wait`, and no ack.
 - Cancellation: the `execute` `signal` (`CA/extensibility/extensions/types.ts:925-933`) aborts the wait; nothing is consumed.
-- Server dependency: slice 9 (server `bus_wait`, contract `{"result":[Entry…]}`) for the schema and the fallback; protocol 3 (contracts.md) → `MIN_SERVER_PROTOCOL` rises to 3 in the release that ships E6.
+- Server dependency: slice 9 (server `bus_wait`, contract `{"result":[Entry…]}`) for the schema and the fallback; it ships under protocol 2 (contracts.md §6), so `MIN_SERVER_PROTOCOL` stays 2.
 
 ### 3.5 Blackboard notices (E10a; `omp-blackboards.feature`; PO-5)
 
@@ -638,7 +638,7 @@ Mirror of `contracts.md` §12 "Contract requests ledger", which is authoritative
 
 | Id | Request | Decision | Section (contracts.md) | Slice |
 |---|---|---|---|---|
-| CR-1 | `/healthz` protocol header, source, start, bump policy | Accepted | §6 | 7; E9a (`MIN_SERVER_PROTOCOL` = 2; 3 with E6/E8b if the 8/9/11 release is separate) |
+| CR-1 | `/healthz` protocol header, source, start, bump policy | Accepted | §6 | 7; E9a (`MIN_SERVER_PROTOCOL` = 2; 8/9/11/12/13 ship under protocol 2, no bump for E6/E8b) |
 | CR-2 | `bus_wait` result and one Entry shape | Accepted | §2.5, §4 | 9, D1; E6 |
 | CR-3 | whoami / participants / list_spaces shapes | Accepted | §3.2 | 4a, 4d, 12; E8a, E8b |
 | CR-4 | `GET /v1/guide` | Accepted | §7.1 | 11; E8b |
@@ -673,7 +673,7 @@ Review of `docs/design/arch/definition-of-ready.md` (Arch-server) for the client
 | R2 spec scenarios approved | scenarios named by feature file; scenarios **superseded by a PO decision** are listed as "not implemented" in the slice: the `bus_cancel_invite` rows (PO-3: `omp-tools.feature:63,115`, `omp-subagents.feature:74`), the upstream-pi rule (PO-6: `omp-delivery.feature:189-198`), and per-type delivery wording now expressed through the class (PO-5) |
 | R3 no open PO question | all PO-1…PO-11 are decided; still open for client slices (`QUESTIONS.md`): Q-P1 (Docker GUI build; variant A needs no approval, only variant B blocks PL-2), Q-P2/Q-P3 (CI settings, non-blocking) |
 | R4 contracts fixed and acknowledged | reverse direction: the server shapes the slice consumes are in `contracts.md` (not only in a message). All client requests are decided in `contracts.md` §12 (mirrored in §12 here); none blocks a slice |
-| R5 dependencies merged | server slices **and** the protocol level: a slice that raises `MIN_SERVER_PROTOCOL` needs the server slices of that protocol merged (E9a ← 7 + D1; E6/E8b ← 9/11 if they bump to 3). Client slices may depend on client slices |
+| R5 dependencies merged | server slices **and** the protocol level: a slice that raises `MIN_SERVER_PROTOCOL` needs the server slices of that protocol merged (E9a ← 7 + D1; today no client slice raises it above 2). Client slices may depend on client slices |
 | R6 shared code | `extension/lib/shared/` stays untouched; the S15 registry is approved (PO-8) and lives in the `createBusExtension` closure, not in `lib/shared/` |
 | R7 no new dependency | root `package.json` deps unchanged; `gui/package.json` has only `typescript` + `@types/bun` (covered by PO-10); an `oven/bun` Docker stage (PL-2 variant B only) needs Q-P1 |
 | R8 acceptance tests named | bun test file + test names + the RED reason (e.g. E1: "`delivery-class.test.ts` fails: module missing; then fails: `queue`/one-shot-idle maps to `aside`") |

@@ -11,7 +11,7 @@ Input for issue-tracker grooming: one row per slice, ids exactly as in `slices.m
 - `depends_on`: hard prerequisites, comma-separated ids (server and client ids never collide); `—` = none. Soft ordering preferences are in the notes below.
 - `dor_status`: `Ready` | `Blocked-by-deps` (only unmerged `depends_on`) | `Blocked-by-question` (a blocking question in `QUESTIONS.md`, plus any deps) | `Deferred` (out of the current version by PO ruling; not groomed).
 - `blocking_q` / `default_q`: question ids from `QUESTIONS.md`. All questions are now decided (PO, 2026-10-26); `default_q` lists the decided questions whose answer the slice implements.
-- `milestone`: `M0` design; `M1` protocol-2 release (server 1–7 + D1 with E9a, E1, E2, E9b, closed by P2b); `M2` tools/extension release (8, 9, 11, 12, 13a, 13b and the remaining extension slices; protocol 3 if released separately, `contracts.md` §6); `M3` web GUI; `Future` (not in the current version).
+- `milestone`: `M0` design; `M1` protocol-2 release = everything merged before the first release tag after slice 7 (server 1–7, D1, 8, 9, 11, 12, 13a, 13b; client P1a, P1b, E4a, E9a, E1, E2, E9b; closed by P2b); `M2` extension release (the remaining extension slices; still protocol 2, so no `MIN_SERVER_PROTOCOL` bump, `contracts.md` §6); `M3` web GUI; `Future` (not in the current version).
 - `specs`: feature files (or analysis items) the slice implements; `contracts`: `contracts.md` sections it implements or consumes.
 
 | order | id | title | track | size | depends_on | dor_status | blocking_q | default_q | milestone | specs | contracts |
@@ -35,8 +35,8 @@ Input for issue-tracker grooming: one row per slice, ids exactly as in `slices.m
 | 17 | E2 | Ack watermark on consumption | ext-delivery | M | E1 | Blocked-by-deps | — | — | M1 | mail/omp-mail-delivery.feature, omp-parity/omp-delivery.feature | §4.2 |
 | 18 | E9b | Invite task as a direct message (extension side) | ext-delivery | S | 7, E1, E2, E9a | Blocked-by-deps | — | — | M1 | guidance/first-prompt.feature | §4.2, §5 |
 | 19 | P2b | Release: version bump + tag check | ext-release | S | 1, 2, 3, 4a, 4b, 4c, 4d, 5, 6a, 6b, 7, D1, E9a, E1, E2, E9b | Blocked-by-deps | — | — | M1 | findings/plugin-version-skew.feature | §6 |
-| 20 | P1b | Tier-0 launcher tests | ext-structure | S | P1a | Blocked-by-deps | — | Q-F4, Q-F6 | M2 | findings/analysis.md (item 7) | — |
-| 21 | E4a | One credential owner + createSession move | ext-structure | M | P1a | Blocked-by-deps | — | Q-F1 | M2 | findings/analysis.md (items 1, 4) | — |
+| 20 | P1b | Tier-0 launcher tests | ext-structure | S | P1a | Blocked-by-deps | — | Q-F4, Q-F6 | M1 | findings/analysis.md (item 7) | — |
+| 21 | E4a | One credential owner + createSession move | ext-structure | M | P1a | Blocked-by-deps | — | Q-F1 | M1 | findings/analysis.md (items 1, 4) | — |
 | 22 | P2a | Worker plugin skew check (S1) | ext-release | M | P1a | Blocked-by-deps | — | — | M2 | findings/plugin-version-skew.feature | — |
 | 23 | E3 | Subagent allow-list, local tools in main only, attribution | ext-delivery | M | E4a | Blocked-by-deps | — | Q-O12 | M2 | omp-parity/omp-subagents.feature, guidance/session-context.feature, omp-parity/omp-delivery.feature, mail/omp-mail-delivery.feature | §4.2 |
 | 24 | E4b | Subagent identity map (S15) | ext-delivery | S | E3 | Blocked-by-deps | — | — | M2 | omp-parity/omp-subagents.feature, guidance/session-context.feature | — |
@@ -44,12 +44,12 @@ Input for issue-tracker grooming: one row per slice, ids exactly as in `slices.m
 | 26 | E5a | Envelope, details, escaping | ext-delivery | S | E1, E2 | Blocked-by-deps | — | — | M2 | omp-parity/omp-rendering.feature | §4 |
 | 27 | E5b | Transcript card renderer | ext-delivery | S | E5a | Blocked-by-deps | — | — | M2 | omp-parity/omp-rendering.feature | — |
 | 28 | E10c | pi.events + two-copy handshake | ext-delivery | S | E2 | Blocked-by-deps | — | — | M2 | omp-parity/omp-events.feature | — |
-| 29 | 8 | bus_space_overview | server | M | 3, 4d | Blocked-by-deps | — | Q-G8 | M2 | guidance/space-overview.feature, guidance/tool-descriptions.feature | §1, §2.4 |
-| 30 | 9 | Server bus_wait | server | M | 3, 4d | Blocked-by-deps | — | Q-M5 | M2 | mail/bus-wait.feature, guidance/tool-descriptions.feature | §1, §2.5, §11, §12 |
-| 31 | 12 | Presence and receipts | server | M | 4d, 9 | Blocked-by-deps | — | — | M2 | omp-parity/presence.feature | §3.4 |
-| 32 | 13a | Mail notice (edge) | server | M | 4d, 9 | Blocked-by-deps | — | Q-M7 | M2 | mail/mail-notice.feature | §9 |
-| 33 | 13b | "You have mail" hint | server | M | 13a | Blocked-by-deps | — | Q-A8, Q-M7 | M2 | mail/mail-hint.feature | §0, §4.2, §9, §12 |
-| 34 | 11 | Guide | server | M | 3, 6b, 8, 9 | Blocked-by-deps | — | Q-A5, Q-G3, Q-G7, Q-G9 | M2 | guidance/agent-guide.feature, guidance/guide-draft.md | §7 |
+| 29 | 8 | bus_space_overview | server | M | 3, 4d | Blocked-by-deps | — | Q-G8 | M1 | guidance/space-overview.feature, guidance/tool-descriptions.feature | §1, §2.4 |
+| 30 | 9 | Server bus_wait | server | M | 3, 4d | Blocked-by-deps | — | Q-M5 | M1 | mail/bus-wait.feature, guidance/tool-descriptions.feature | §1, §2.5, §11, §12 |
+| 31 | 12 | Presence and receipts | server | M | 4d, 9 | Blocked-by-deps | — | — | M1 | omp-parity/presence.feature | §3.4 |
+| 32 | 13a | Mail notice (edge) | server | M | 4d, 9 | Blocked-by-deps | — | Q-M7 | M1 | mail/mail-notice.feature | §9 |
+| 33 | 13b | "You have mail" hint | server | M | 13a | Blocked-by-deps | — | Q-A8, Q-M7 | M1 | mail/mail-hint.feature | §0, §4.2, §9, §12 |
+| 34 | 11 | Guide | server | M | 3, 6b, 8, 9 | Blocked-by-deps | — | Q-A5, Q-G3, Q-G7, Q-G9 | M1 | guidance/agent-guide.feature, guidance/guide-draft.md | §7 |
 | 35 | E6 | Local bus_wait shadow + dispatcher hold | ext-delivery | M | 9, E2 | Blocked-by-deps | — | Q-M5 | M2 | omp-parity/omp-tools.feature, mail/omp-mail-delivery.feature, omp-parity/omp-delivery.feature | §2.5, §6, §12 |
 | 36 | E7 | Tool presentation + no bus_inbox_ack | ext-delivery | S | E6 | Blocked-by-deps | — | — | M2 | omp-parity/omp-tools.feature, mail/mail-hint.feature, guidance/session-context.feature, guidance/tool-descriptions.feature | §2.5, §3.1, §9 |
 | 37 | E10a | Blackboard notices | ext-delivery | M | E2, E5a, E6 | Blocked-by-deps | — | Q-O6 | M2 | omp-parity/omp-blackboards.feature | §4.1 |
@@ -78,7 +78,7 @@ Input for issue-tracker grooming: one row per slice, ids exactly as in `slices.m
 - **Critical path:** 0 → 1 → 4a → 6a → 4c → 4d → 5 → 6b → W1a → W1b → W3 → GUI-6. The extension path to the protocol-2 release is 0 → P1a → E9a (needs 7, D1) → E1 → E2 → E9b → P2b.
 - **The web track** (W1a and the 11 slices behind it) is gated only by its dependencies 4a and 6b; the GUI listens on its own address `AMB_WEB_ADDR` (PO ruling on Q-A1).
 - **Migration numbers are assigned at merge time** (`schema.md` §2): 7, 13a and 10 each add a named migration and take the next free number when they merge, so they may merge in any order; there is no ordering edge between them.
-- **Same-release pairs:** 7 with E9a + E9b; E1 with E2 (an aside dropped between them is lost); D1 before E1. A release that ships 9/11 without the M1 slices bumps `Agent-Bus-Protocol` to 3 and raises `MIN_SERVER_PROTOCOL` with E6/E8b (`contracts.md` §6).
+- **Same-release pairs:** 7 with E9a + E9b; E1 with E2 (an aside dropped between them is lost); D1 before E1. No tag was cut after slice 7, so 8, 9, 12, 13a, 13b (and 11 if it merges before the tag) ship under protocol 2: `MIN_SERVER_PROTOCOL` stays 2 and E6/E8b need no protocol-3 bump (`contracts.md` §6). Only an extension-facing change merged after the tag bumps to 3.
 - **P2b** is built once (first run closes M1) and then runs at every release; its later runs are not new slices.
 - **Merge early:** 3 touches every tool file; open 6a/8/9/10 branches after it merges (`slices.md` slice 3).
 - **Slice 0** is the one R11 size exception (a verbatim copy of reviewed files).

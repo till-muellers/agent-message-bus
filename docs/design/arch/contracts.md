@@ -212,7 +212,7 @@ Server rule, decided in exactly one place (`server/internal/inbox/class.go`, `Cl
 - The value is an integer. A response without the header = legacy server (the extension reports it as `none`). [AD-1]
 - Source of truth: `server/internal/server/protocol.go` `const Protocol = 2`.
 - Bump policy: at most +1 per release, by the first slice after a release tag that adds or changes a contract the extension depends on (a tool it calls, a result field it reads, an entry it renders, an endpoint). Additive server changes the extension ignores do not bump. `protocol.go` keeps one comment line per value.
-- History: `2` = invite task as direct message, accept without `task`, kind/role `admin`, `bus_list_spaces.admins`, entry field `class` (the release containing 1–7 and D1). Next planned: `3` = the release containing 8/9/11 (`bus_space_overview`, server `bus_wait`, `GET /v1/guide`) if it is not the same release.
+- History: `2` = everything merged before the first release tag after slice 7 (no tag was cut in between): invite task as direct message, accept without `task`, kind/role `admin`, `bus_list_spaces.admins`, entry field `class` (1–7, D1), and also `bus_wait` (9), `bus_space_overview` (8), the mail notice and `mail` hint (13a, 13b), receipts and `connected` (12) and `GET /v1/guide` + MCP `instructions` (11, if it merges before the tag). Next: `3` only for the first extension-facing contract change merged after that tag; 11 merging after the tag would be that change.
 - The extension's minimum is its own constant (Arch-client). Old extension + new server needs no check (additive); the invite task then arrives via the old extension's inbox stream as a normal message.
 
 ---

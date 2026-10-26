@@ -117,7 +117,7 @@ S4  logs:    omp log lines "agent-bus: …"; server log next to the db
 ### E6 Local `bus_wait` shadow + dispatcher hold
 - **Goal:** local `bus_wait` with the server schema; dispatcher `takeHeld`/`waitNext`; fallback to server `bus_wait` without a stream; consumed ids count for the watermark (`client.md` §3.4).
 - **Specs:** `omp-tools.feature` `bus_wait` rule (all 9 scenarios); `omp-mail-delivery.feature` rule 4; `omp-delivery.feature` "An entry returned by bus_wait counts as consumed".
-- **Files:** new `tools/wait-tool.ts`; `delivery/dispatcher.ts`, `tools/tool-selection.ts` (shadow), `index.ts`, `version/server-protocol.ts` (`MIN_SERVER_PROTOCOL = 3` if contracts.md puts `bus_wait` at 3).
+- **Files:** new `tools/wait-tool.ts`; `delivery/dispatcher.ts`, `tools/tool-selection.ts` (shadow), `index.ts`. `MIN_SERVER_PROTOCOL` stays 2: server `bus_wait` (9) ships under protocol 2 (`contracts.md` §6).
 - **Tests:** waiter gets the entry and it is not handed to omp; held entries returned at once; `from`/`threadId`/`after` filters; timeout `[]`; abort consumes nothing; conflict → forwards, no ack; the server fallback call uses a transport timeout of `timeoutSeconds + 10 s` (CR-7, `contracts.md` §2.5); the local shadow's schema equals the server's from `GET /v1/tools` (CR-9).
 - **Docs:** `extension/README.md` "Tools" (`bus_wait` in omp).
 - **Depends on:** server 9, E2. **Size:** M.
@@ -331,4 +331,4 @@ flowchart LR
   GUI1 --> PL2[PL-2]
 ```
 
-Server gates: P1a ← 0; E1 ← D1 (+ E9a); E6 ← 9; E8a ← 4a, 4b, 4c, 4d, 6a; E8b ← 4d, 11; E8c ← 11; E9a ← 7, D1; E9b ← 7; E10d ← 12; GUI-1/GUI-2 ← W1a; GUI-3/GUI-4 ← W1b; GUI-5 ← W2; GUI-6 ← W3 and 10 (invite id + cancel endpoint). Release: the protocol-2 release (server 1-7 + D1) must contain E9a, E1, E2 and E9b; the release that ships 9/11 raises `MIN_SERVER_PROTOCOL` with E6/E8b if it is a separate release; P2b closes every release.
+Server gates: P1a ← 0; E1 ← D1 (+ E9a); E6 ← 9; E8a ← 4a, 4b, 4c, 4d, 6a; E8b ← 4d, 11; E8c ← 11; E9a ← 7, D1; E9b ← 7; E10d ← 12; GUI-1/GUI-2 ← W1a; GUI-3/GUI-4 ← W1b; GUI-5 ← W2; GUI-6 ← W3 and 10 (invite id + cancel endpoint). Release: the protocol-2 release (everything merged before the first tag after slice 7, incl. 8, 9, 11, 12, 13a, 13b) must contain E9a, E1, E2 and E9b; `MIN_SERVER_PROTOCOL` stays 2 for E6/E8b; P2b closes every release.
