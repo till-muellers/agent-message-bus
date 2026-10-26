@@ -178,3 +178,37 @@ func waitingIn(ctx context.Context, q db.DBTX, agentID, space int64) (Notice, er
 	}
 	return n, nil
 }
+
+// recipientNamesSQL takes a JSON array of agent ids; their names, sorted.
+const recipientNamesSQL = `SELECT id, name FROM agents WHERE id IN (SELECT value FROM json_each(?)) ORDER BY name`
+
+// recipient is an agent an entry was delivered to.
+type recipient struct {
+	id   int64
+	name string
+}
+
+// recipientNames returns the agents ids, sorted by name.
+func recipientNames(ctx context.Context, q db.DBTX, ids []int64) ([]recipient, error) {
+	list, err := json.Marshal(ids)
+	if err != nil {
+		return nil, fmt.Errorf("encoding recipient ids: %w", err)
+	}
+	rows, err := q.QueryContext(ctx, recipientNamesSQL, string(list))
+	if err != nil {
+		return nil, fmt.Errorf("reading recipient names: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []recipient{}
+	for rows.Next() {
+		var r recipient
+		if err := rows.Scan(&r.id, &r.name); err != nil {
+			return nil, fmt.Errorf("scanning recipient: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating recipients: %w", err)
+	}
+	return out, nil
+}

@@ -28,7 +28,7 @@ Every code claim below is anchored to the repo as of `526635d` (`git log -1`).
 | Invite task | `Accept` returns `task` in `Admission` (omitempty); task validated with `ValidBody` (wrong field name in the error) | `invites/service.go:30-37,53-60,93-115` |
 | `AdmitMember` | returns `(space, token, err)` — no agent id | `spaces/admission.go:25-38` |
 | Inbox | `Deliver` = tx + insert + publish after commit; `Read` caps at 500; ack is cumulative `DELETE … id <= ?` | `inbox/deliver.go:12-27`, `inbox/service.go:72-92`, `inbox/repository.go:24` |
-| Stream | subscribe → drain → forward; one slot per agent; root ctx passed per handler | `inbox/stream.go:16-28`, `inbox/slots.go`, `inbox/handler.go:22-44` |
+| Stream | subscribe → drain → forward; one slot per agent; root ctx passed per handler | `inbox/stream.go:16-28`, `inbox/presence.go` (slot, since 12), `inbox/handler.go:22-44` |
 | Tool | `Tool{Name, Description, Result, Group, Schema, Call}` — no `Access`; ledger derives access from first sentence | `tools/registry.go:21-31`, `tools/doc.go:70-77` |
 | Tool count | 29, asserted in tests | `tools/registry_test.go:11`, `rpc/handler_test.go:159`, `spec/transports.feature:54-57,191` |
 | MCP | `mcp.NewServer(&mcp.Implementation{…}, nil)` — no instructions; stateless, JSON responses | `mcpserver/server.go:20-29` |

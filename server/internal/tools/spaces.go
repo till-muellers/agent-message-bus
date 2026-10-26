@@ -37,7 +37,7 @@ func spaceIdentityTools(s *spaces.Service) []Tool {
 				return list(s.List(ctx, p))
 			}),
 		define("bus_list_participants", accessParticipantsRead, "Lists the space's admins, leaders and members, in that order.",
-			"[{name, role}]",
+			"[{name, role, connected}]",
 			spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 				return list(s.Participants(ctx, p, a.Space))
 			}),

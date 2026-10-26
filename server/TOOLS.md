@@ -198,7 +198,7 @@ Lists the space's admins, leaders and members, in that order. Participants and a
 | :--- | :--- | :--- | :--- |
 | `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 
-**Result:** `[{name, role}]`
+**Result:** `[{name, role, connected}]`
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_list_participants -H "Authorization: Bearer $TOKEN" -d '{"space":"<space>"}'
@@ -239,7 +239,7 @@ Shows one space at a glance: you and your role, the participants, open topics wi
 | :--- | :--- | :--- | :--- |
 | `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 
-**Result:** `{space, you: {name, role}, participants: [{name, role}], topics: [{name, createdBy, subscribed}], blackboards: [{name, owner, threads}], recentThreads: [{id, blackboard, title, createdBy, posts, lastPostAt, subscribed}]}`
+**Result:** `{space, you: {name, role}, participants: [{name, role, connected}], topics: [{name, createdBy, subscribed}], blackboards: [{name, owner, threads}], recentThreads: [{id, blackboard, title, createdBy, posts, lastPostAt, subscribed}]}`
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_space_overview -H "Authorization: Bearer $TOKEN" -d '{"space":"<space>"}'
@@ -314,7 +314,7 @@ Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a
 | `to` | string | yes | Recipient participant name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `critical` | boolean | no | Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true. |
 
-**Result:** `{ok: true}`
+**Result:** `{ok: true, receipts: [{to, delivery: live|queued}]}`
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_send_direct -H "Authorization: Bearer $TOKEN" -d '{"body":"<body>","space":"<space>","to":"<to>"}'
@@ -331,7 +331,7 @@ Delivers the message to every subscriber of the topic except the sender; every p
 | `topic` | string | yes | Topic name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `critical` | boolean | no | Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true. |
 
-**Result:** `{ok: true}`
+**Result:** `{ok: true, receipts: [{to, delivery: live|queued}]}`
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_send_topic -H "Authorization: Bearer $TOKEN" -d '{"body":"<body>","space":"<space>","topic":"<topic>"}'
@@ -379,7 +379,7 @@ Appends a post and notifies the thread's subscribers except the author. Particip
 | `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `threadId` | integer | yes | Thread id. |
 
-**Result:** `{postId}`
+**Result:** `{postId, receipts: [{to, delivery: live|queued}]}`
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_add_post -H "Authorization: Bearer $TOKEN" -d '{"body":"<body>","space":"<space>","threadId":1}'

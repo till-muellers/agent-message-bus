@@ -20,7 +20,7 @@ func mustJoin(t *testing.T, e env, p auth.Principal, space string) {
 
 func wantParticipants(t *testing.T, e env, space string, want []Participant) {
 	t.Helper()
-	got, err := listParticipants(context.Background(), e.db, spaceID(t, e, space))
+	got, _, err := listParticipants(context.Background(), e.db, spaceID(t, e, space))
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("participants of %s = %+v, %v; want %+v", space, got, err, want)
 	}
@@ -41,7 +41,7 @@ func TestAdminCreatesLeaderlessSpace(t *testing.T) {
 	e := newEnv(t, nil, []CreationHook{hook})
 	ops := opsAdmin(t, e)
 	mustCreate(t, e, ops, "gamma")
-	wantParticipants(t, e, "gamma", []Participant{{"ops", RoleAdmin}})
+	wantParticipants(t, e, "gamma", []Participant{{"ops", RoleAdmin, false}})
 	if len(hook.calls) != 1 || hook.calls[0].Role != RoleAdmin || !hook.calls[0].Admin {
 		t.Fatalf("creation hook calls = %+v", hook.calls)
 	}
@@ -85,13 +85,13 @@ func TestAdminJoinLeave(t *testing.T) {
 	mustJoin(t, e, ops, "demo")
 	apperrtest.WantKind(t, e.svc.Join(ctx, ops, "demo"), apperr.Conflict, "already a participant of demo")
 	apperrtest.WantKind(t, e.svc.Join(ctx, ops, "ghost"), apperr.NotFound, "space ghost not found")
-	wantParticipants(t, e, "demo", []Participant{{"ops", RoleAdmin}, {"lead", RoleLeader}})
+	wantParticipants(t, e, "demo", []Participant{{"ops", RoleAdmin, false}, {"lead", RoleLeader, false}})
 	inMember := auth.Principal{AgentID: ops.AgentID, SpaceID: spaceID(t, e, "demo")}
 	seedInbox(t, e, inMember)
 	if err := e.svc.Leave(ctx, ops, "demo"); err != nil {
 		t.Fatalf("admin leaves: %v", err)
 	}
-	wantParticipants(t, e, "demo", []Participant{{"lead", RoleLeader}})
+	wantParticipants(t, e, "demo", []Participant{{"lead", RoleLeader, false}})
 	wantNoInbox(t, e, inMember)
 	if len(hook.calls) != 1 || hook.calls[0].Role != RoleAdmin {
 		t.Fatalf("departure hook calls = %+v", hook.calls)
@@ -112,7 +112,7 @@ func TestParticipantOrder(t *testing.T) {
 	inviteMember(t, e, lead, "demo", "worker")
 	mustJoin(t, e, ops, "demo")
 	mustJoin(t, e, root, "demo")
-	wantParticipants(t, e, "demo", []Participant{{"admin", RoleAdmin}, {"ops", RoleAdmin}, {"lead", RoleLeader}, {"worker", RoleMember}})
+	wantParticipants(t, e, "demo", []Participant{{"admin", RoleAdmin, false}, {"ops", RoleAdmin, false}, {"lead", RoleLeader, false}, {"worker", RoleMember, false}})
 }
 
 func TestListSpacesAdmins(t *testing.T) {

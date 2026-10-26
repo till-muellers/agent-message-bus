@@ -15,7 +15,7 @@ Feature: Direct messages
 
   Scenario: A member sends a direct message to another member
     When member "ann" sends direct message "hi" to "bob" in space "demo"
-    Then the call succeeds
+    Then the call returns {"ok": true, "receipts": [{"to": "bob", "delivery": "queued"}]}
     And member "bob" receives a "direct_message" inbox entry from "ann" with space "demo", critical false and body "hi"
     And "ann" receives no inbox entry
     And "lead" receives no inbox entry

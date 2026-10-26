@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
 
@@ -85,4 +86,15 @@ func done(err error) (any, error) {
 		return nil, err
 	}
 	return map[string]bool{"ok": true}, nil
+}
+
+// receiptsResult is the ledger shape of sent's success result.
+const receiptsResult = "{ok: true, receipts: [{to, delivery: live|queued}]}"
+
+// sent maps a send's receipts to {ok:true, receipts}.
+func sent(rs []inbox.Receipt, err error) (any, error) {
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true, "receipts": rs}, nil
 }

@@ -55,7 +55,7 @@ func TestToolSectionAndIndexShareAnchor(t *testing.T) {
 		"| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants and admins. |",
 		"\n## Blackboards\n",
 		`-d '{"body":"<body>","space":"<space>","threadId":1}'`,
-		"**Result:** `{postId}`",
+		"**Result:** `{postId, receipts: [{to, delivery: live|queued}]}`",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Fatalf("ledger lacks %q", want)

@@ -2,6 +2,7 @@ package blackboards
 
 import (
 	"context"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -57,7 +58,7 @@ func TestThreadValidation(t *testing.T) {
 			apperrtest.WantKind(t, err, apperr.Invalid, tc.msg)
 		})
 	}
-	_, err := f.svc.AddPost(ctx, f.m1, "alpha", id, "")
+	_, _, err := f.svc.AddPost(ctx, f.m1, "alpha", id, "")
 	apperrtest.WantKind(t, err, apperr.Invalid, "body must be 1..65536 bytes")
 	_, err = f.svc.CreateThread(ctx, f.m1, "alpha", "b", strings.Repeat("é", 200), "x")
 	must(t, err)
@@ -70,7 +71,7 @@ func TestReadAndListThreads(t *testing.T) {
 	first := boardWithThread(t, f, f.m1)
 	second, err := f.svc.CreateThread(ctx, f.m2, "alpha", "b", "other", "hello")
 	must(t, err)
-	_, err = f.svc.AddPost(ctx, f.lead, "alpha", first, "reply")
+	_, _, err = f.svc.AddPost(ctx, f.lead, "alpha", first, "reply")
 	must(t, err)
 	list, err := f.svc.ListThreads(ctx, f.m1, "alpha", "b")
 	must(t, err)
@@ -98,8 +99,11 @@ func TestPostNotifications(t *testing.T) {
 	id := boardWithThread(t, f, f.m1)
 	must(t, f.svc.Subscribe(ctx, f.m2, "alpha", id))
 	must(t, f.svc.Subscribe(ctx, f.m2, "alpha", id)) // idempotent
-	_, err := f.svc.AddPost(ctx, f.m2, "alpha", id, "hi")
+	_, rs, err := f.svc.AddPost(ctx, f.m2, "alpha", id, "hi")
 	must(t, err)
+	if want := []inbox.Receipt{{To: "m1", Delivery: inbox.Queued}}; !reflect.DeepEqual(rs, want) {
+		t.Fatalf("receipts = %+v, want %+v", rs, want)
+	}
 	es := readInbox(t, f.ib, f.m1)
 	want := inbox.Entry{Space: "alpha", Type: inbox.ThreadPost, From: "m2", Blackboard: "b",
 		ThreadID: id, ThreadTitle: "plan", Body: "hi"}
@@ -112,8 +116,11 @@ func TestPostNotifications(t *testing.T) {
 	}
 	must(t, f.svc.Unsubscribe(ctx, f.m1, "alpha", id))
 	must(t, f.svc.Unsubscribe(ctx, f.m1, "alpha", id))
-	_, err = f.svc.AddPost(ctx, f.m2, "alpha", id, "again")
+	_, rs, err = f.svc.AddPost(ctx, f.m2, "alpha", id, "again")
 	must(t, err)
+	if len(rs) != 0 || rs == nil {
+		t.Fatalf("receipts without subscribers = %#v, want []", rs)
+	}
 	if es := readInbox(t, f.ib, f.m1); len(es) != 1 {
 		t.Fatalf("unsubscribed m1 got %+v", es)
 	}
@@ -190,7 +197,7 @@ func TestThreadFromOtherSpace(t *testing.T) {
 	msg := "thread " + strconv.FormatInt(id, 10) + " not found"
 	_, err := f.svc.ReadThread(ctx, f.lead, "beta", id)
 	apperrtest.WantKind(t, err, apperr.NotFound, msg)
-	_, err = f.svc.AddPost(ctx, f.b1, "beta", id, "x")
+	_, _, err = f.svc.AddPost(ctx, f.b1, "beta", id, "x")
 	apperrtest.WantKind(t, err, apperr.NotFound, msg)
 	apperrtest.WantKind(t, f.svc.Subscribe(ctx, f.b1, "beta", id), apperr.NotFound, msg)
 	apperrtest.WantKind(t, f.svc.Unsubscribe(ctx, f.b1, "beta", id), apperr.NotFound, msg)

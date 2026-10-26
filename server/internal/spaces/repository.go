@@ -151,26 +151,28 @@ func deleteParticipant(ctx context.Context, q db.DBTX, spaceID, agentID int64) e
 	return nil
 }
 
-// listParticipants returns participants ordered admins, leaders, members, each by name.
-func listParticipants(ctx context.Context, q db.DBTX, spaceID int64) ([]Participant, error) {
-	rows, err := q.QueryContext(ctx, `SELECT a.name, p.role FROM participants p JOIN agents a ON a.id = p.agent_id
+// listParticipants returns participants ordered admins, leaders, members, each by name,
+// and their agent ids in the same order.
+func listParticipants(ctx context.Context, q db.DBTX, spaceID int64) ([]Participant, []int64, error) {
+	rows, err := q.QueryContext(ctx, `SELECT a.id, a.name, p.role FROM participants p JOIN agents a ON a.id = p.agent_id
 		WHERE p.space_id = ? ORDER BY CASE p.role WHEN 'admin' THEN 0 WHEN 'leader' THEN 1 ELSE 2 END, a.name`, spaceID)
 	if err != nil {
-		return nil, fmt.Errorf("listing participants: %w", err)
+		return nil, nil, fmt.Errorf("listing participants: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	out := []Participant{}
+	out, ids := []Participant{}, []int64{}
 	for rows.Next() {
 		var p Participant
-		if err := rows.Scan(&p.Name, &p.Role); err != nil {
-			return nil, fmt.Errorf("scanning participant: %w", err)
+		var id int64
+		if err := rows.Scan(&id, &p.Name, &p.Role); err != nil {
+			return nil, nil, fmt.Errorf("scanning participant: %w", err)
 		}
-		out = append(out, p)
+		out, ids = append(out, p), append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating participants: %w", err)
+		return nil, nil, fmt.Errorf("iterating participants: %w", err)
 	}
-	return out, nil
+	return out, ids, nil
 }
 
 // agentSpaces lists the spaces agentID participates in, ordered by name.

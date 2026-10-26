@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	demoParticipants = `[{"name":"lead","role":"leader"},{"name":"peer","role":"member"},{"name":"worker","role":"member"}]`
-	allOnly          = `[{"name":"all","createdBy":"lead","subscribed":true}]`
+	demoParticipants = `[{"connected":false,"name":"lead","role":"leader"},{"connected":false,"name":"peer","role":"member"},` +
+		`{"connected":false,"name":"worker","role":"member"}]`
+	allOnly = `[{"name":"all","createdBy":"lead","subscribed":true}]`
 )
 
 // overviewCase is one bus_space_overview call; want holds the expected JSON of each
@@ -75,7 +76,7 @@ func overviewCases() []overviewCase {
 			w.must(t, w.sp.Join(t.Context(), w.ops, "demo"))
 		}, caller: ops, space: "demo", want: map[string]string{
 			"you":          `{"name":"ops","role":"admin"}`,
-			"participants": `[{"name":"ops","role":"admin"},` + demoParticipants[1:],
+			"participants": `[{"connected":false,"name":"ops","role":"admin"},` + demoParticipants[1:],
 			"topics":       allOnly,
 		}},
 		{name: "unjoined admin has no role and no subscriptions", setup: memberViewSetup, caller: ops, space: "demo",
@@ -87,7 +88,7 @@ func overviewCases() []overviewCase {
 		{name: "empty space shows empty lists", setup: func(t *testing.T, w *world) {
 			w.must(t, w.sp.Create(t.Context(), w.lead, "empty"))
 		}, caller: lead, space: "empty", want: map[string]string{
-			"you": `{"name":"lead","role":"leader"}`, "participants": `[{"name":"lead","role":"leader"}]`,
+			"you": `{"name":"lead","role":"leader"}`, "participants": `[{"connected":false,"name":"lead","role":"leader"}]`,
 			"topics": allOnly, "blackboards": `[]`, "recentThreads": `[]`,
 		}},
 		{name: "the all topic shows as subscribed for every participant", caller: peer, space: "demo",
@@ -123,7 +124,7 @@ func recentSetup(t *testing.T, w *world) {
 	for i := 1; i <= 12; i++ {
 		w.thread(t, w.lead, recentBoard(i), fmt.Sprintf("t%02d", i))
 	}
-	_, err := w.bb.AddPost(t.Context(), w.lead, "demo", 1, "bump")
+	_, _, err := w.bb.AddPost(t.Context(), w.lead, "demo", 1, "bump")
 	w.must(t, err)
 }
 
@@ -225,7 +226,8 @@ func TestOverviewHasNoSideEffects(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	memberViewSetup(t, w)
-	w.must(t, w.msg.SendDirect(t.Context(), w.lead, "demo", "worker", "hello", false))
+	_, err := w.msg.SendDirect(t.Context(), w.lead, "demo", "worker", "hello", false)
+	w.must(t, err)
 	before := rowCounts(t, w)
 	for _, p := range []auth.Principal{w.wkr, w.lead, w.ops} {
 		_, err := w.overview(t.Context(), t, p, `{"space":"demo"}`)

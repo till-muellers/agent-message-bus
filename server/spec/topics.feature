@@ -97,7 +97,7 @@ Feature: Topics
       And member "bob" subscribed to topic "dev" in space "demo"
       And leader "lead" subscribed to topic "dev" in space "demo"
       When member "ann" sends "m" to topic "dev" in space "demo"
-      Then the call succeeds
+      Then the call returns {"ok": true, "receipts": [{"to": "bob", "delivery": "queued"}, {"to": "lead", "delivery": "queued"}]}
       And member "bob" receives a "topic_message" inbox entry from "ann" with topic "dev" and body "m"
       And leader "lead" receives a "topic_message" inbox entry from "ann" with topic "dev" and body "m"
       And "ann" receives no inbox entry

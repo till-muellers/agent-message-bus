@@ -89,14 +89,14 @@ func threadTools(b *blackboards.Service) []Tool {
 			"Stops post notifications for the thread; idempotent.", b, (*blackboards.Service).Unsubscribe),
 		define("bus_add_post", accessParticipants,
 			"Appends a post and notifies the thread's subscribers except the author.",
-			"{postId}", []string{"space", "threadId", "body"},
+			"{postId, receipts: [{to, delivery: live|queued}]}", []string{"space", "threadId", "body"},
 			map[string]any{"space": spaceProp(), "threadId": threadProp(), "body": bodyProp()},
 			func(ctx context.Context, p auth.Principal, a postArgs) (any, error) {
-				id, err := b.AddPost(ctx, p, a.Space, a.ThreadID, a.Body)
+				id, rs, err := b.AddPost(ctx, p, a.Space, a.ThreadID, a.Body)
 				if err != nil {
 					return nil, err
 				}
-				return map[string]int64{"postId": id}, nil
+				return map[string]any{"postId": id, "receipts": rs}, nil
 			}),
 	}
 }
