@@ -7,7 +7,8 @@ import { activateBusTools, deactivateBusTools, deactivateTools } from "./activat
 import type { BusClient } from "../bus/client.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
 import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
-import { createDeliver } from "../delivery/delivery-class.ts";
+import { phaseOf } from "../delivery/delivery-class.ts";
+import { createDispatcher } from "../delivery/dispatcher.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
@@ -18,6 +19,8 @@ import type { ServerGate } from "./server-gate.ts";
 export interface SessionView {
 	mode?: string;
 	sub: boolean;
+	/** Whether the agent is idle right now (bound to the latest omp context). */
+	isIdle(): boolean;
 }
 
 export interface ConnectionDeps {
@@ -48,7 +51,11 @@ export function createConnection({ pi, client, store, credentials, identity, vie
 	const tools = { registered: false, names: [] as string[] };
 	let active: ActiveCredentials | undefined;
 	const getActive = () => active;
-	const inbox = createInboxRunner({ client, getActive, warn, sleep, deliver: createDeliver(pi, () => view.mode) });
+	const dispatcher = createDispatcher({
+		phase: () => phaseOf(view.mode, view.isIdle()),
+		handOver: (content, mechanism) => pi.sendMessage({ customType: "agent-bus", content, display: true }, mechanism),
+	});
+	const inbox = createInboxRunner({ client, getActive, warn, sleep, dispatcher });
 	const ours = () => [...tools.names, ...localTools];
 	return {
 		getActive,

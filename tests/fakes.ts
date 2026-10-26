@@ -71,7 +71,7 @@ export function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 export function entry(id: number, extra: Partial<Entry> = {}): Entry {
-	return { id, space: "demo", type: "direct_message", from: "lead", critical: false, body: `body ${id}`, createdAt: "t", ...extra };
+	return { id, space: "demo", type: "direct_message", from: "lead", critical: false, class: "queue", body: `body ${id}`, createdAt: "t", ...extra };
 }
 
 export function frame(e: Entry): string {
@@ -191,6 +191,8 @@ export interface BootSession {
 	cwd?: string;
 	flags?: Record<string, string>;
 	sessionFile?: string;
+	/** Whether the agent is idle; idle by default. */
+	idle?: boolean;
 }
 
 export interface Sent {
@@ -204,6 +206,7 @@ interface Ctx {
 	agent: { kind: string };
 	ui: { notify(message: string): void };
 	sessionManager: { getSessionFile(): string | undefined };
+	isIdle(): boolean;
 }
 
 type Handler = (event: unknown, ctx: Ctx) => unknown;
@@ -221,6 +224,7 @@ function sessionContext(session: BootSession, notes: string[]): Ctx {
 		},
 		ui: { notify: message => void notes.push(message) },
 		sessionManager: { getSessionFile: () => session.sessionFile },
+		isIdle: () => session.idle ?? true,
 	};
 }
 
