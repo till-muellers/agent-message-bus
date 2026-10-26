@@ -100,11 +100,7 @@ Final: **34 server tools** (PO-3: no `bus_cancel_invite`). `bus_spawn_worker` is
 
 `Tool.Access` is a separate field; descriptions open with the purpose and contain the access sentence; TOOLS.md "Access" column = `Tool.Access` (`tool-descriptions.feature:13-19`). Pitfall sentences per `tool-descriptions.feature:31-50`; critical property: **"Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true."** (from 4c; slice 3 interim: "Leaders only. omp recipients are interrupted (steer); other clients see critical: true.").
 
-Descriptions state only shipped behaviour. Slice 3 ships interim texts; each later slice adds its clause when its behaviour ships:
-
-| Clause (final text) | Slice 3 interim | Added by |
-|---|---|---|
-| `bus_inbox_ack`: "acknowledging everything lets the next mail notify again" | — (omitted) | 13b (13a stores the edge; the notify first becomes visible with the hint) |
+Descriptions state only shipped behaviour. Slice 3 shipped interim texts; each later slice added its clause when its behaviour shipped. The last one, `bus_inbox_ack`: "acknowledging everything lets the next mail notify again", shipped with 13b.
 
 Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-69`); the rest [AD-13].
 

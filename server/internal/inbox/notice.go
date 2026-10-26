@@ -49,3 +49,25 @@ func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, boo
 	}
 	return n, due, nil
 }
+
+// ReadMarking is Read for the agent itself (bus_inbox_read): looking counts as being told,
+// so the edges it returns are marked noticed. The web GUI uses Read, which never marks.
+func (s *Service) ReadMarking(ctx context.Context, p auth.Principal, after int64, limit int) ([]Entry, error) {
+	es, err := s.Read(ctx, p, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	return es, s.markSeen(ctx, p.AgentID, es)
+}
+
+// markSeen marks the unnoticed edges among es, which agentID has just been shown, noticed.
+func (s *Service) markSeen(ctx context.Context, agentID int64, es []Entry) error {
+	if len(es) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(es))
+	for i, e := range es {
+		ids[i] = e.ID
+	}
+	return markEntriesNoticed(ctx, s.db, agentID, ids)
+}

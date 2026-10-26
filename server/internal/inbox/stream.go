@@ -27,7 +27,8 @@ func (s *Service) stream(ctx context.Context, w http.ResponseWriter, p auth.Prin
 	return s.forwardLive(ctx, sse, p, live, lastSent)
 }
 
-// drain sends p's stored entries after lastSent page by page and returns the last id sent.
+// drain sends p's stored entries after lastSent page by page, marks the edges of each sent
+// page noticed (the stream told the agent) and returns the last id sent.
 func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, lastSent int64) (int64, error) {
 	for {
 		page, err := s.Read(ctx, p, lastSent, maxLimit)
@@ -42,6 +43,9 @@ func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, la
 				return lastSent, err
 			}
 			lastSent = e.ID
+		}
+		if err := s.markSeen(ctx, p.AgentID, page); err != nil {
+			return lastSent, err
 		}
 	}
 }

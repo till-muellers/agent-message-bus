@@ -276,7 +276,7 @@ func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, boo
 func (s *Service) ReadMarking(ctx context.Context, p auth.Principal, after int64, limit int) ([]Entry, error) // Read + mark returned edges noticed [13b]
 ```
 
-`bus_inbox_read` and `bus_wait` use the marking path; the SSE stream marks the edge rows it sends (a channel told the agent, `mail/analysis.md:149`); the web GUI uses `Read` (never marks, `mail/mail-hint.feature:104-115`). **[AD-6]**
+`bus_inbox_read` and `bus_wait` use the marking path (`ReadMarking`; `Wait` marks the entries it returns); the SSE stream marks the edge rows it sends (a channel told the agent, `mail/analysis.md:149`); the web GUI uses `Read` (never marks, `mail/mail-hint.feature:104-115`). The transports take the notice only after a successful tool call, so `bus_inbox_ack`'s removed entries are gone before the query, and a failed notice query is logged without failing the call. **[AD-6]**
 
 ### 3.4 `internal/invites` [2, 7, 10, W1b]
 

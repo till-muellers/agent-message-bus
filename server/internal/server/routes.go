@@ -22,8 +22,8 @@ func Routes(streamRoot context.Context, a *auth.Service, ib *inbox.Service, inv 
 	reg *tools.Registry, shutdown func()) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
-	mux.Handle("/mcp", mcpserver.NewHandler(reg, a))
-	api := a.Middleware(rpc.NewHandler(reg))
+	mux.Handle("/mcp", mcpserver.NewHandler(reg, a, ib))
+	api := a.Middleware(rpc.NewHandler(reg, ib))
 	mux.Handle("GET /v1/tools", api)
 	mux.Handle("POST /v1/tools/{name}", api)
 	mux.Handle("POST /v1/invites/accept", inv.AcceptHandler())

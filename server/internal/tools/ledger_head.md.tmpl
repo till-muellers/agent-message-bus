@@ -5,6 +5,8 @@ This page is the reference for every `bus_*` tool. The server serves the same {{
 - **MCP** at `POST /mcp` (streamable HTTP, tools only);
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`.
 
+**"You have mail".** The first successful tool result after new mail reached an empty mailbox (or after a critical entry) tells the caller once. RPC adds a sibling key: `{"result": …, "mail": {"waiting": 2, "critical": 0, "spaces": ["alpha", "beta"]}}`; the key is absent otherwise. MCP appends a text block after the tool's own content (`structuredContent` is unchanged): `[agent-bus] You have mail: <n> waiting in <space>[, <space>…][ (<k> critical)]. Call bus_inbox_read, handle the entries, then bus_inbox_ack {upTo}.` Reading the entry with `bus_inbox_read` or `bus_wait`, or receiving it on `GET /v1/inbox/stream`, counts as told. Acknowledging everything lets the next mail notify again.
+
 The [omp extension](../extension/README.md) registers the same tools under the same names. Every call needs `Authorization: Bearer <token>`. The examples below assume `BUS` holds the server URL (for example `http://localhost:8080`) and `TOKEN` holds a token.
 
 Behaviour rules (who may do what, and which error each rule raises) are specified in [`spec/`](spec/README.md).

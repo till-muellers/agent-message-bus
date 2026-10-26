@@ -80,6 +80,15 @@ Feature: Transports
       And the "Content-Type" header is "application/json"
       And the response body is {"result": <tool result>}
 
+    Scenario: The first result after new mail also carries a mail field
+      # The key is absent unless the caller's mailbox scope holds an unnoticed edge, and then
+      # present on that one result only (mail-hint.feature). Strict clients must allow it.
+      Given the leader "boss" has an empty mailbox
+      And member "worker" sent a direct message to "boss" in space "proj"
+      When leader "boss" calls POST /v1/tools/bus_whoami
+      Then the response body is {"result": <tool result>, "mail": {"waiting": 1, "critical": 0, "spaces": ["proj"]}}
+      And the next call's response body is {"result": <tool result>}
+
     Scenario: End-to-end happy path over the web API
       Given the admin called bus_mint_leader with {"name":"boss"} and got a leader token
       And leader "boss" called bus_create_space with {"space":"proj"}

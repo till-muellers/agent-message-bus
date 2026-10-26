@@ -12,6 +12,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/mcpserver"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
@@ -42,6 +43,13 @@ func testRegistry() *tools.Registry {
 	})
 }
 
+// noNotice is a mailbox scope without pending mail.
+type noNotice struct{}
+
+func (noNotice) TakeNotice(context.Context, auth.Principal) (inbox.Notice, bool, error) {
+	return inbox.Notice{}, false, nil
+}
+
 func setup(t *testing.T) (string, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -50,7 +58,7 @@ func setup(t *testing.T) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(mcpserver.NewHandler(testRegistry(), a))
+	srv := httptest.NewServer(mcpserver.NewHandler(testRegistry(), a, noNotice{}))
 	t.Cleanup(srv.Close)
 	return srv.URL, tok
 }

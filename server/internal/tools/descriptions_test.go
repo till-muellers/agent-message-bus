@@ -74,7 +74,8 @@ func TestPitfalls(t *testing.T) {
 		{"bus_inbox_read", "it never blocks (use bus_wait to wait) and reading does not acknowledge"},
 		{"bus_wait", "it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, " +
 			"filters with from/threadId and does not acknowledge (omp acknowledges for you)"},
-		{"bus_inbox_ack", "it deletes every entry with id up to upTo, so never acknowledge past what was handled"},
+		{"bus_inbox_ack", "it deletes every entry with id up to upTo, so never acknowledge past what was handled; " +
+			"acknowledging everything lets the next mail notify again"},
 		{"bus_create_topic", "nobody else is notified, so subscribers must be told the topic name"},
 		{"bus_create_blackboard", "a member's boards are deleted when it leaves or is revoked"},
 		{"bus_leave_space", "a member's boards, inbox entries, subscriptions and token are deleted"},

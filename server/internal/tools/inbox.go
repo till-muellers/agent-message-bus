@@ -31,11 +31,12 @@ func inboxTools(ib *inbox.Service) []Tool {
 			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
 			nil, map[string]any{"after": integer("Return entries with id greater than this; default 0."), "limit": integer("Maximum entries, 1..500; default 100.")},
 			func(ctx context.Context, p auth.Principal, a readArgs) (any, error) {
-				return list(ib.Read(ctx, p, a.After, a.Limit))
+				return list(ib.ReadMarking(ctx, p, a.After, a.Limit))
 			}),
 		define("bus_inbox_ack", accessInbox,
 			"Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. "+
-				"Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled.",
+				"Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled; "+
+				"acknowledging everything lets the next mail notify again.",
 			"{acked}",
 			[]string{"upTo"}, map[string]any{"upTo": integer("Highest entry id to acknowledge.")},
 			func(ctx context.Context, p auth.Principal, a ackArgs) (any, error) {
