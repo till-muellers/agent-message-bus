@@ -118,10 +118,12 @@ Contributor conventions, working method and the definition of done are in [`.omp
 
 ## Releasing
 
-Push a tag `vX.Y.Z`. The release workflow runs the server tests, builds `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads from the latest release.
+1. Branch `release/vX.Y.Z`: bump the `version` in `package.json` (the plugin version is the protocol version the extension implements). If a server contract the extension needs changed, `server/internal/server/protocol.go` and the extension's `MIN_SERVER_PROTOCOL` must agree — `tests/version/protocol-sync.test.ts` fails when they do not. Open a pull request, let CI go green, merge.
+2. Tag the merge commit `vX.Y.Z` and push the tag. The release workflow checks that the tag matches the package version (it fails in seconds and publishes nothing when it does not), runs the server tests, builds `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads from the latest release.
+3. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
 
 ```sh
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 ## License
