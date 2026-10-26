@@ -34,7 +34,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 | `/bus server status` | Shows whether the local server is running. |
 | `/bus help` | Prints usage. |
 
-**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message, then acknowledges it with `bus_inbox_ack`. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
+**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message that carries the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
 
 **Subagents.** A subagent session gets neither `bus_inbox_read`/`bus_inbox_ack` nor an inbox stream; its parent session owns the inbox. `AGENT_BUS_URL`, `AGENT_BUS_TOKEN` and `AGENT_BUS_BIN` are read once at load and removed from the environment, so they are meant for direct-token use. Workers normally join with `/bus accept <url> <code>` or are started by a leader with `/bus spawn`.
 
