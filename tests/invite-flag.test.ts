@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { Joined } from "../extension/lib/accept.ts";
+import type { Joined } from "../extension/lib/commands/accept.ts";
 import { BusError } from "../extension/lib/bus/client.ts";
-import { createInviteFlag } from "../extension/lib/invite-flag.ts";
+import { createInviteFlag } from "../extension/lib/commands/invite-flag.ts";
 import { CODE, URL_ } from "./fakes.ts";
 
 const joined: Joined = { result: { message: "Joined space demo as member worker.", level: "info" }, task: "fix the bug" };

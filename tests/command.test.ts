@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type BusClient, createClient } from "../extension/lib/bus/client.ts";
-import { type CommandDeps, COMMAND_DESCRIPTION, runCommand, USAGE } from "../extension/lib/command.ts";
+import { type CommandDeps, COMMAND_DESCRIPTION, runCommand, USAGE } from "../extension/lib/commands/command.ts";
 import type { CredentialStore, SessionCredentials } from "../extension/lib/session/stored-credentials.ts";
 import type { ServerCli } from "../extension/lib/server.ts";
 import { CODE, errorResponse, fakeBus, memoryStore, URL_ } from "./fakes.ts";

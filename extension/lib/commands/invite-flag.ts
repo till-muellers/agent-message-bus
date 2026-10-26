@@ -3,7 +3,7 @@
  * re-parses the flags on every session switch, so the code is redeemed at most once per process, even when it fails.
  */
 import type { Joined } from "./accept.ts";
-import { errorMessage } from "./bus/errors.ts";
+import { errorMessage } from "../bus/errors.ts";
 
 export interface InviteFlagHost {
 	/** The value of a CLI flag registered by the extension. */

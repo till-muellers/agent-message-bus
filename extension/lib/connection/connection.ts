@@ -10,7 +10,7 @@ import { createDeliver } from "../delivery/delivery-class.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
-import { INBOX_TOOLS, registerRemoteTools } from "../tools.ts";
+import { INBOX_TOOLS, registerRemoteTools } from "../tools/remote-tools.ts";
 
 /** What the omp context says about the current session; updated on every event and command. */
 export interface SessionView {

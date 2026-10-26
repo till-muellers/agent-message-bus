@@ -2,10 +2,10 @@
  * `/bus accept <url> <code>` (and `--bus-accept`): redeems an invite code for a member token and makes it this
  * session's identity. Restarting the connection and sending the first prompt are the caller's.
  */
-import type { CommandResult } from "./shared/command.ts";
-import type { BusClient } from "./bus/client.ts";
-import { type SessionCredentials, trimUrl } from "./session/stored-credentials.ts";
-import type { SessionIdentity } from "./session/session-identity.ts";
+import type { CommandResult } from "../shared/command.ts";
+import type { BusClient } from "../bus/client.ts";
+import { type SessionCredentials, trimUrl } from "../session/stored-credentials.ts";
+import type { SessionIdentity } from "../session/session-identity.ts";
 
 export interface AcceptDeps {
 	client: BusClient;

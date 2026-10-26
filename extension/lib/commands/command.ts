@@ -4,12 +4,12 @@
  * and returns the message to show. `SUBCOMMANDS` is the one list the usage
  * text, the command description and the dispatch are built from.
  */
-import { type CommandResult, parseArgs } from "./shared/command.ts";
-import type { BusClient } from "./bus/client.ts";
-import { type CredentialStore, resolveActive, type SessionCredentials, trimUrl } from "./session/stored-credentials.ts";
-import { errorMessage } from "./bus/errors.ts";
-import { type ServerCli, serverCommand } from "./server.ts";
-import type { SpawnRequest, SpawnResult } from "./spawn.ts";
+import { type CommandResult, parseArgs } from "../shared/command.ts";
+import type { BusClient } from "../bus/client.ts";
+import { type CredentialStore, resolveActive, type SessionCredentials, trimUrl } from "../session/stored-credentials.ts";
+import { errorMessage } from "../bus/errors.ts";
+import { type ServerCli, serverCommand } from "../server.ts";
+import type { SpawnRequest, SpawnResult } from "../spawn.ts";
 
 export interface CommandDeps {
 	store: CredentialStore;
@@ -26,7 +26,7 @@ export interface CommandDeps {
 	accept(url: string, code: string): Promise<CommandResult>;
 	/** Forgets the token accepted by `/bus accept` in memory and in this session's credential file. */
 	clearAccepted(): Promise<void>;
-	/** `/bus spawn <space> <name> [task…]`: invites the member and starts it in a new terminal tab (`lib/spawn.ts`); cwd is the session's. */
+	/** `/bus spawn <space> <name> [task…]`: invites the member and starts it in a new terminal tab (`lib/spawn/spawn.ts`); cwd is the session's. */
 	spawn(req: Omit<SpawnRequest, "cwd">): Promise<SpawnResult>;
 }
 

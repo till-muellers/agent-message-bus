@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { type JsonSchema, toZod } from "./bus/schema.ts";
 import type { SpawnRequest, SpawnResult } from "./spawn.ts";
-import { toolResult } from "./tool-result.ts";
+import { toolResult } from "./tools/tool-result.ts";
 
 export const SPAWN_TOOL = "bus_spawn_worker";
 
