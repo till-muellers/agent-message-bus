@@ -9,20 +9,22 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-// row is one stored invite; task is NULL when the invite has no first prompt.
+// row is one stored invite; task is NULL when the invite has no first prompt, and
+// invitedBy names the inviting leader or admin.
 type row struct {
 	hash      string
 	spaceID   int64
 	name      string
 	task      sql.NullString
+	invitedBy string
 	expiresAt int64 // unix seconds
 }
 
 // insertInvite stores r under the hash of its code.
 func insertInvite(ctx context.Context, q db.DBTX, r row) error {
 	_, err := q.ExecContext(ctx,
-		`INSERT INTO invites (hash, space_id, name, task, expires_at) VALUES (?, ?, ?, ?, ?)`,
-		r.hash, r.spaceID, r.name, r.task, r.expiresAt)
+		`INSERT INTO invites (hash, space_id, name, task, invited_by, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		r.hash, r.spaceID, r.name, r.task, r.invitedBy, r.expiresAt)
 	if err != nil {
 		return fmt.Errorf("inserting invite for %s: %w", r.name, err)
 	}
@@ -32,8 +34,8 @@ func insertInvite(ctx context.Context, q db.DBTX, r row) error {
 // takeInvite reads and deletes the invite stored under hash.
 func takeInvite(ctx context.Context, q db.DBTX, hash string) (row, bool, error) {
 	r := row{hash: hash}
-	err := q.QueryRowContext(ctx, `SELECT space_id, name, task, expires_at FROM invites WHERE hash = ?`, hash).
-		Scan(&r.spaceID, &r.name, &r.task, &r.expiresAt)
+	err := q.QueryRowContext(ctx, `SELECT space_id, name, task, invited_by, expires_at FROM invites WHERE hash = ?`, hash).
+		Scan(&r.spaceID, &r.name, &r.task, &r.invitedBy, &r.expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row{}, false, nil
 	}

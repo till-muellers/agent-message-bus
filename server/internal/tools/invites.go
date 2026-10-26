@@ -18,7 +18,7 @@ type inviteArgs struct {
 
 func inviteTools(inv *invites.Service) []Tool {
 	desc := fmt.Sprintf("Returns an invite code that lets member agent <name> join the space, with an optional task "+
-		"returned once on accept. Pitfalls: the code is single-use and expires after %d minutes; the user redeems it with "+
+		"delivered as a direct message from you when the code is accepted. Pitfalls: the code is single-use and expires after %d minutes; the user redeems it with "+
 		"/bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; "+
 		"inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes.",
 		int(invites.TTL/time.Minute))
@@ -37,7 +37,7 @@ func inviteTools(inv *invites.Service) []Tool {
 
 func inviteProps() map[string]any {
 	props := memberProps()
-	props["task"] = str(fmt.Sprintf("First prompt for the member, returned once when the code is accepted; 1..%d bytes.",
+	props["task"] = str(fmt.Sprintf("First prompt for the member, delivered as a direct message from you when the code is accepted; 1..%d bytes.",
 		domain.MaxBodyBytes))
 	return props
 }

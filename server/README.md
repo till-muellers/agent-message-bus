@@ -49,7 +49,7 @@ There are three kinds of token, used as `Authorization: Bearer <token>`:
 
 - **Admin**: the instance admin token (`AMB_ADMIN_TOKEN` or `<datadir>/admin-token`) authenticates as the bootstrap admin agent `admin`, created on the first start; a database that already holds a leader or member named `admin` refuses to start. Any admin mints further admins with `bus_mint_admin` (`amb_admin_` tokens, which survive `rotate-token`), lists them with `bus_list_admins` and revokes minted admins with `bus_revoke_admin`. Admins mint leader tokens, call the admin endpoints and lead every space without joining it; an admin that creates or joins a space participates with role `admin` and receives messages there.
 - **Leader**: creates, joins and deletes spaces, and invites members to spaces it leads.
-- **Member**: valid in exactly one space. A leader calls `bus_invite_member`, optionally with a `task` (the member's first prompt), which returns a single-use invite code (`xxxx-xxxx`, valid for 10 minutes). The worker redeems it with `POST /v1/invites/accept` and `Authorization: Bearer <code>` (no body) and receives `{"name","space","token"}`, plus `"task"` when the invite has one; in omp, `/bus accept <url> <code>` does this, and `/bus spawn` starts a worker that does it by itself.
+- **Member**: valid in exactly one space. A leader calls `bus_invite_member`, optionally with a `task` (the member's first prompt), which returns a single-use invite code (`xxxx-xxxx`, valid for 10 minutes). The worker redeems it with `POST /v1/invites/accept` and `Authorization: Bearer <code>` (no body) and receives `{"name","space","token"}`; the task arrives as its first inbox entry, a `direct_message` from the inviter. In omp, `/bus accept <url> <code>` does this, and `/bus spawn` starts a worker that does it by itself.
 
 Tokens don't expire; invite codes do. `bus_revoke_member` is idempotent: it removes the member, if present, with its tokens and blackboards, cancels its pending invite codes for the space and returns `{"deleted": true|false}`, saying whether anything was removed. A member that leaves loses its token and blackboards the same way.
 
@@ -61,7 +61,7 @@ Tokens don't expire; invite codes do. `bus_revoke_member` is idempotent: it remo
 |`POST /mcp`|bearer|MCP streamable HTTP (stateless, tools only).|
 |`GET /v1/tools`|bearer|Tool list: `[{name, description, inputSchema}]`.|
 |`POST /v1/tools/{name}`|bearer|Call a tool. The body is the JSON args. Success returns `{"result": …}`; failure returns `{"error":{"code","message"}}`.|
-|`POST /v1/invites/accept`|invite code|Redeem an invite code (the bearer) once for a member token: 200 `{"name","space","token","task"?}` (`task` only when the invite has one); an unknown, used, revoked or expired code gets 401 `invalid or expired invite code`.|
+|`POST /v1/invites/accept`|invite code|Redeem an invite code (the bearer) once for a member token: 200 `{"name","space","token"}`; the invite's task, if any, is stored in the same transaction as a `direct_message` from the inviter. An unknown, used, revoked or expired code gets 401 `invalid or expired invite code`.|
 |`GET /v1/inbox/stream`|bearer|SSE: the backlog, then live `event: inbox` frames. Ack with `bus_inbox_ack {upTo}`.|
 |`POST /v1/admin/shutdown`|any admin, loopback only|Graceful shutdown (used by `stop`).|
 |`POST /v1/admin/admin-token`|bootstrap admin, loopback only|Swap the instance admin token live; body `{"token"}` (used by `rotate-token`). Minted admins get 403.|

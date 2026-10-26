@@ -40,6 +40,11 @@ Feature: Delivery class of inbox entries
         | thread_removed     | false    | deferred  |
         | blackboard_removed | false    | deferred  |
 
+    Scenario: The invite task arrives as a queue entry
+      Given leader "lead" created an invite code for member "new" in space "alpha" with task "fix the bug"
+      When the code is posted to /v1/invites/accept
+      Then member "new" has a "direct_message" entry with "class": "queue"
+
   Rule: The class is part of the entry shape on every read path
 
     Scenario Outline: <path> returns the class

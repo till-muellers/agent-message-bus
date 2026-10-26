@@ -50,13 +50,3 @@ func TestAcceptHandler(t *testing.T) {
 		})
 	}
 }
-
-func TestAcceptHandlerReturnsTask(t *testing.T) {
-	t.Parallel()
-	e := newEnv(t)
-	task := "fix the bug"
-	status, body := postAccept(t, e, "Bearer "+mustCreate(t, e, "worker", &task).Code)
-	if status != http.StatusOK || body.Task == nil || *body.Task != task {
-		t.Fatalf("accept = %d %+v", status, body)
-	}
-}

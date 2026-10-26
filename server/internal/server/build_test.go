@@ -212,3 +212,16 @@ func TestBuildBootstrapError(t *testing.T) {
 		t.Fatalf("Build err = %v, want the bootstrap conflict", err)
 	}
 }
+
+func TestHealthzProtocolHeader(t *testing.T) {
+	t.Parallel()
+	srv := newServer(t)
+	res, err := srv.Client().Get(srv.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if got := res.Header.Get("Agent-Bus-Protocol"); got != "2" {
+		t.Fatalf("Agent-Bus-Protocol = %q, want 2", got)
+	}
+}

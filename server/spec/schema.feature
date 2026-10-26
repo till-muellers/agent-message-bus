@@ -17,7 +17,7 @@ Feature: One fresh schema as the service's first iteration
     Scenario: The first start creates the schema
       Given AMB_DB_PATH points to a file that does not exist
       When the server starts
-      Then schema_migrations holds exactly version 1
+      Then schema_migrations holds version 1 and the version of every later numbered migration
       And the tables are agents, spaces, tokens, participants, topics, topic_subscriptions, blackboards, threads, posts, thread_subscriptions, inbox and invites
       And the bootstrap admin "admin" exists
 
@@ -34,7 +34,7 @@ Feature: One fresh schema as the service's first iteration
     Scenario: A second start applies nothing
       Given the server started once on the database
       When the server starts again
-      Then schema_migrations still holds exactly version 1
+      Then schema_migrations still holds the same versions
 
   Rule: Later schema changes are numbered migrations again
 

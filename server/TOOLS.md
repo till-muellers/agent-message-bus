@@ -17,7 +17,7 @@ Behaviour rules (who may do what, and which error each rule raises) are specifie
 | `leader` | `bus_mint_leader` | Creates, joins and deletes spaces; invites and revokes members in spaces it leads; sends to `all` and sends critical messages. Lists all spaces. |
 | `member` | `bus_invite_member` → `POST /v1/invites/accept` | Valid in exactly one space. Uses direct messages, topics, blackboards and its inbox there. |
 
-Inside a space, most permissions check the caller's role there (`spaces[].role` in `bus_whoami`), not the token kind. Tokens don't expire. Invite codes from `bus_invite_member` are single-use and expire after 10 minutes; redeem one with `POST /v1/invites/accept` and `Authorization: Bearer <code>` (no body) to receive `{name, space, token, task?}`, where `task` is the optional first prompt given to `bus_invite_member` and is omitted when there is none. Revoking a member or having it leave deletes its tokens. `bus_revoke_member` is idempotent: it removes the member, if present, and cancels its pending invite codes for the space, and returns `{deleted}` saying whether anything was removed.
+Inside a space, most permissions check the caller's role there (`spaces[].role` in `bus_whoami`), not the token kind. Tokens don't expire. Invite codes from `bus_invite_member` are single-use and expire after 10 minutes; redeem one with `POST /v1/invites/accept` and `Authorization: Bearer <code>` (no body) to receive `{name, space, token}`. The optional `task` given to `bus_invite_member` arrives as the member's first inbox entry: a `direct_message` from the inviter. Revoking a member or having it leave deletes its tokens. `bus_revoke_member` is idempotent: it removes the member, if present, and cancels its pending invite codes for the space, and returns `{deleted}` saying whether anything was removed.
 
 ## Index
 
@@ -29,7 +29,7 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 | [bus_revoke_admin](#bus_revoke_admin) | [Admin](#admin) | Admins only. | Deletes every token of the minted admin and removes it from every space it joined; spaces left empty are deleted. deleted reports whether anything was removed. Pitfalls: the bootstrap admin cannot be revoked (rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name again gives the same agent a new token. |
 | [bus_create_space](#bus_create_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Creates the space with its all topic and joins the caller as leader (an admin with role admin). |
 | [bus_delete_space](#bus_delete_space) | [Spaces & membership](#spaces--membership) | Leaders of the space once no other leader remains, and admins. | Deletes the space and everything in it, including member tokens. Pitfall: an admin may delete any space, even one with other leaders. |
-| [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. |
+| [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Returns an invite code that lets member agent <name> join the space, with an optional task delivered as a direct message from you when the code is accepted. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. |
 | [bus_join_space](#bus_join_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Joins an existing space as a leader (an admin with role admin); a space can have several leaders. |
 | [bus_leave_space](#bus_leave_space) | [Spaces & membership](#spaces--membership) | Participants. | Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave while others remain, and the last participant's departure deletes the space. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. |
 | [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Lists the space's admins, leaders and members, in that order. |
@@ -144,13 +144,13 @@ curl -X POST $BUS/v1/tools/bus_delete_space -H "Authorization: Bearer $TOKEN" -d
 
 ### bus_invite_member
 
-Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. Leaders of the space and admins.
+Returns an invite code that lets member agent <name> join the space, with an optional task delivered as a direct message from you when the code is accepted. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. Leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `name` | string | yes | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `task` | string | no | First prompt for the member, returned once when the code is accepted; 1..65536 bytes. |
+| `task` | string | no | First prompt for the member, delivered as a direct message from you when the code is accepted; 1..65536 bytes. |
 
 **Result:** `{name, space, code, expires_at}`
 
@@ -578,7 +578,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 
 ### bus_spawn_worker
 
-Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself and gets `<task>` as its first prompt; the invite code is never exposed. Pitfalls: each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space and admins.
+Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself; the invite code is never exposed. Pitfalls: the task is delivered to the worker as a direct message from the caller (a leader or an admin); each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space and admins.
 
 Registered by the omp extension only; the server does not serve it.
 
@@ -586,7 +586,7 @@ Registered by the omp extension only; the server does not serve it.
 | :--- | :--- | :--- | :--- |
 | `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `name` | string | yes | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `task` | string | no | Task for the worker, its first prompt, 1..65536 bytes: goal, done criteria and where to report. |
+| `task` | string | no | Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report. |
 | `cwd` | string | no | Working directory, relative to this session's; defaults to this session's. |
 
 **Result:** `{name, space, launcher}`
