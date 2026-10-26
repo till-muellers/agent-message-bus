@@ -1,6 +1,6 @@
 /** Starts and stops the session's inbox loop (`lib/inbox.ts`), warning on errors and on another session holding the stream. */
 import type { BusClient } from "./bus/client.ts";
-import { conflictWarning } from "./conflict.ts";
+import { conflictWarning } from "./connection/conflict.ts";
 import type { ActiveCredentials } from "./session/stored-credentials.ts";
 import { errorMessage } from "./bus/errors.ts";
 import { type InboxLoopOptions, runInboxLoop } from "./inbox.ts";

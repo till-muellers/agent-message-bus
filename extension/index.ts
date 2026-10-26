@@ -29,7 +29,7 @@ import { acceptInvite, type Joined } from "./lib/accept.ts";
 import { findOnPath, resolveBinary } from "./lib/binary.ts";
 import { type BusClient, createClient, type FetchLike } from "./lib/bus/client.ts";
 import { COMMAND_DESCRIPTION, runCommand } from "./lib/command.ts";
-import { type Connection, createConnection, type SessionView } from "./lib/connection.ts";
+import { type Connection, createConnection, type SessionView } from "./lib/connection/connection.ts";
 import { type CredentialStore, configDir, createCredentialStore, type SessionCredentials } from "./lib/session/stored-credentials.ts";
 import { type BusEnv, consumeEnv } from "./lib/session/env.ts";
 import { errorMessage } from "./lib/bus/errors.ts";

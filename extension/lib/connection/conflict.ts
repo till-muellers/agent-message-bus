@@ -1,6 +1,6 @@
 /** The warning for an inbox stream refused with 409: another session already streams this agent's inbox. */
-import type { BusClient } from "./bus/client.ts";
-import type { ActiveCredentials } from "./session/stored-credentials.ts";
+import type { BusClient } from "../bus/client.ts";
+import type { ActiveCredentials } from "../session/stored-credentials.ts";
 
 /** The agent's name from `bus_whoami`, or undefined when the call fails or returns none. */
 async function whoamiName(client: BusClient, active: ActiveCredentials): Promise<string | undefined> {

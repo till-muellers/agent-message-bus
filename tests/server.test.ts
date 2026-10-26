@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { activateBusTools, deactivateBusTools, deactivateTools } from "../extension/lib/activation.ts";
+import { activateBusTools, deactivateBusTools, deactivateTools } from "../extension/lib/connection/activation.ts";
 import { resolveBinary } from "../extension/lib/binary.ts";
 import type { FetchLike } from "../extension/lib/bus/client.ts";
 import { assetName, expectedSum, RELEASES_URL } from "../extension/lib/download.ts";
