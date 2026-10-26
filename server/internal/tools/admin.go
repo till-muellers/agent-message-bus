@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 type nameArgs struct {
 	Name string `json:"name"`
 }
 
-func adminTools(a *auth.Service) []Tool {
+func adminTools(a *auth.Service, s *spaces.Service) []Tool {
 	return []Tool{
 		mintTool("bus_mint_leader", "Creates the leader agent if missing and returns a new leader token for it.",
 			"Leader agent", a.MintLeader),
@@ -23,6 +24,20 @@ func adminTools(a *auth.Service) []Tool {
 			"[{name, bootstrap, tokens, spaces}]",
 			nil, nil, func(ctx context.Context, p auth.Principal, _ noArgs) (any, error) {
 				return list(a.ListAdmins(ctx, p))
+			}),
+		define("bus_revoke_admin", accessAdmins,
+			"Deletes every token of the minted admin and removes it from every space it joined; spaces left empty are "+
+				"deleted. deleted reports whether anything was removed. Pitfalls: the bootstrap admin cannot be revoked "+
+				"(rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name "+
+				"again gives the same agent a new token.",
+			"{deleted}",
+			[]string{"name"}, map[string]any{"name": str(nameDesc("Admin agent"))},
+			func(ctx context.Context, p auth.Principal, x nameArgs) (any, error) {
+				deleted, err := s.RevokeAdmin(ctx, p, x.Name)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]bool{"deleted": deleted}, nil
 			}),
 	}
 }

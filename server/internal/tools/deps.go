@@ -23,7 +23,7 @@ type Deps struct {
 // Call, so zero-value Deps suffice to list or document the tools.
 func New(d Deps) *Registry {
 	var ts []Tool
-	ts = append(ts, inGroup(GroupAdmin, adminTools(d.Auth))...)
+	ts = append(ts, inGroup(GroupAdmin, adminTools(d.Auth, d.Spaces))...)
 	ts = append(ts, inGroup(GroupSpaces, append(spaceTools(d.Spaces), inviteTools(d.Invites)...))...)
 	ts = append(ts, inGroup(GroupMessaging, topicTools(d.Messaging))...)
 	ts = append(ts, inGroup(GroupBlackboards, blackboardTools(d.Blackboards))...)

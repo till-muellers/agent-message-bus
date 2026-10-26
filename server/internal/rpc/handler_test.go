@@ -160,7 +160,7 @@ func TestListTools(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
 		t.Fatal(err)
 	}
-	if res.StatusCode != http.StatusOK || len(got) != 31 || got[0].InputSchema["type"] != "object" {
+	if res.StatusCode != http.StatusOK || len(got) != 32 || got[0].InputSchema["type"] != "object" {
 		t.Fatalf("status %d, %d tools", res.StatusCode, len(got))
 	}
 }

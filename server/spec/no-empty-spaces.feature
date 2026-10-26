@@ -95,3 +95,14 @@ Feature: A space never exists without participants
       When admin "ops" revokes member "late" from space "demo"
       Then the call returns {"deleted": true}
       And the space "demo" still exists
+
+  Rule: Revoking an admin deletes every space it was the last participant of
+
+    Scenario: bus_revoke_admin empties and deletes the admin's solo spaces
+      Given admin "ops" created space "gamma"
+      And leader "lead" created space "demo"
+      And admin "ops" joined space "demo"
+      When the bootstrap admin calls bus_revoke_admin with {"name":"ops"}
+      Then the call returns {"deleted": true}
+      And the space "gamma" no longer exists
+      And the space "demo" still exists

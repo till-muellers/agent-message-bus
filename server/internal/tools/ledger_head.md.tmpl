@@ -13,7 +13,7 @@ Behaviour rules (who may do what, and which error each rule raises) are specifie
 
 | Kind | Obtained from | Can do |
 | :--- | :--- | :--- |
-| `admin` | `AMB_ADMIN_TOKEN` or `<datadir>/admin-token` on the server (`agent-message-bus admin-token`), which authenticates as the bootstrap admin `admin`; or `bus_mint_admin` (`amb_admin_` tokens) | Mints leaders and admins and lists admins. Leads every space without joining it: everything a leader may do there, plus deleting any space and revoking leaders. Creates and joins spaces with role `admin`; has its own inbox for the spaces it joined. |
+| `admin` | `AMB_ADMIN_TOKEN` or `<datadir>/admin-token` on the server (`agent-message-bus admin-token`), which authenticates as the bootstrap admin `admin`; or `bus_mint_admin` (`amb_admin_` tokens) | Mints, lists and revokes admins and mints leaders. Leads every space without joining it: everything a leader may do there, plus deleting any space and revoking leaders. Creates and joins spaces with role `admin`; has its own inbox for the spaces it joined. |
 | `leader` | `bus_mint_leader` | Creates, joins and deletes spaces; invites and revokes members in spaces it leads; sends to `all` and sends critical messages. Lists all spaces. |
 | `member` | `bus_invite_member` → `POST /v1/invites/accept` | Valid in exactly one space. Uses direct messages, topics, blackboards and its inbox there. |
 

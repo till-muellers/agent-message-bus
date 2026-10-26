@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
@@ -13,11 +14,13 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-// memberAccounts mints, vets and revokes the member agents that spaces admit.
-type memberAccounts interface {
+// accounts mints, vets and revokes the agents and tokens that spaces admit and remove.
+type accounts interface {
 	MintMember(ctx context.Context, tx db.DBTX, name string, spaceID int64) (agentID int64, token string, err error)
 	RevokeSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
 	CheckMemberName(ctx context.Context, q db.DBTX, name string) error
+	AdminAgent(ctx context.Context, q db.DBTX, name string) (id int64, found, bootstrap bool, err error)
+	RevokeAgentTokens(ctx context.Context, q db.DBTX, agentID int64) (int64, error)
 }
 
 type inboxStore interface {
@@ -45,16 +48,18 @@ type Participant struct {
 type Service struct {
 	db       *sql.DB
 	r        *Resolver
-	accounts memberAccounts
+	accounts accounts
 	ib       inboxStore
 	now      func() time.Time
 	hooks    Hooks
+	log      *slog.Logger // audit lines ("admin revoked")
 }
 
 // NewService returns a spaces Service; departure hooks run when a participant departs,
 // creation hooks when a space is created and revocation hooks when a name is revoked.
-func NewService(conn *sql.DB, r *Resolver, a memberAccounts, ib inboxStore, now func() time.Time, hooks Hooks) *Service {
-	return &Service{db: conn, r: r, accounts: a, ib: ib, now: now, hooks: hooks}
+// Audit lines go to slog.Default().
+func NewService(conn *sql.DB, r *Resolver, a accounts, ib inboxStore, now func() time.Time, hooks Hooks) *Service {
+	return &Service{db: conn, r: r, accounts: a, ib: ib, now: now, hooks: hooks, log: slog.Default()}
 }
 
 func (s *Service) stamp() string { return db.Timestamp(s.now()) }

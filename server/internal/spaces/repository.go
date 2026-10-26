@@ -203,3 +203,25 @@ func agentSpaces(ctx context.Context, q db.DBTX, agentID int64) ([]SpaceRole, er
 	}
 	return out, nil
 }
+
+// joinedSpaces returns the spaces agentID participates in, by name.
+func joinedSpaces(ctx context.Context, q db.DBTX, agentID int64) ([]spaceRow, error) {
+	rows, err := q.QueryContext(ctx, `SELECT s.id, s.name FROM participants p JOIN spaces s ON s.id = p.space_id
+		WHERE p.agent_id = ? ORDER BY s.name`, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("listing joined spaces of agent %d: %w", agentID, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []spaceRow
+	for rows.Next() {
+		var r spaceRow
+		if err := rows.Scan(&r.id, &r.name); err != nil {
+			return nil, fmt.Errorf("scanning joined space: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating joined spaces: %w", err)
+	}
+	return out, nil
+}

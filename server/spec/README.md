@@ -18,7 +18,7 @@ flowchart LR
     rpc["/v1/tools<br/>JSON RPC"]
     sse["/v1/inbox/stream<br/>SSE"]
     acc["/v1/invites/accept<br/>invite code → member token"]
-    reg["tool registry (31 bus_* tools)"]
+    reg["tool registry (32 bus_* tools)"]
     feat["auth · spaces · invites · messaging · blackboards · inbox"]
     broker["in-process broker<br/>topic inbox/&lt;agentID&gt;"]
     db[("SQLite<br/>/data/agent-message-bus.db")]
@@ -48,7 +48,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Agent | One global identity with a name matching `^[a-z0-9][a-z0-9_-]{0,62}$`. An agent is an admin, a leader or a member agent, never two of them. |
 | Admin | An agent of kind `admin`. The bootstrap admin `admin` is created on the first start of a database and reused afterwards; a database that holds a non-admin agent named `admin` refuses to start. Admins lead every space without joining it; one that creates or joins a space participates with role `admin`. |
 | Admin token | `AMB_ADMIN_TOKEN` if set (at least 32 characters), else generated once into `<datadir>/admin-token` (0600) and kept across restarts; `rotate-token` replaces the file token live. It authenticates as the bootstrap admin `admin`. |
-| Minted admin | An admin agent created by any admin with `bus_mint_admin`; its tokens are `amb_admin_` + 43 base64url characters, stored hashed, not bound to a space. Re-minting issues an additional token. Minted admin tokens survive `rotate-token`, and minted admins can't replace the instance admin token. `bus_list_admins` lists every admin. |
+| Minted admin | An admin agent created by any admin with `bus_mint_admin`; its tokens are `amb_admin_` + 43 base64url characters, stored hashed, not bound to a space. Re-minting issues an additional token. Minted admin tokens survive `rotate-token`, and minted admins can't replace the instance admin token. `bus_list_admins` lists every admin; `bus_revoke_admin` deletes a minted admin's tokens and participations (the agent row stays). |
 | Leader token | Minted by the admin. Not bound to a space. Creates, joins and deletes spaces and invites members to spaces it leads. Minting again for the same leader issues an additional token. |
 | Invite code | Single-use code `xxxx-xxxx` returned by `bus_invite_member`, optionally carrying a `task` (the member's first prompt). Stored hashed, expires after 10 minutes, cancelled by `bus_revoke_member` for that name. Redeemed with `POST /v1/invites/accept` (code as bearer) for a member token and the task. |
 | Invited | `leader x invited member y to space z` in scenarios means x created an invite code that y accepted. |
@@ -81,7 +81,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [schema.feature](schema.feature) | The single irreversible `0001_schema` migration with kind/role `admin`; later numbered migrations apply on top |
 | [tool-descriptions.feature](tool-descriptions.feature) | Tool descriptions: purpose first, a separate access sentence, pitfalls, the critical property, and the `bus_spawn_worker` entry in TOOLS.md |
 | [delivery-class.feature](delivery-class.feature) | The delivery class of every inbox entry (`interrupt`, `queue`, `deferred`), decided by the server from type and critical flag; returned on every read path |
-| [admin-tokens.feature](admin-tokens.feature) | The bootstrap admin `admin` and the instance admin token; minting (`bus_mint_admin`) and listing (`bus_list_admins`) admins, the audit line, rotation, and the admin endpoint guards |
+| [admin-tokens.feature](admin-tokens.feature) | The bootstrap admin `admin` and the instance admin token; minting (`bus_mint_admin`), listing (`bus_list_admins`) and revoking (`bus_revoke_admin`) admins, the audit lines, rotation, and the admin endpoint guards |
 | [admin-role.feature](admin-role.feature) | An admin leads every space without joining it: reads, sends (incl. `all` and critical), posts, creates, closes, removes, invites and revokes members and leaders; creates, lists and deletes any space |
 | [admin-messaging.feature](admin-messaging.feature) | An admin is reachable only in the spaces it joined (role `admin`): joining, messaging, its own inbox and stream, leaving |
 
@@ -101,5 +101,5 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 ## Known limitations
 
 - **Single-writer throughput.** All writes are serialized through one SQLite connection.
-- **No token expiry.** Tokens stay valid until their member leaves, is revoked or its space is deleted; leader and minted admin tokens are never removed. Only the instance admin token can be rotated (`rotate-token`).
+- **No token expiry.** Tokens stay valid until their member leaves, is revoked or its space is deleted; leader tokens are never removed, and minted admin tokens only by `bus_revoke_admin`. Only the instance admin token can be rotated (`rotate-token`).
 - **No thread claiming.** Agents can't claim a thread as a unit of work.
