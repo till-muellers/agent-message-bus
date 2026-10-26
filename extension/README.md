@@ -54,6 +54,7 @@ A worker can also join when its session starts: `omp --bus-url <url> --bus-accep
 - The file is written with mode `0600` and existing files are chmod-ed to `0600`. Windows ignores the mode; the user-profile ACL protects it.
 - A corrupt file fails with `Credential file <path> is unreadable. Run /bus login to rewrite it.`
 - **Environment:** `AGENT_BUS_URL`, `AGENT_BUS_TOKEN` and `AGENT_BUS_BIN` are read once when the extension loads and then removed from `process.env`, so child processes and subagents never inherit them.
+- **One owner:** `lib/session/session-credentials.ts` holds the promoted, env and accepted credentials of the session; the callers name what happened (`promote`, `loggedIn`, `inviteAccepted`, `loggedOut`, `ended`) instead of writing the state. The precedence below is unchanged.
 - **Precedence:** the session's promoted leader token (`/bus promote`) wins. Next, if `AGENT_BUS_URL` **and** `AGENT_BUS_TOKEN` were both set at load, they win (until `/bus logout`). Next comes the member token this session accepted (`/bus accept`). Otherwise the stored `token` is used. With only an admin token, the session has no tools and no inbox. Workers normally join with `/bus spawn` or `/bus accept`; the env override still hands a session a token directly (for example a member token redeemed with `POST /v1/invites/accept`) without touching the shared file. Each worker must be given its own variables explicitly:
 
   ```powershell

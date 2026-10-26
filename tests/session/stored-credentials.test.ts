@@ -2,25 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { configDir, createCredentialStore, resolveActive } from "../../extension/lib/session/stored-credentials.ts";
+import { configDir, createCredentialStore } from "../../extension/lib/session/stored-credentials.ts";
 import { consumeEnv } from "../../extension/lib/session/env.ts";
 import { URL_, useTempDirs } from "../fakes.ts";
 
 describe("credentials", () => {
 	const tempDir = useTempDirs();
-
-	test("resolveActive: session override > env credentials > accepted invite > file", () => {
-		const stored = { url: "http://file", token: "file-tok" };
-		const env = { url: "http://env", token: "env-tok" };
-		const override = { url: "http://session", token: "session-tok" };
-		const accepted = { url: "http://accepted", token: "acc-tok" };
-		expect(resolveActive({ override, env, accepted }, stored)).toEqual(override);
-		expect(resolveActive({ env, accepted }, stored)).toEqual(env);
-		expect(resolveActive({ accepted }, stored)).toEqual(accepted);
-		expect(resolveActive({}, stored)).toEqual({ url: "http://file", token: "file-tok" });
-		expect(resolveActive({}, { url: "http://file", adminToken: "a" })).toBeUndefined();
-		expect(resolveActive({}, undefined)).toBeUndefined();
-	});
 
 	test("configDir: OMP_AGENT_BUS_DIR wins, else <PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus", () => {
 		expect(configDir({ OMP_AGENT_BUS_DIR: "/bus", PI_CODING_AGENT_DIR: "/agent" })).toBe("/bus");

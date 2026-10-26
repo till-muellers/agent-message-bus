@@ -12,7 +12,8 @@
  * Active credentials: the session's promoted leader token, else
  * `AGENT_BUS_URL` + `AGENT_BUS_TOKEN` (read once at load and deleted from the
  * environment so child processes do not inherit them), else the member token
- * this session accepted (`lib/session/session-identity.ts`), else the stored agent
+ * this session accepted (`lib/session/session-credentials.ts` owns the three;
+ * `lib/session/session-identity.ts` keeps the accepted one), else the stored agent
  * token. With them the server's `bus_*` tools are registered and, with
  * `bus_spawn_worker`, switched on, and the inbox is streamed into the session;
  * without them those tools are switched off (`lib/connection/connection.ts`; delivery
@@ -20,29 +21,29 @@
  * accepted token (a branch or fork carries it to its new session file) and
  * reconnect. Subagents get neither the inbox stream nor the inbox tools.
  * `/bus logout` deactivates every `bus_*` tool until agent credentials resolve again.
+ *
+ * This file is wiring only: the session itself lives in `lib/session/session.ts`.
  */
 import { join } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { agentConfigDir } from "./lib/shared/credential-store.ts";
-import type { CommandResult } from "./lib/shared/command.ts";
-import { acceptInvite, type Joined } from "./lib/commands/accept.ts";
-import { findOnPath, resolveBinary } from "./lib/local-server/binary.ts";
-import { type BusClient, createClient, type FetchLike } from "./lib/bus/client.ts";
+import { createClient, type FetchLike } from "./lib/bus/client.ts";
 import { COMMAND_DESCRIPTION, runCommand } from "./lib/commands/command.ts";
-import { type Connection, createConnection, type SessionView } from "./lib/connection/connection.ts";
-import { type CredentialStore, configDir, createCredentialStore, type SessionCredentials } from "./lib/session/stored-credentials.ts";
-import { type BusEnv, consumeEnv } from "./lib/session/env.ts";
+import { createInviteFlag } from "./lib/commands/invite-flag.ts";
+import { findOnPath, resolveBinary } from "./lib/local-server/binary.ts";
+import { createServerCli, type ServerCli } from "./lib/local-server/server-cli.ts";
+import { consumeEnv, type BusEnv } from "./lib/session/env.ts";
+import { configDir, createCredentialStore, type CredentialStore } from "./lib/session/stored-credentials.ts";
+import { type Session, type SessionContext, createSession } from "./lib/session/session.ts";
+import type { SessionChange } from "./lib/session/session-identity.ts";
 import { errorMessage } from "./lib/bus/errors.ts";
 import type { InboxLoopOptions } from "./lib/delivery/inbox-loop.ts";
-import { createInviteFlag } from "./lib/commands/invite-flag.ts";
 import { type DetachedSpawner, spawnDetached } from "./lib/launch/detached.ts";
 import { LAUNCHERS } from "./lib/launch/index.ts";
 import type { LaunchCommand, LaunchContext } from "./lib/launch/launcher.ts";
 import { executeLaunch } from "./lib/launch/run.ts";
 import { pluginArgs } from "./lib/spawn/plugin-args.ts";
 import { type Runner, spawnRunner } from "./lib/process/runner.ts";
-import { createServerCli, type ServerCli } from "./lib/local-server/server-cli.ts";
-import { createSessionIdentity, type IdentityContext, type SessionChange } from "./lib/session/session-identity.ts";
 import { spawnWorker } from "./lib/spawn/spawn.ts";
 import { SPAWN_TOOL, type Spawn, spawnToolDefinition } from "./lib/spawn/spawn-tool.ts";
 
@@ -60,59 +61,6 @@ export interface BusExtensionOptions {
 	arch?: string;
 	/** This omp process's argv, whose extension-loading flags a spawned worker gets; default `process.argv`. */
 	argv?: readonly string[];
-}
-
-/** The parts of the omp context a session reads: mode, agent kind and the session file. */
-interface SessionContext extends IdentityContext {
-	mode?: string;
-}
-
-/** The session's bus state: its credentials, accepted identity and connection. */
-interface Session extends Connection {
-	client: BusClient;
-	credentials: SessionCredentials;
-	warn(message: string): void;
-	isSub(): boolean;
-	clearAccepted(): Promise<void>;
-	accept(url: string, code: string): Promise<Joined>;
-	/** After an accept: reconnects as the member, which switches the tools on, and sends the invite's first prompt. */
-	join(joined: Joined): Promise<CommandResult>;
-	/** Session end: stops the loop and forgets the promoted leader token. */
-	shutdown(): void;
-	setContext(ctx: SessionContext, change?: SessionChange): Promise<void>;
-}
-
-/** `dir` holds the per-session files. */
-function createSession(pi: ExtensionAPI, store: CredentialStore, busEnv: BusEnv, options: BusExtensionOptions, dir: string): Session {
-	const client = createClient(options.fetchFn);
-	const warn = (message: string) => pi.logger.warn(`agent-bus: ${message}`);
-	const credentials: SessionCredentials = { env: busEnv.credentials };
-	const identity = createSessionIdentity(dir, credentials);
-	const view: SessionView = { sub: false };
-	const connection = createConnection({ pi, client, store, credentials, identity, view, warn, sleep: options.sleep, localTools: [SPAWN_TOOL] });
-	return {
-		...connection,
-		client,
-		credentials,
-		warn,
-		isSub: () => view.sub,
-		clearAccepted: () => identity.clear(),
-		accept: (url, code) => acceptInvite({ client, session: credentials, identity }, url, code),
-		async join(joined) {
-			await connection.restart();
-			if (joined.task) pi.sendUserMessage(joined.task);
-			return joined.result;
-		},
-		shutdown() {
-			connection.stop();
-			credentials.override = undefined;
-		},
-		setContext(ctx, change) {
-			view.mode = ctx.mode;
-			view.sub = ctx.agent?.kind === "sub";
-			return identity.bind(ctx, change);
-		},
-	};
 }
 
 /** The local agent-message-bus CLI: `AGENT_BUS_BIN`, else PATH, else the verified release download. */
@@ -194,7 +142,16 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		const env = options.env ?? process.env;
 		const busEnv = consumeEnv(env);
 		const store = createCredentialStore(env);
-		const session = createSession(pi, store, busEnv, options, configDir(env));
+		const client = createClient(options.fetchFn);
+		const session = createSession({
+			pi,
+			store,
+			busEnv,
+			dir: configDir(env),
+			client,
+			localTools: [SPAWN_TOOL],
+			sleep: options.sleep,
+		});
 		const which = options.which ?? ((name: string) => findOnPath(name, env.PATH));
 		const spawn = workerSpawner({ env, platform: options.platform ?? process.platform, which }, options, session);
 		pi.registerFlag("bus-url", { type: "string", description: "Bus url for --bus-accept" });

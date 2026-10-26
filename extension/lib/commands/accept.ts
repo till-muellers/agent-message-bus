@@ -4,12 +4,14 @@
  */
 import type { CommandResult } from "../shared/command.ts";
 import type { BusClient } from "../bus/client.ts";
-import { type SessionCredentials, trimUrl } from "../session/stored-credentials.ts";
+import type { SessionCredentials } from "../session/session-credentials.ts";
+import { trimUrl } from "../session/stored-credentials.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
 
 export interface AcceptDeps {
 	client: BusClient;
-	session: SessionCredentials;
+	/** The credential set of this session; only the accept operation is called. */
+	session: Pick<SessionCredentials, "inviteAccepted">;
 	identity: Pick<SessionIdentity, "save">;
 }
 
@@ -24,8 +26,7 @@ export async function acceptInvite(deps: AcceptDeps, rawUrl: string, code: strin
 	const url = trimUrl(rawUrl);
 	const invite = await deps.client.acceptInvite(url, code);
 	const persisted = await deps.identity.save({ url, token: invite.token });
-	deps.session.override = undefined;
-	deps.session.env = undefined;
+	deps.session.inviteAccepted();
 	const note = persisted ? "" : " Not persisted: this session has no session file.";
 	const result: CommandResult = { message: `Joined space ${invite.space} as member ${invite.name}.${note}`, level: "info" };
 	return invite.task === undefined ? { result } : { result, task: invite.task };

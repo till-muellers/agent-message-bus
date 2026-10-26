@@ -1,8 +1,9 @@
 /**
  * The member identity this omp session accepted with `/bus accept`: owns the session's key, its credential file
- * (`session-store.ts`) and `SessionCredentials.accepted`, which nothing else writes.
+ * (`session-store.ts`) and the accepted token of the credential set, which nothing else writes.
  */
-import type { ActiveCredentials, SessionCredentials } from "./stored-credentials.ts";
+import type { SessionCredentials } from "./session-credentials.ts";
+import type { ActiveCredentials } from "./stored-credentials.ts";
 import { createSessionStore, type SessionStore, sessionKey } from "./session-store.ts";
 
 /** The parts of the omp context that identify a session: its agent kind and its session file. */
@@ -29,7 +30,7 @@ export interface SessionIdentity {
 	clear(): Promise<void>;
 }
 
-/** `dir` holds `sessions/<key>.json`; `credentials` is the session's credential set whose `accepted` this owns. */
+/** `dir` holds `sessions/<key>.json`; `credentials` is the session's credential set whose accepted token this owns. */
 export function createSessionIdentity(dir: string, credentials: SessionCredentials): SessionIdentity {
 	let store: SessionStore | undefined;
 	const storeOf = (file: string | undefined, sub: boolean) => {
@@ -40,22 +41,25 @@ export function createSessionIdentity(dir: string, credentials: SessionCredentia
 		async bind(ctx, change = { kind: "same" }) {
 			const sub = ctx.agent?.kind === "sub";
 			store = storeOf(ctx.sessionManager?.getSessionFile(), sub);
-			if (change.kind === "new") credentials.accepted = undefined;
+			if (change.kind === "new") credentials.setAccepted(undefined);
 			if (change.kind !== "branch") return;
 			const previous = storeOf(change.previousSessionFile, sub);
-			if (previous) credentials.accepted = await previous.load();
-			if (credentials.accepted) await store?.save(credentials.accepted);
+			// A branch without a previous session file keeps the token it already holds.
+			if (!previous) return;
+			const carried = await previous.load();
+			credentials.setAccepted(carried);
+			if (carried) await store?.save(carried);
 		},
 		async load() {
-			if (store) credentials.accepted = await store.load();
+			if (store) credentials.setAccepted(await store.load());
 		},
 		async save(creds) {
 			await store?.save(creds);
-			credentials.accepted = creds;
+			credentials.setAccepted(creds);
 			return store !== undefined;
 		},
 		async clear() {
-			credentials.accepted = undefined;
+			credentials.setAccepted(undefined);
 			await store?.clear();
 		},
 	};

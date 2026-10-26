@@ -94,7 +94,7 @@ const ROOT_TESTS: Record<string, true> = {
 /** The modules allowed to see the whole graph: the wiring root and, once it exists, the session. */
 const ROOTS: Record<string, true> = {
 	"index.ts": true,
-	"session/session.ts": true,
+	"lib/session/session.ts": true,
 };
 
 /** A module of the extension. */
@@ -227,7 +227,8 @@ describe("extension layout", () => {
 			const from = BY_PATH.get(edge.from);
 			const to = BY_PATH.get(edge.to);
 			if (!from || !to || from.folder === to.folder) return false;
-			if (from.folder === "index" || from.folder === "") return false;
+			// The wiring roots wire the folders together; the allowed set describes the edges between the folders.
+			if (ROOTS[from.rel]) return false;
 			const key = `${from.folder}>${to.folder}`;
 			return !GRAPH_EDGES[key] && !TRANSITIONAL_EDGES[key];
 		}).map(edge => {

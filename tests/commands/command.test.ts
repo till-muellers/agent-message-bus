@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { type BusClient, createClient } from "../../extension/lib/bus/client.ts";
 import { type CommandDeps, COMMAND_DESCRIPTION, runCommand, USAGE } from "../../extension/lib/commands/command.ts";
-import type { CredentialStore, SessionCredentials } from "../../extension/lib/session/stored-credentials.ts";
+import { createSessionCredentials, type SessionCredentials } from "../../extension/lib/session/session-credentials.ts";
+import type { CredentialStore } from "../../extension/lib/session/stored-credentials.ts";
 import type { ServerCli } from "../../extension/lib/local-server/server-cli.ts";
 import { CODE, errorResponse, fakeBus, memoryStore, URL_ } from "../fakes.ts";
 
-function commandDeps(store: CredentialStore, client: BusClient, session: SessionCredentials = {}, server: ServerCli = async () => "") {
+function commandDeps(store: CredentialStore, client: BusClient, session: SessionCredentials = createSessionCredentials(undefined), server: ServerCli = async () => "") {
 	const deps = {
 		store,
 		client,
@@ -23,7 +24,7 @@ function commandDeps(store: CredentialStore, client: BusClient, session: Session
 			return { message: "accepted", level: "info" as const };
 		},
 		clearAccepted: async () => {
-			deps.session.accepted = undefined;
+			deps.session.setAccepted(undefined);
 			deps.acceptedCleared++;
 		},
 		spawn: async (req: { space: string; name: string; task?: string }) => {
@@ -79,7 +80,7 @@ describe("runCommand", () => {
 		});
 		expect(bus.calls[0]).toMatchObject({ url: `${URL_}/v1/tools/bus_mint_leader`, auth: "Bearer adm", body: { name: "lead" } });
 		expect(store.value).toEqual({ url: `${URL_}/`, adminToken: "adm" });
-		expect(deps.session.override).toEqual({ url: URL_, token: "lead-tok" });
+		expect(deps.session.resolve(undefined)).toEqual({ url: URL_, token: "lead-tok", source: "promote" });
 		expect(deps.restarts).toBe(1);
 	});
 
@@ -87,34 +88,42 @@ describe("runCommand", () => {
 		const client = clientWith({
 			tools: { bus_whoami: whoami({ "lead-tok": { kind: "leader", name: "lead", spaces: [] }, mem: { kind: "member", name: "w", spaces: [] } }) },
 		});
-		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), client, { override: { url: URL_, token: "lead-tok" } });
+		const promoted = createSessionCredentials(undefined);
+		promoted.promote({ url: URL_, token: "lead-tok" });
+		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), client, promoted);
 		expect((await runCommand("status", deps)).message).toBe(`${URL_}: leader lead; spaces: none`);
 	});
 
 	test("logout clears the stored file, the session override and the env credentials with no fallback, and stops", async () => {
 		const store = memoryStore({ url: URL_, adminToken: "adm", token: "t" });
-		const deps = commandDeps(store, clientWith(), { override: { url: URL_, token: "lead-tok" }, env: { url: URL_, token: "env" } });
+		const session = createSessionCredentials({ url: URL_, token: "env" });
+		session.promote({ url: URL_, token: "lead-tok" });
+		const deps = commandDeps(store, clientWith(), session);
 		expect(await runCommand("logout", deps)).toEqual({ message: "Logged out; bus tools deactivated.", level: "info" });
-		expect({ session: deps.session, stored: store.value }).toEqual({ session: {}, stored: undefined });
+		expect({ session: deps.session.resolve(undefined), stored: store.value }).toEqual({ session: undefined, stored: undefined });
 		expect({ restarts: deps.restarts, stops: deps.stops }).toEqual({ restarts: 0, stops: 1 });
 	});
 
 	test("login with an agent token clears the session override so the new token takes effect", async () => {
 		const client = clientWith({ tools: { bus_whoami: whoami({ mem: { kind: "member", name: "w", spaces: [] } }) } });
-		const deps = commandDeps(memoryStore(), client, { override: { url: URL_, token: "lead-tok" } });
+		const promoted = createSessionCredentials(undefined);
+		promoted.promote({ url: URL_, token: "lead-tok" });
+		const deps = commandDeps(memoryStore(), client, promoted);
 		await runCommand(`login ${URL_} mem`, deps);
-		expect(deps.session.override).toBeUndefined();
+		expect(deps.session.resolve(undefined)).toBeUndefined();
 		expect(deps.restarts).toBe(1);
 	});
 
 	test("login with an agent token and logout clear the accepted token; login with an admin token keeps it", async () => {
 		const client = clientWith({ tools: { bus_whoami: whoami({ mem: { kind: "member", name: "w", spaces: [] }, adm: { kind: "admin", spaces: [] } }) } });
 		const accepted = { url: URL_, token: "acc-tok" };
-		const deps = commandDeps(memoryStore(), client, { accepted });
+		const session = createSessionCredentials(undefined);
+		session.setAccepted(accepted);
+		const deps = commandDeps(memoryStore(), client, session);
 		await runCommand(`login ${URL_} adm`, deps);
-		expect({ accepted: deps.session.accepted, cleared: deps.acceptedCleared }).toEqual({ accepted, cleared: 0 });
+		expect({ accepted: deps.session.resolve(undefined), cleared: deps.acceptedCleared }).toEqual({ accepted: { ...accepted, source: "accepted" }, cleared: 0 });
 		await runCommand(`login ${URL_} mem`, deps);
-		expect({ accepted: deps.session.accepted, cleared: deps.acceptedCleared }).toEqual({ accepted: undefined, cleared: 1 });
+		expect({ accepted: deps.session.resolve(undefined), cleared: deps.acceptedCleared }).toEqual({ accepted: undefined, cleared: 1 });
 		await runCommand("logout", deps);
 		expect(deps.acceptedCleared).toBe(2);
 	});
