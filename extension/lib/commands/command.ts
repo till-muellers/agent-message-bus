@@ -8,8 +8,8 @@ import { type CommandResult, parseArgs } from "../shared/command.ts";
 import type { BusClient } from "../bus/client.ts";
 import { type CredentialStore, resolveActive, type SessionCredentials, trimUrl } from "../session/stored-credentials.ts";
 import { errorMessage } from "../bus/errors.ts";
-import { type ServerCli, serverCommand } from "../server.ts";
-import type { SpawnRequest, SpawnResult } from "../spawn.ts";
+import { type ServerCli, serverCommand } from "../local-server/server-cli.ts";
+import type { SpawnRequest, SpawnResult } from "../spawn/spawn.ts";
 
 export interface CommandDeps {
 	store: CredentialStore;

@@ -3,11 +3,11 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { activateBusTools, deactivateBusTools, deactivateTools } from "../extension/lib/connection/activation.ts";
-import { resolveBinary } from "../extension/lib/binary.ts";
+import { resolveBinary } from "../extension/lib/local-server/binary.ts";
 import type { FetchLike } from "../extension/lib/bus/client.ts";
-import { assetName, expectedSum, RELEASES_URL } from "../extension/lib/download.ts";
-import type { Runner } from "../extension/lib/runner.ts";
-import { createServerCli } from "../extension/lib/server.ts";
+import { assetName, expectedSum, RELEASES_URL } from "../extension/lib/local-server/download.ts";
+import type { Runner } from "../extension/lib/process/runner.ts";
+import { createServerCli } from "../extension/lib/local-server/server-cli.ts";
 import { useTempDirs } from "./fakes.ts";
 
 describe("activation", () => {

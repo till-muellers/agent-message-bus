@@ -3,18 +3,18 @@
  * opens `omp <leader's extension flags> --cwd <cwd> --bus-url <url> --bus-accept <code>`, which joins the space by
  * itself. The code is never returned.
  */
-import { BusError, type BusClient } from "./bus/client.ts";
-import type { ActiveCredentials } from "./session/stored-credentials.ts";
-import { errorMessage, NOT_LOGGED_IN } from "./bus/errors.ts";
-import type { LaunchCommand, LaunchContext, Launcher } from "./launch/launcher.ts";
-import { pickLauncher } from "./launch/select.ts";
+import { BusError, type BusClient } from "../bus/client.ts";
+import type { ActiveCredentials } from "../session/stored-credentials.ts";
+import { errorMessage, NOT_LOGGED_IN } from "../bus/errors.ts";
+import type { LaunchCommand, LaunchContext, Launcher } from "../launch/launcher.ts";
+import { pickLauncher } from "../launch/select.ts";
 
 export interface SpawnDeps {
 	client: BusClient;
 	getActive(): ActiveCredentials | undefined;
 	launchers: readonly Launcher[];
 	launchContext: LaunchContext;
-	/** The leader's extension-loading flags (`lib/plugin-args.ts`), placed right after `omp`. */
+	/** The leader's extension-loading flags (`plugin-args.ts`), placed right after `omp`. */
 	pluginArgs: readonly string[];
 	execute(cmd: LaunchCommand, signal?: AbortSignal): Promise<void>;
 }

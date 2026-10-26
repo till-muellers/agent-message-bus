@@ -3,20 +3,20 @@
  *
  *   /bus login <url> <token>     store an admin, leader or member token
  *   /bus accept <url> <code>     redeem an invite code; the member token is kept for this omp session
- *   /bus spawn <space> <name> [task]  invite a member and open it in a new terminal tab (`lib/spawn.ts`; also the bus_spawn_worker tool)
+ *   /bus spawn <space> <name> [task]  invite a member and open it in a new terminal tab (`lib/spawn/spawn.ts`; also the bus_spawn_worker tool)
  *   /bus promote <leader-name>   mint a leader token for this session only (admin token required; never stored)
  *   /bus server start|stop|status  run a local agent-message-bus and log in as its admin
  *   /bus status | logout | help
- *   omp --bus-url <url> --bus-accept <code>  redeem an invite code when the session starts (`lib/invite-flag.ts`)
+ *   omp --bus-url <url> --bus-accept <code>  redeem an invite code when the session starts (`lib/commands/invite-flag.ts`)
  *
  * Active credentials: the session's promoted leader token, else
  * `AGENT_BUS_URL` + `AGENT_BUS_TOKEN` (read once at load and deleted from the
  * environment so child processes do not inherit them), else the member token
- * this session accepted (`lib/session-identity.ts`), else the stored agent
+ * this session accepted (`lib/session/session-identity.ts`), else the stored agent
  * token. With them the server's `bus_*` tools are registered and, with
  * `bus_spawn_worker`, switched on, and the inbox is streamed into the session;
- * without them those tools are switched off (`lib/connection.ts`; delivery
- * policy: `lib/deliver.ts`). Session start, switch and branch re-key the
+ * without them those tools are switched off (`lib/connection/connection.ts`; delivery
+ * policy: `lib/delivery/delivery-class.ts`). Session start, switch and branch re-key the
  * accepted token (a branch or fork carries it to its new session file) and
  * reconnect. Subagents get neither the inbox stream nor the inbox tools.
  * `/bus logout` deactivates every `bus_*` tool until agent credentials resolve again.
@@ -26,7 +26,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { agentConfigDir } from "./lib/shared/credential-store.ts";
 import type { CommandResult } from "./lib/shared/command.ts";
 import { acceptInvite, type Joined } from "./lib/commands/accept.ts";
-import { findOnPath, resolveBinary } from "./lib/binary.ts";
+import { findOnPath, resolveBinary } from "./lib/local-server/binary.ts";
 import { type BusClient, createClient, type FetchLike } from "./lib/bus/client.ts";
 import { COMMAND_DESCRIPTION, runCommand } from "./lib/commands/command.ts";
 import { type Connection, createConnection, type SessionView } from "./lib/connection/connection.ts";
@@ -39,12 +39,12 @@ import { type DetachedSpawner, spawnDetached } from "./lib/launch/detached.ts";
 import { LAUNCHERS } from "./lib/launch/index.ts";
 import type { LaunchCommand, LaunchContext } from "./lib/launch/launcher.ts";
 import { executeLaunch } from "./lib/launch/run.ts";
-import { pluginArgs } from "./lib/plugin-args.ts";
-import { type Runner, spawnRunner } from "./lib/runner.ts";
-import { createServerCli, type ServerCli } from "./lib/server.ts";
+import { pluginArgs } from "./lib/spawn/plugin-args.ts";
+import { type Runner, spawnRunner } from "./lib/process/runner.ts";
+import { createServerCli, type ServerCli } from "./lib/local-server/server-cli.ts";
 import { createSessionIdentity, type IdentityContext, type SessionChange } from "./lib/session/session-identity.ts";
-import { spawnWorker } from "./lib/spawn.ts";
-import { SPAWN_TOOL, type Spawn, spawnToolDefinition } from "./lib/spawn-tool.ts";
+import { spawnWorker } from "./lib/spawn/spawn.ts";
+import { SPAWN_TOOL, type Spawn, spawnToolDefinition } from "./lib/spawn/spawn-tool.ts";
 
 export interface BusExtensionOptions {
 	fetchFn?: FetchLike;

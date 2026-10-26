@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { executeLaunch, LAUNCH_TIMEOUT_MS } from "../../extension/lib/launch/run.ts";
-import type { RunOptions, RunResult } from "../../extension/lib/runner.ts";
+import type { RunOptions, RunResult } from "../../extension/lib/process/runner.ts";
 
 function deps(result: RunResult) {
 	const calls: { kind: string; command: string; args: string[]; options?: RunOptions }[] = [];

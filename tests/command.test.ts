@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { type BusClient, createClient } from "../extension/lib/bus/client.ts";
 import { type CommandDeps, COMMAND_DESCRIPTION, runCommand, USAGE } from "../extension/lib/commands/command.ts";
 import type { CredentialStore, SessionCredentials } from "../extension/lib/session/stored-credentials.ts";
-import type { ServerCli } from "../extension/lib/server.ts";
+import type { ServerCli } from "../extension/lib/local-server/server-cli.ts";
 import { CODE, errorResponse, fakeBus, memoryStore, URL_ } from "./fakes.ts";
 
 function commandDeps(store: CredentialStore, client: BusClient, session: SessionCredentials = {}, server: ServerCli = async () => "") {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
-import { pluginArgs } from "../extension/lib/plugin-args.ts";
+import { pluginArgs } from "../extension/lib/spawn/plugin-args.ts";
 
 const CWD = resolve("/leader");
 const ABS = resolve("/p");

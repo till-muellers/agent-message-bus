@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { spawnRunner } from "../extension/lib/runner.ts";
+import { spawnRunner } from "../../extension/lib/process/runner.ts";
 
 /** A child process that would outlive every test. Real time on purpose: execFile's own timeout kills it, which fake timers cannot drive. */
 const sleeper: [string, string[]] = [process.execPath, ["-e", "setTimeout(() => {}, 30000)"]];

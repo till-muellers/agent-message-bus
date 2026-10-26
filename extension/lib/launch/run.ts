@@ -1,4 +1,4 @@
-import type { Runner } from "../runner.ts";
+import type { Runner } from "../process/runner.ts";
 import type { DetachedSpawner } from "./detached.ts";
 import type { LaunchCommand } from "./launcher.ts";
 

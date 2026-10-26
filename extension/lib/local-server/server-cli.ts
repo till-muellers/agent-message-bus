@@ -2,9 +2,9 @@
  * `/bus server start|stop|status`: drives a local agent-message-bus through its
  * CLI (`start`, `stop`, `status --json`, `admin-token`).
  */
-import type { CommandResult } from "./shared/command.ts";
-import type { CredentialStore } from "./session/stored-credentials.ts";
-import type { Runner } from "./runner.ts";
+import type { CommandResult } from "../shared/command.ts";
+import type { CredentialStore } from "../session/stored-credentials.ts";
+import type { Runner } from "../process/runner.ts";
 
 /** Runs `<binary> <args>` and returns stdout; a non-zero exit is an error. */
 export type ServerCli = (args: string[]) => Promise<string>;

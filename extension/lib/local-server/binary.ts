@@ -1,7 +1,7 @@
 /**
  * Resolves the agent-message-bus binary for `/bus server`: `AGENT_BUS_BIN`
  * (read once at load), else `agent-message-bus` on PATH, else the verified
- * download of the latest release (`lib/download.ts`).
+ * download of the latest release (`download.ts`).
  */
 import { access, constants } from "node:fs/promises";
 import { delimiter, join } from "node:path";
