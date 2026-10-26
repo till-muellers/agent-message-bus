@@ -272,7 +272,7 @@ type Notice struct {
 // insert (service.go:44-57) computes edge per recipient scope inside the Deliver tx:
 //   scope = (agent) for leader/admin kind, (agent, space) for member kind;
 //   edge = scope had no row before this tx's first insert for it, or the entry is critical (PO-7 re-notify).
-func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, bool, error) // returns+marks unnoticed edges of p's scope [13b]
+func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, bool, error) // returns+marks unnoticed edges of p's scope [13a; consumed from 13b]
 func (s *Service) ReadMarking(ctx context.Context, p auth.Principal, after int64, limit int) ([]Entry, error) // Read + mark returned edges noticed [13b]
 ```
 

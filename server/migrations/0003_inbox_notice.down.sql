@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS inbox_unnoticed;
+ALTER TABLE inbox DROP COLUMN noticed;
+ALTER TABLE inbox DROP COLUMN edge;

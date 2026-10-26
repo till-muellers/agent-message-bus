@@ -9,7 +9,7 @@ Feature: Tool descriptions guide the agent on their own
   # description matter most.
   #
   # Descriptions state only shipped behaviour. A later slice extends them: the
-  # bus_inbox_ack notify clause (slice 13a).
+  # bus_inbox_ack notify clause (slice 13b, with the first notice an agent can see).
 
   Rule: Descriptions open with the purpose; the access rule follows
 

@@ -104,7 +104,7 @@ Descriptions state only shipped behaviour. Slice 3 ships interim texts; each lat
 
 | Clause (final text) | Slice 3 interim | Added by |
 |---|---|---|
-| `bus_inbox_ack`: "acknowledging everything lets the next mail notify again" | — (omitted) | 13a |
+| `bus_inbox_ack`: "acknowledging everything lets the next mail notify again" | — (omitted) | 13b (13a stores the edge; the notify first becomes visible with the hint) |
 
 Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-69`); the rest [AD-13].
 
