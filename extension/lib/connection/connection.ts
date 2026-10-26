@@ -7,6 +7,7 @@ import { activateBusTools, deactivateBusTools, deactivateTools } from "./activat
 import type { BusClient } from "../bus/client.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
 import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
+import type { AckWatermark } from "../delivery/ack-watermark.ts";
 import { phaseOf } from "../delivery/delivery-class.ts";
 import { createDispatcher } from "../delivery/dispatcher.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
@@ -32,6 +33,8 @@ export interface ConnectionDeps {
 	view: SessionView;
 	/** Keeps the extension off a server that is too old; checked before the tools are activated. */
 	gate: ServerGate;
+	/** The watermark of the acked entries; the dispatcher tells it what arrived. */
+	watermark: AckWatermark;
 	warn(message: string): void;
 	sleep?: InboxLoopOptions["sleep"];
 	/** Tools this extension registers itself (`bus_spawn_worker`); they are switched on and off with the server tools. */
@@ -47,13 +50,14 @@ export interface Connection {
 	stop(): void;
 }
 
-export function createConnection({ pi, client, store, credentials, identity, view, gate, warn, sleep, localTools }: ConnectionDeps): Connection {
+export function createConnection({ pi, client, store, credentials, identity, view, gate, watermark, warn, sleep, localTools }: ConnectionDeps): Connection {
 	const tools = { registered: false, names: [] as string[] };
 	let active: ActiveCredentials | undefined;
 	const getActive = () => active;
 	const dispatcher = createDispatcher({
 		phase: () => phaseOf(view.mode, view.isIdle()),
-		handOver: (content, mechanism) => pi.sendMessage({ customType: "agent-bus", content, display: true }, mechanism),
+		watermark,
+		handOver: (content, mechanism, details) => pi.sendMessage({ customType: "agent-bus", content, display: true, details }, mechanism),
 	});
 	const inbox = createInboxRunner({ client, getActive, warn, sleep, dispatcher });
 	const ours = () => [...tools.names, ...localTools];
