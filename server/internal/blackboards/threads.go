@@ -105,7 +105,7 @@ func (s *Service) RemoveThread(ctx context.Context, p auth.Principal, space stri
 		if err != nil {
 			return nil, err
 		}
-		if t.createdByID != m.AgentID && m.Role != spaces.RoleLeader {
+		if t.createdByID != m.AgentID && !m.Leads() {
 			return nil, apperr.New(apperr.Forbidden, "only the creator or a leader may remove thread %d", id)
 		}
 		ids, err := threadSubscribers(ctx, tx, id, m.AgentID)

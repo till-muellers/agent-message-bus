@@ -93,7 +93,7 @@ func summarize(name string, ps []Participant, caller string) SpaceInfo {
 }
 
 func requireLeaderRole(m Membership, action string) error {
-	if m.Role != RoleLeader {
+	if !m.Leads() {
 		return apperr.New(apperr.Forbidden, "only leaders may %s", action)
 	}
 	return nil

@@ -76,7 +76,7 @@ func (s *Service) topicRecipients(ctx context.Context, tx *sql.Tx, m spaces.Memb
 	if t.name != allTopic {
 		return subscriberIDs(ctx, tx, t.id, m.AgentID)
 	}
-	if m.Role != spaces.RoleLeader {
+	if !m.Leads() {
 		return nil, apperr.New(apperr.Forbidden, "only leaders may send to all")
 	}
 	ids, err := s.spaces.ParticipantIDs(ctx, tx, m.SpaceID)
@@ -121,7 +121,7 @@ func (s *Service) CloseTopic(ctx context.Context, p auth.Principal, space, topic
 		if err != nil {
 			return nil, err
 		}
-		if t.createdBy != m.AgentID && m.Role != spaces.RoleLeader {
+		if t.createdBy != m.AgentID && !m.Leads() {
 			return nil, apperr.New(apperr.Forbidden, "only the creator or a leader may close topic %s", topic)
 		}
 		recipients, err := subscriberIDs(ctx, tx, t.id, m.AgentID)
