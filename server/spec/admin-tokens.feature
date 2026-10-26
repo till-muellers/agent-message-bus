@@ -120,6 +120,7 @@ Feature: Admin agents, the bootstrap admin and admin tokens
       Given the bootstrap admin minted admin "ops"
       And the bootstrap admin minted admin "ops" again
       And the bootstrap admin minted admin "web"
+      And admin "web" was revoked
       And the bootstrap admin minted leader "lead"
       And leader "lead" created space "demo"
       And admin "ops" joined space "demo"
@@ -128,14 +129,87 @@ Feature: Admin agents, the bootstrap admin and admin tokens
         | name  | bootstrap | tokens | spaces |
         | admin | true      | 0      |        |
         | ops   | false     | 2      | demo   |
-        | web   | false     | 1      |        |
+        | web   | false     | 0      |        |
 
     Scenario: Leaders and members cannot list admins
       Given the bootstrap admin minted leader "lead"
       When leader "lead" calls bus_list_admins
       Then the call fails with forbidden "admin token required"
 
-  Rule: Every admin mint is logged
+  Rule: Admins revoke minted admins (bus_revoke_admin)
+
+    Scenario: An admin revokes another admin
+      Given the bootstrap admin minted admin "ops"
+      And the bootstrap admin minted admin "web"
+      When admin "ops" calls bus_revoke_admin with {"name":"web"}
+      Then the call returns {"deleted": true}
+      And every token of admin "web" fails with unauthenticated "invalid token"
+
+    Scenario: Revoking an admin removes it from every space it joined
+      Given the bootstrap admin minted leader "lead"
+      And leader "lead" created space "demo"
+      And leader "lead" created space "other"
+      And the bootstrap admin minted admin "web"
+      And admin "web" joined space "demo"
+      And admin "web" joined space "other"
+      And admin "web" has inbox entries in spaces "demo" and "other"
+      When the bootstrap admin calls bus_revoke_admin with {"name":"web"}
+      Then admin "web" is not a participant of space "demo" or "other"
+      And admin "web" has no inbox entry
+      And admin "web" has no topic or thread subscription
+
+    Scenario: A revoked admin's authored content keeps its author
+      Given the bootstrap admin minted leader "lead"
+      And leader "lead" created space "demo"
+      And the bootstrap admin minted admin "web"
+      And admin "web" created blackboard "audit" in space "demo"
+      When the bootstrap admin calls bus_revoke_admin with {"name":"web"}
+      Then the blackboard "audit" of space "demo" still has owner "web"
+
+    Scenario: Minting a revoked admin again gives the same agent a new token
+      Given the bootstrap admin minted admin "web"
+      And admin "web" was revoked
+      When the bootstrap admin calls bus_mint_admin with {"name":"web"}
+      Then the new token authenticates as admin "web" with the same agent id as before
+
+    Scenario: An admin may revoke itself
+      Given the bootstrap admin minted admin "ops"
+      When admin "ops" calls bus_revoke_admin with {"name":"ops"}
+      Then the call returns {"deleted": true}
+      And the token of admin "ops" fails with unauthenticated "invalid token"
+
+    Scenario Outline: The bootstrap admin cannot be revoked (<caller>)
+      Given the bootstrap admin minted admin "ops"
+      When <caller> calls bus_revoke_admin with {"name":"admin"}
+      Then the call fails with forbidden "admin is the bootstrap admin; rotate its token with agent-message-bus rotate-token"
+
+      Examples:
+        | caller              |
+        | the bootstrap admin |
+        | admin "ops"         |
+
+    Scenario: Revoking an unknown name removes nothing
+      When the bootstrap admin calls bus_revoke_admin with {"name":"ghost"}
+      Then the call returns {"deleted": false}
+
+    Scenario: Revoking an already revoked admin removes nothing
+      Given the bootstrap admin minted admin "web"
+      And admin "web" was revoked
+      When the bootstrap admin calls bus_revoke_admin with {"name":"web"}
+      Then the call returns {"deleted": false}
+
+    Scenario: bus_revoke_admin does not revoke leaders
+      Given the bootstrap admin minted leader "lead"
+      When the bootstrap admin calls bus_revoke_admin with {"name":"lead"}
+      Then the call fails with conflict "agent lead is a leader agent"
+
+    Scenario: Only admins revoke admins
+      Given the bootstrap admin minted admin "ops"
+      And the bootstrap admin minted leader "lead"
+      When leader "lead" calls bus_revoke_admin with {"name":"ops"}
+      Then the call fails with forbidden "admin token required"
+
+  Rule: Every admin mint and revoke is logged
 
     # One structured info line (slog, JSON handler on stderr, so it lands in the
     # log file under `start`). Never contains a token.
@@ -150,6 +224,15 @@ Feature: Admin agents, the bootstrap admin and admin tokens
       Given the bootstrap admin minted admin "ops"
       When the bootstrap admin mints admin "ops" again
       Then the server logs one info line with msg "admin minted", by "admin", name "ops"
+
+    Scenario: Revoking an admin logs one line with the outcome
+      Given the bootstrap admin minted admin "web"
+      When the bootstrap admin calls bus_revoke_admin with {"name":"web"}
+      Then the server logs one info line with msg "admin revoked", by "admin", name "web", deleted true
+
+    Scenario: A no-op revoke is logged too
+      When the bootstrap admin calls bus_revoke_admin with {"name":"ghost"}
+      Then the server logs one info line with msg "admin revoked", by "admin", name "ghost", deleted false
 
     Scenario: Refused calls log no audit line
       Given the bootstrap admin minted leader "lead"
@@ -181,8 +264,8 @@ Feature: Admin agents, the bootstrap admin and admin tokens
   Rule: The admin endpoints stay loopback-only
 
     # Instance lifecycle endpoints. The loopback rule is unchanged. The bus_* admin
-    # tools (bus_mint_leader, bus_mint_admin, bus_list_admins) are not loopback-only,
-    # like every tool.
+    # tools (bus_mint_leader, bus_mint_admin, bus_list_admins, bus_revoke_admin) are not
+    # loopback-only, like every tool.
 
     Scenario Outline: Guard on <route> from <remote> with the <token> token
       Given the bootstrap admin minted admin "ops"

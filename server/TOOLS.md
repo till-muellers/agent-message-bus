@@ -1,6 +1,6 @@
 # agent-message-bus tools
 
-This page is the reference for every `bus_*` tool. The server serves the same 31 tools from one registry over two transports:
+This page is the reference for every `bus_*` tool. The server serves the same 32 tools from one registry over two transports:
 
 - **MCP** at `POST /mcp` (streamable HTTP, tools only);
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`.
@@ -13,7 +13,7 @@ Behaviour rules (who may do what, and which error each rule raises) are specifie
 
 | Kind | Obtained from | Can do |
 | :--- | :--- | :--- |
-| `admin` | `AMB_ADMIN_TOKEN` or `<datadir>/admin-token` on the server (`agent-message-bus admin-token`), which authenticates as the bootstrap admin `admin`; or `bus_mint_admin` (`amb_admin_` tokens) | Mints leaders and admins and lists admins. Leads every space without joining it: everything a leader may do there, plus deleting any space and revoking leaders. Creates and joins spaces with role `admin`; has its own inbox for the spaces it joined. |
+| `admin` | `AMB_ADMIN_TOKEN` or `<datadir>/admin-token` on the server (`agent-message-bus admin-token`), which authenticates as the bootstrap admin `admin`; or `bus_mint_admin` (`amb_admin_` tokens) | Mints, lists and revokes admins and mints leaders. Leads every space without joining it: everything a leader may do there, plus deleting any space and revoking leaders. Creates and joins spaces with role `admin`; has its own inbox for the spaces it joined. |
 | `leader` | `bus_mint_leader` | Creates, joins and deletes spaces; invites and revokes members in spaces it leads; sends to `all` and sends critical messages. Lists all spaces. |
 | `member` | `bus_invite_member` → `POST /v1/invites/accept` | Valid in exactly one space. Uses direct messages, topics, blackboards and its inbox there. |
 
@@ -26,6 +26,7 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 | [bus_list_admins](#bus_list_admins) | [Admin](#admin) | Admins only; no side effects. | Lists every admin with its bootstrap flag, its number of tokens and the spaces it joined. |
 | [bus_mint_admin](#bus_mint_admin) | [Admin](#admin) | Admins only. | Creates the admin agent if missing and returns a new admin token for it; minting the same name again issues an additional token. Pitfall: admin is the bootstrap admin, whose token is the instance admin token, so it cannot be minted. |
 | [bus_mint_leader](#bus_mint_leader) | [Admin](#admin) | Admins only. | Creates the leader agent if missing and returns a new leader token for it. |
+| [bus_revoke_admin](#bus_revoke_admin) | [Admin](#admin) | Admins only. | Deletes every token of the minted admin and removes it from every space it joined; spaces left empty are deleted. deleted reports whether anything was removed. Pitfalls: the bootstrap admin cannot be revoked (rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name again gives the same agent a new token. |
 | [bus_create_space](#bus_create_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Creates the space with its all topic and joins the caller as leader (an admin with role admin). |
 | [bus_delete_space](#bus_delete_space) | [Spaces & membership](#spaces--membership) | Leaders of the space once no other leader remains, and admins. | Deletes the space and everything in it, including member tokens. Pitfall: an admin may delete any space, even one with other leaders. |
 | [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Returns an invite code that lets member agent <name> join the space, with an optional task returned once on accept. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. |
@@ -95,6 +96,20 @@ Creates the leader agent if missing and returns a new leader token for it. Admin
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_mint_leader -H "Authorization: Bearer $TOKEN" -d '{"name":"<name>"}'
+```
+
+### bus_revoke_admin
+
+Deletes every token of the minted admin and removes it from every space it joined; spaces left empty are deleted. deleted reports whether anything was removed. Pitfalls: the bootstrap admin cannot be revoked (rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name again gives the same agent a new token. Admins only.
+
+| Argument | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `name` | string | yes | Admin agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+
+**Result:** `{deleted}`
+
+```sh
+curl -X POST $BUS/v1/tools/bus_revoke_admin -H "Authorization: Bearer $TOKEN" -d '{"name":"<name>"}'
 ```
 
 ## Spaces & membership

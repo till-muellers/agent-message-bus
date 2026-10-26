@@ -67,3 +67,15 @@ func (s *Service) ListAdmins(ctx context.Context, p Principal) ([]AdminInfo, err
 	}
 	return admins, nil
 }
+
+// AdminAgent looks up admin agent name through q. An agent of another kind is a Conflict;
+// bootstrap reports whether name is the bootstrap admin.
+func (s *Service) AdminAgent(ctx context.Context, q db.DBTX, name string) (id int64, found, bootstrap bool, err error) {
+	id, found, err = s.agentOfKind(ctx, q, name, Admin)
+	return id, found, found && name == BootstrapName, err
+}
+
+// RevokeAgentTokens deletes every token of agentID through q and reports how many were removed.
+func (s *Service) RevokeAgentTokens(ctx context.Context, q db.DBTX, agentID int64) (int64, error) {
+	return deleteAgentTokens(ctx, q, agentID)
+}

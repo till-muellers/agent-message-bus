@@ -100,3 +100,16 @@ func splitNames(s string) []string {
 	}
 	return strings.Split(s, "\x1f")
 }
+
+// deleteAgentTokens removes every token of agentID and returns how many were removed.
+func deleteAgentTokens(ctx context.Context, q db.DBTX, agentID int64) (int64, error) {
+	res, err := q.ExecContext(ctx, `DELETE FROM tokens WHERE agent_id = ?`, agentID)
+	if err != nil {
+		return 0, fmt.Errorf("deleting tokens of agent %d: %w", agentID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("counting deleted tokens: %w", err)
+	}
+	return n, nil
+}

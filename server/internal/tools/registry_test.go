@@ -8,8 +8,8 @@ import (
 
 func TestRegistryHasAllToolsSortedAndUnique(t *testing.T) {
 	ts := New(Deps{}).List()
-	if len(ts) != 31 {
-		t.Fatalf("got %d tools, want 31", len(ts))
+	if len(ts) != 32 {
+		t.Fatalf("got %d tools, want 32", len(ts))
 	}
 	names := make([]string, len(ts))
 	seen := map[string]bool{}

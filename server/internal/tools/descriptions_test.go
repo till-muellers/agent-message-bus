@@ -10,6 +10,7 @@ var wantAccess = map[string]string{
 	"bus_mint_leader":        "Admins only.",
 	"bus_mint_admin":         "Admins only.",
 	"bus_list_admins":        "Admins only; no side effects.",
+	"bus_revoke_admin":       "Admins only.",
 	"bus_whoami":             "Any token; no side effects.",
 	"bus_list_spaces":        "Leaders and admins see all spaces, members only their own; no side effects.",
 	"bus_list_participants":  "Participants and admins; no side effects.",
