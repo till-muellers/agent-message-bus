@@ -49,7 +49,7 @@ Feature: Invite codes
         | too long | of 65537 bytes |
 
     Scenario: A task at the limit is accepted
-      When leader "lead" invites member "worker" to space "demo" with task "fix the bug"
+      When leader "lead" invites member "worker" to space "demo" with task of 65536 bytes
       Then the call returns name "worker", space "demo" and an invite code
 
     Scenario: An invite without a task is accepted
