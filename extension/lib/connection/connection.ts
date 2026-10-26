@@ -5,7 +5,8 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { activateBusTools, deactivateBusTools, deactivateTools } from "./activation.ts";
 import type { BusClient } from "../bus/client.ts";
-import { type ActiveCredentials, type CredentialStore, resolveActive, type SessionCredentials } from "../session/stored-credentials.ts";
+import type { SessionCredentials } from "../session/session-credentials.ts";
+import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
 import { createDeliver } from "../delivery/delivery-class.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
@@ -22,7 +23,7 @@ export interface ConnectionDeps {
 	pi: ExtensionAPI;
 	client: BusClient;
 	store: CredentialStore;
-	credentials: SessionCredentials;
+	credentials: Pick<SessionCredentials, "resolve">;
 	identity: Pick<SessionIdentity, "load">;
 	view: SessionView;
 	warn(message: string): void;
@@ -52,7 +53,7 @@ export function createConnection({ pi, client, store, credentials, identity, vie
 		async restart() {
 			inbox.stop();
 			await identity.load();
-			active = resolveActive(credentials, await store.load());
+			active = credentials.resolve(await store.load());
 			if (active) await registerRemoteTools(pi, { client, getActive, state: tools, warn, exclude: view.sub ? INBOX_TOOLS : undefined });
 			if (active && !view.sub) inbox.start();
 			if (active) await activateBusTools(pi, ours());

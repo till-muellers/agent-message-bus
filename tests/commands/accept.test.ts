@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { acceptInvite } from "../../extension/lib/commands/accept.ts";
 import { createClient } from "../../extension/lib/bus/client.ts";
-import type { ActiveCredentials, SessionCredentials } from "../../extension/lib/session/stored-credentials.ts";
+import { createSessionCredentials } from "../../extension/lib/session/session-credentials.ts";
+import type { ActiveCredentials } from "../../extension/lib/session/stored-credentials.ts";
 import { CODE, fakeBus, URL_ } from "../fakes.ts";
 
 function setup(options: { task?: string; persisted?: boolean } = {}) {
 	const bus = fakeBus({ task: options.task });
 	const saved: ActiveCredentials[] = [];
-	const session: SessionCredentials = { override: { url: URL_, token: "lead-tok" }, env: { url: URL_, token: "env-tok" } };
+	const session = createSessionCredentials({ url: URL_, token: "env-tok" });
+	session.promote({ url: URL_, token: "lead-tok" });
 	const identity = {
 		save: async (creds: ActiveCredentials) => {
 			saved.push(creds);
@@ -23,7 +25,7 @@ describe("acceptInvite", () => {
 		expect(await acceptInvite(deps, `${URL_}/`, CODE)).toEqual({ result: { message: "Joined space demo as member worker.", level: "info" } });
 		expect(bus.calls.map(c => c.url)).toEqual([`${URL_}/v1/invites/accept`]);
 		expect(saved).toEqual([{ url: URL_, token: "acc-tok" }]);
-		expect(session).toEqual({ override: undefined, env: undefined });
+		expect(session.resolve(undefined)).toBeUndefined();
 	});
 
 	test("returns the first prompt that travelled with the invite", async () => {
@@ -40,6 +42,6 @@ describe("acceptInvite", () => {
 		const { saved, session, deps } = setup();
 		await expect(acceptInvite(deps, URL_, "nope-nope")).rejects.toMatchObject({ code: "unauthenticated" });
 		expect(saved).toEqual([]);
-		expect(session.override).toEqual({ url: URL_, token: "lead-tok" });
+		expect(session.resolve(undefined)).toEqual({ url: URL_, token: "lead-tok", source: "promote" });
 	});
 });
