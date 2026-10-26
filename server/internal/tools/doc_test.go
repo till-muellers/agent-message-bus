@@ -75,17 +75,3 @@ func TestAnchor(t *testing.T) {
 		}
 	}
 }
-
-func TestSplitDescription(t *testing.T) {
-	cases := []struct{ in, access, summary string }{
-		{"Any token. Returns x; no side effects.", "Any token.", "Returns x; no side effects."},
-		{"Leaders only, once alone. Deletes it.", "Leaders only, once alone.", "Deletes it."},
-		{"Just one sentence.", "Just one sentence.", ""},
-	}
-	for _, c := range cases {
-		access, summary := splitDescription(c.in)
-		if access != c.access || summary != c.summary {
-			t.Fatalf("splitDescription(%q) = %q, %q", c.in, access, summary)
-		}
-	}
-}

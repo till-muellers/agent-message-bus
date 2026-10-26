@@ -51,9 +51,9 @@ func writeIndex(b *strings.Builder, groups map[string][]Tool) {
 	b.WriteString("## Index\n\n| Tool | Group | Access | Summary |\n| :--- | :--- | :--- | :--- |\n")
 	for _, g := range groupOrder() {
 		for _, tl := range groups[g] {
-			access, summary := splitDescription(tl.Description)
+			summary := strings.TrimSuffix(tl.Description, " "+tl.Access)
 			fmt.Fprintf(b, "| [%s](#%s) | [%s](#%s) | %s | %s |\n",
-				tl.Name, anchor(tl.Name), g, anchor(g), cell(access), cell(summary))
+				tl.Name, anchor(tl.Name), g, anchor(g), cell(tl.Access), cell(summary))
 		}
 	}
 	b.WriteString("\n")
@@ -65,15 +65,6 @@ func writeToolSection(b *strings.Builder, tl Tool) {
 	fmt.Fprintf(b, "\n**Result:** `%s`\n\n", tl.Result)
 	fmt.Fprintf(b, "```sh\ncurl -X POST $BUS/v1/tools/%s -H \"Authorization: Bearer $TOKEN\" -d '%s'\n```\n\n",
 		tl.Name, exampleArgs(tl.Schema))
-}
-
-// splitDescription splits desc into its first sentence (the access rule) and the rest.
-func splitDescription(desc string) (access, summary string) {
-	i := strings.Index(desc, ". ")
-	if i < 0 {
-		return desc, ""
-	}
-	return desc[:i+1], desc[i+2:]
 }
 
 // anchor returns the GitHub heading anchor for heading text.

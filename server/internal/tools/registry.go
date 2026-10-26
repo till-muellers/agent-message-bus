@@ -20,8 +20,12 @@ const (
 
 // Tool is one callable operation with a JSON Schema for its arguments.
 type Tool struct {
-	Name        string
+	Name string
+	// Description is the full text served over MCP and GET /v1/tools: purpose first, then
+	// the Access sentence and the pitfalls an agent cannot see from the schema.
 	Description string
+	// Access is the exact access sentence contained in Description; the ledger's Access column.
+	Access string
 	// Result is a one-line sketch of the success result shape.
 	Result string
 	// Group is the ledger section the tool belongs to (one of the Group* constants).

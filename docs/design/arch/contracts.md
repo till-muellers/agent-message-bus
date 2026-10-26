@@ -100,6 +100,16 @@ Final: **34 server tools** (PO-3: no `bus_cancel_invite`). `bus_spawn_worker` is
 
 `Tool.Access` is a separate field; descriptions open with the purpose and contain the access sentence; TOOLS.md "Access" column = `Tool.Access` (`tool-descriptions.feature:13-19`). Pitfall sentences per `tool-descriptions.feature:31-50`; critical property: **"Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true."** (from 4c; slice 3 interim: "Leaders only. omp recipients are interrupted (steer); other clients see critical: true.").
 
+Descriptions state only shipped behaviour. Slice 3 ships interim texts; each later slice adds its clause when its behaviour ships:
+
+| Clause (final text) | Slice 3 interim | Added by |
+|---|---|---|
+| `bus_inbox_read`: "it never blocks (use bus_wait to wait)" | "it never blocks" | 9 |
+| `bus_inbox_ack`: "acknowledging everything lets the next mail notify again" | — (omitted) | 13a |
+| `bus_spawn_worker`: "the task is delivered to the worker as a direct message from the caller (a leader or an admin)" | "gets `<task>` as its first prompt" | 7 (direct message), 4c (admin) |
+| `bus_spawn_worker` `task` property: "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report." | "Task for the worker, its first prompt, 1..65536 bytes: goal, done criteria and where to report." | 7 |
+| `bus_spawn_worker` access: "Leaders of the space and admins." | "Leaders of the space." | 4c |
+
 Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-69`); the rest [AD-13].
 
 | Tool | Slice 3 (no admin authority yet) | Final (from 4c/4d/6a) |
@@ -114,7 +124,7 @@ Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-6
 | `bus_create_space`, `bus_join_space` | Leaders only. | Leaders and admins. |
 | `bus_leave_space` | Participants only. | Participants. |
 | `bus_delete_space` | Leaders of the space, once no other leader remains. | Leaders of the space once no other leader remains, and admins. |
-| `bus_invite_member` ✔, `bus_revoke_member` | Leaders of the space only. | Leaders of the space and admins. |
+| `bus_invite_member` ✔, `bus_revoke_member` | Leaders of the space. | Leaders of the space and admins. |
 | `bus_send_direct` | Participants only; critical requires a leader. | Participants and admins; critical requires a leader or an admin. |
 | `bus_send_topic` | Participants only; only leaders may send to all or send critical. | Participants and admins; only leaders and admins may send to all or send critical. |
 | `bus_create_topic`, `bus_create_blackboard`, `bus_create_thread`, `bus_add_post` | Participants only. | Participants and admins. |
@@ -125,7 +135,7 @@ Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-6
 | `bus_inbox_read` ✔, `bus_inbox_ack`, `bus_wait` ✔ | Leaders and members. | Leaders, members and admins. |
 | `bus_spawn_worker` ✔ (TOOLS.md only) | Leaders of the space. | Leaders of the space and admins. |
 
-`bus_spawn_worker` TOOLS.md entry (slice 3, `tool-descriptions.feature:22-23,73-79`): description starts "Starts a worker agent"; args `space` ("Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."), `name`, `task` ("Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report."), `cwd`; result `{name, space, launcher}`.
+`bus_spawn_worker` TOOLS.md entry (slice 3, `tool-descriptions.feature:22-23,73-79`): description starts "Starts a worker agent"; args `space` ("Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."), `name`, `task` (final: "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report."; slice 3 interim in the table above), `cwd`; result `{name, space, launcher}`.
 
 ### 3.2 Identity and listing [4a, 4d]
 

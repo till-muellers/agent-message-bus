@@ -49,5 +49,5 @@ func titleProp() map[string]any {
 }
 
 func criticalProp() map[string]any {
-	return boolean("Leaders only: mark the message critical so it interrupts the recipient.")
+	return boolean("Leaders only. omp recipients are interrupted (steer); other clients see critical: true.")
 }
