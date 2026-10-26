@@ -17,11 +17,12 @@ type okBody struct {
 	OK bool `json:"ok"`
 }
 
-// Mount registers POST /v1/admin/shutdown and POST /v1/admin/admin-token on mux.
-// authn must authenticate the bearer token and store the principal (auth.Service.Middleware).
+// Mount registers POST /v1/admin/shutdown (any admin) and POST /v1/admin/admin-token (the
+// bootstrap admin only) on mux. authn must authenticate the bearer token and store the
+// principal (auth.Service.Middleware).
 func Mount(mux *http.ServeMux, authn func(http.Handler) http.Handler, ts TokenSetter, shutdown func()) {
 	mux.Handle("POST /v1/admin/shutdown", authn(guard(shutdownHandler(shutdown))))
-	mux.Handle("POST /v1/admin/admin-token", authn(guard(tokenHandler(ts))))
+	mux.Handle("POST /v1/admin/admin-token", authn(guard(bootstrapOnly(tokenHandler(ts)))))
 }
 
 func shutdownHandler(shutdown func()) http.HandlerFunc {

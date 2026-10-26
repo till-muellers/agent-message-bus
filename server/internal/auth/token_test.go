@@ -9,11 +9,11 @@ import (
 
 func TestNewToken(t *testing.T) {
 	t.Parallel()
-	a, err := NewToken()
+	a, err := NewToken(TokenPrefix)
 	if err != nil {
 		t.Fatalf("NewToken: %v", err)
 	}
-	b, err := NewToken()
+	b, err := NewToken(TokenPrefix)
 	if err != nil {
 		t.Fatalf("NewToken: %v", err)
 	}

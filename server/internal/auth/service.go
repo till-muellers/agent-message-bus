@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -12,17 +13,19 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-// Service authenticates bearer tokens and mints leader and member tokens.
+// Service authenticates bearer tokens and mints admin, leader and member tokens.
 type Service struct {
 	db          *sql.DB
 	adminHash   atomic.Pointer[string]
 	bootstrapID atomic.Int64 // agent id of the bootstrap admin, set by Bootstrap
 	now         func() time.Time
+	log         *slog.Logger // audit lines ("admin minted")
 }
 
-// NewService returns a Service using adminToken as the admin credential.
+// NewService returns a Service using adminToken as the admin credential; audit lines go
+// to slog.Default().
 func NewService(db *sql.DB, adminToken string, now func() time.Time) *Service {
-	s := &Service{db: db, now: now}
+	s := &Service{db: db, now: now, log: slog.Default()}
 	h := Hash(adminToken)
 	s.adminHash.Store(&h)
 	return s
@@ -44,10 +47,10 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Principal, er
 	return p, nil
 }
 
-// MintLeader creates (or reuses) leader agent name and returns a new token. Admin only.
+// MintLeader creates (or reuses) leader agent name and returns a new token. Admins only.
 func (s *Service) MintLeader(ctx context.Context, p Principal, name string) (string, error) {
-	if p.Kind != Admin {
-		return "", apperr.New(apperr.Forbidden, "admin token required")
+	if err := RequireAdmin(p); err != nil {
+		return "", err
 	}
 	if err := domain.ValidName("name", name); err != nil {
 		return "", err
@@ -58,7 +61,7 @@ func (s *Service) MintLeader(ctx context.Context, p Principal, name string) (str
 		if err != nil {
 			return err
 		}
-		token, err = s.issue(ctx, tx, id, 0)
+		token, err = s.issue(ctx, tx, TokenPrefix, id, 0)
 		return err
 	})
 	if err != nil {
@@ -76,7 +79,7 @@ func (s *Service) MintMember(ctx context.Context, tx db.DBTX, name string, space
 	if err != nil {
 		return 0, "", err
 	}
-	token, err = s.issue(ctx, tx, agentID, spaceID)
+	token, err = s.issue(ctx, tx, TokenPrefix, agentID, spaceID)
 	if err != nil {
 		return 0, "", err
 	}
@@ -121,9 +124,9 @@ func article(kind Kind) string {
 	return "a"
 }
 
-// issue stores a fresh token's hash and returns the plaintext token.
-func (s *Service) issue(ctx context.Context, q db.DBTX, agentID, spaceID int64) (string, error) {
-	token, err := NewToken()
+// issue stores a fresh token's hash and returns the plaintext token, which starts with prefix.
+func (s *Service) issue(ctx context.Context, q db.DBTX, prefix string, agentID, spaceID int64) (string, error) {
+	token, err := NewToken(prefix)
 	if err != nil {
 		return "", err
 	}
