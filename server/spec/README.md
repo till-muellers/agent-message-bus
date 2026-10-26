@@ -60,7 +60,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Blackboard | A named board in a space, owned by its creator. Holds threads. |
 | Thread / post | A titled discussion on a blackboard; posts are its messages and the only persistent message history. |
 | Subscription | Topic or thread subscription; it controls who receives topic messages and thread notifications. |
-| Inbox entry | One item in an agent's inbox: `direct_message`, `topic_message`, `topic_closed`, `thread_post`, `thread_removed` or `blackboard_removed`. Entries are deleted when acknowledged. |
+| Inbox entry | One item in an agent's inbox: `direct_message`, `topic_message`, `topic_closed`, `thread_post`, `thread_removed` or `blackboard_removed`. Each entry carries a delivery class (`interrupt`, `queue` or `deferred`, see [delivery-class.feature](delivery-class.feature)). Entries are deleted when acknowledged. |
 
 ## Features
 
@@ -78,6 +78,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [transports.feature](transports.feature) | RPC routes, error bodies and status codes, argument validation, MCP, admin endpoints |
 | [schema.feature](schema.feature) | The single irreversible `0001_schema` migration with kind/role `admin`; later numbered migrations apply on top |
 | [tool-descriptions.feature](tool-descriptions.feature) | Tool descriptions: purpose first, a separate access sentence, pitfalls, the critical property, and the `bus_spawn_worker` entry in TOOLS.md |
+| [delivery-class.feature](delivery-class.feature) | The delivery class of every inbox entry (`interrupt`, `queue`, `deferred`), decided by the server from type and critical flag; returned on every read path |
 
 ## Design decisions
 

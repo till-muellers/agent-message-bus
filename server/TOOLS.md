@@ -485,7 +485,7 @@ Returns inbox entries after the given id without removing them; members see only
 | `after` | integer | no | Return entries with id greater than this; default 0. |
 | `limit` | integer | no | Maximum entries, 1..500; default 100. |
 
-**Result:** `[{id, space, type, from, critical, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]`
+**Result:** `[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]`
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_inbox_read -H "Authorization: Bearer $TOKEN" -d '{}'

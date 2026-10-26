@@ -83,6 +83,8 @@ Every tool's arguments, result shape, example call and error codes are listed in
   - The SSE stream subscribes before reading the backlog.
   - A live broker message only tells the stream to re-read entries after the last id it sent. Ids therefore go out in order exactly once, so `ack upTo` never deletes an unseen entry.
   - A subscriber that falls behind is disconnected and replays from the database when it reconnects.
+  - Every entry carries a delivery class, derived by `inbox.ClassOf(type, critical)` and never stored: `interrupt` (any critical entry: reach the agent now), `queue` (`direct_message`, `topic_message`, `thread_post`: next step, wakes an idle agent) or `deferred` (`topic_closed`, `thread_removed`, `blackboard_removed`: next turn, never wakes). A new entry type adds its row to `classByType` in `inbox/class.go`; a test fails when one is missing.
+  - Every new stream connection replays from the lowest unacked id; `Last-Event-ID` is ignored.
 - **At-least-once delivery.** Clients ack after handling an entry. If an ack fails, the entry is redelivered.
 - **One consumer per agent.** One identity per agent is an enforced invariant: the inbox service holds one stream slot per agent, so a second concurrent `GET /v1/inbox/stream` for the same agent gets 409 `conflict` while the first keeps streaming. The slot frees when that stream ends for any reason (disconnect, server shutdown, dropped subscription). Tool calls aren't restricted.
 - **Admin token swap.** `SetAdminToken` replaces the admin credential atomically; requests after the swap see only the new token.

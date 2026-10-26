@@ -54,6 +54,7 @@ func scanEntries(rows *sql.Rows) ([]Entry, error) {
 			&e.Topic, &e.Blackboard, &e.ThreadID, &e.ThreadTitle, &e.Body, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning inbox entry: %w", err)
 		}
+		e.Class = ClassOf(e.Type, e.Critical)
 		es = append(es, e)
 	}
 	if err := rows.Err(); err != nil {
