@@ -42,8 +42,8 @@ func TestCreateErrors(t *testing.T) {
 	}{
 		{name: "leader name", space: "demo", invitee: "boss", kind: apperr.Conflict, msg: "agent boss is a leader agent"},
 		{name: "unknown space", space: "nope", invitee: "worker", kind: apperr.NotFound},
-		{name: "empty task", space: "demo", invitee: "worker", task: &empty, kind: apperr.Invalid, msg: "body must be 1..65536 bytes"},
-		{name: "long task", space: "demo", invitee: "worker", task: &long, kind: apperr.Invalid, msg: "body must be 1..65536 bytes"},
+		{name: "empty task", space: "demo", invitee: "worker", task: &empty, kind: apperr.Invalid, msg: "task must be 1..65536 bytes"},
+		{name: "long task", space: "demo", invitee: "worker", task: &long, kind: apperr.Invalid, msg: "task must be 1..65536 bytes"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -93,12 +93,20 @@ func TestAcceptOnce(t *testing.T) {
 
 func TestAcceptReturnsTask(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t)
-	task := "fix the bug"
-	inv := mustCreate(t, e, "worker", &task)
-	got, err := e.svc.Accept(context.Background(), inv.Code)
-	if err != nil || got.Task != task {
-		t.Fatalf("admission = %+v, %v; want task %q", got, err, task)
+	tests := []struct{ name, task string }{
+		{"short task", "fix the bug"},
+		{"task at the limit", strings.Repeat("x", domain.MaxBodyBytes)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newEnv(t)
+			inv := mustCreate(t, e, "worker", &tc.task)
+			got, err := e.svc.Accept(context.Background(), inv.Code)
+			if err != nil || got.Task != tc.task {
+				t.Fatalf("admission = %+v, %v; want task of %d bytes", got.Name, err, len(tc.task))
+			}
+		})
 	}
 }
 

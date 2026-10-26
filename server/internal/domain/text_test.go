@@ -53,3 +53,29 @@ func TestValidBodyAndTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestValidText(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, field, v, msg string
+	}{
+		{"task empty", "task", "", "task must be 1..65536 bytes"},
+		{"task at limit", "task", strings.Repeat("x", MaxBodyBytes), ""},
+		{"task over limit", "task", strings.Repeat("x", MaxBodyBytes+1), "task must be 1..65536 bytes"},
+		{"body empty", "body", "", "body must be 1..65536 bytes"},
+		{"body over limit", "body", strings.Repeat("x", MaxBodyBytes+1), "body must be 1..65536 bytes"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidText(tc.field, tc.v)
+			if tc.msg == "" {
+				if err != nil {
+					t.Fatalf("unexpected err: %v", err)
+				}
+				return
+			}
+			apperrtest.WantKind(t, err, "invalid", tc.msg)
+		})
+	}
+}
