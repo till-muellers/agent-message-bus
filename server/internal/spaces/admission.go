@@ -22,19 +22,20 @@ func (s *Service) AuthorizeInvite(ctx context.Context, tx db.DBTX, p auth.Princi
 	return m.SpaceID, nil
 }
 
-// AdmitMember mints a member token for name in spaceID, adding the participant if new.
-func (s *Service) AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (space, token string, err error) {
-	agentID, token, err := s.accounts.MintMember(ctx, tx, name, spaceID)
+// AdmitMember mints a member token for name in spaceID, adding the participant if new, and
+// returns the member's agent id, the space name and the token.
+func (s *Service) AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, space, token string, err error) {
+	agentID, token, err = s.accounts.MintMember(ctx, tx, name, spaceID)
 	if err != nil {
-		return "", "", err
+		return 0, "", "", err
 	}
 	if err := s.ensureMember(ctx, tx, spaceID, agentID); err != nil {
-		return "", "", err
+		return 0, "", "", err
 	}
 	if space, err = spaceName(ctx, tx, spaceID); err != nil {
-		return "", "", err
+		return 0, "", "", err
 	}
-	return space, token, nil
+	return agentID, space, token, nil
 }
 
 // ensureMember inserts agentID as a member of spaceID unless it already participates.

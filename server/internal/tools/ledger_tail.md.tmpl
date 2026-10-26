@@ -42,7 +42,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 
 ### bus_spawn_worker
 
-Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself and gets `<task>` as its first prompt; the invite code is never exposed. Pitfalls: each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space and admins.
+Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself; the invite code is never exposed. Pitfalls: the task is delivered to the worker as a direct message from the caller (a leader or an admin); each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space and admins.
 
 Registered by the omp extension only; the server does not serve it.
 
@@ -50,7 +50,7 @@ Registered by the omp extension only; the server does not serve it.
 | :--- | :--- | :--- | :--- |
 | `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `name` | string | yes | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `task` | string | no | Task for the worker, its first prompt, 1..65536 bytes: goal, done criteria and where to report. |
+| `task` | string | no | Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report. |
 | `cwd` | string | no | Working directory, relative to this session's; defaults to this session's. |
 
 **Result:** `{name, space, launcher}`

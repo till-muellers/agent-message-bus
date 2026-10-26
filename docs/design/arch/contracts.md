@@ -106,9 +106,6 @@ Descriptions state only shipped behaviour. Slice 3 ships interim texts; each lat
 |---|---|---|
 | `bus_inbox_read`: "it never blocks (use bus_wait to wait)" | "it never blocks" | 9 |
 | `bus_inbox_ack`: "acknowledging everything lets the next mail notify again" | — (omitted) | 13a |
-| `bus_spawn_worker`: "the task is delivered to the worker as a direct message from the caller (a leader or an admin)" | "gets `<task>` as its first prompt" | 7 (direct message), 4c (admin) |
-| `bus_spawn_worker` `task` property: "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report." | "Task for the worker, its first prompt, 1..65536 bytes: goal, done criteria and where to report." | 7 |
-| `bus_spawn_worker` access: "Leaders of the space and admins." | "Leaders of the space." | 4c |
 
 Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-69`); the rest [AD-13].
 
@@ -135,7 +132,7 @@ Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-6
 | `bus_inbox_read` ✔, `bus_inbox_ack`, `bus_wait` ✔ | Leaders and members. | Leaders, members and admins. |
 | `bus_spawn_worker` ✔ (TOOLS.md only) | Leaders of the space. | Leaders of the space and admins. |
 
-`bus_spawn_worker` TOOLS.md entry (slice 3, `tool-descriptions.feature:22-23,73-79`): description starts "Starts a worker agent"; args `space` ("Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."), `name`, `task` (final: "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report."; slice 3 interim in the table above), `cwd`; result `{name, space, launcher}`.
+`bus_spawn_worker` TOOLS.md entry (slice 3, `tool-descriptions.feature:22-23,73-79`): description starts "Starts a worker agent"; args `space` ("Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."), `name`, `task` ("Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report.", from slice 7), `cwd`; result `{name, space, launcher}`.
 
 ### 3.2 Identity and listing [4a, 4d]
 

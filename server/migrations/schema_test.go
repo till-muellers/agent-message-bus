@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -28,8 +29,8 @@ func TestSchemaReset(t *testing.T) {
 		name  string
 		check func(t *testing.T, conn *sql.DB)
 	}{
-		{"fresh database holds exactly version 1", func(t *testing.T, conn *sql.DB) {
-			assertVersions(t, conn, []int{1})
+		{"fresh database holds version 1 and every later migration", func(t *testing.T, conn *sql.DB) {
+			assertVersions(t, conn, embeddedVersions(t))
 		}},
 		{"fresh database has the twelve tables", func(t *testing.T, conn *sql.DB) {
 			if got := tables(t, conn); !slices.Equal(got, wantTables) {
@@ -54,7 +55,7 @@ func TestSchemaReset(t *testing.T) {
 			if err := db.Migrate(context.Background(), conn, migrations.FS); err != nil {
 				t.Fatalf("second migrate: %v", err)
 			}
-			assertVersions(t, conn, []int{1})
+			assertVersions(t, conn, embeddedVersions(t))
 		}},
 	}
 	for _, tc := range tests {
@@ -63,6 +64,27 @@ func TestSchemaReset(t *testing.T) {
 			tc.check(t, dbtest.Open(t))
 		})
 	}
+}
+
+// embeddedVersions returns the versions of every NNNN_*.up.sql in migrations.FS, ascending.
+func embeddedVersions(t *testing.T) []int {
+	t.Helper()
+	names, err := fs.Glob(migrations.FS, "*.up.sql")
+	if err != nil {
+		t.Fatalf("listing migrations: %v", err)
+	}
+	out := make([]int, 0, len(names))
+	for _, name := range names {
+		v, err := strconv.Atoi(name[:4])
+		if err != nil {
+			t.Fatalf("migration %s has no four-digit version: %v", name, err)
+		}
+		out = append(out, v)
+	}
+	if len(out) == 0 || out[0] != 1 {
+		t.Fatalf("migrations = %v, want 0001_schema first", names)
+	}
+	return out
 }
 
 func TestLaterMigrationAppliesOnTop(t *testing.T) {

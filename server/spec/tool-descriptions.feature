@@ -9,9 +9,7 @@ Feature: Tool descriptions guide the agent on their own
   # description matter most.
   #
   # Descriptions state only shipped behaviour. Later slices extend them: bus_wait and its
-  # pitfall (slice 9), the bus_inbox_ack notify clause (slice 13a), the task delivered as a
-  # direct message (slice 7), admin access and the admin pitfalls of bus_revoke_member and
-  # bus_delete_space (slices 4c, 4d).
+  # pitfall (slice 9) and the bus_inbox_ack notify clause (slice 13a).
 
   Rule: Descriptions open with the purpose; the access rule follows
 
@@ -38,6 +36,7 @@ Feature: Tool descriptions guide the agent on their own
         | bus_create_blackboard | a member's boards are deleted when it leaves or is revoked                               |
         | bus_leave_space       | a member's boards, inbox entries, subscriptions and token are deleted                    |
         | bus_send_direct       | the recipient must be a participant of the same space                                     |
+        | bus_spawn_worker      | the task is delivered to the worker as a direct message from the caller (a leader or an admin) |
         | bus_spawn_worker      | each worker needs its own name                                                            |
         | bus_spawn_worker      | a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand |
         | bus_invite_member     | the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept |
@@ -72,4 +71,4 @@ Feature: Tool descriptions guide the agent on their own
 
     Scenario: bus_spawn_worker arguments carry the same rules as the server's
       Then the "space" property of bus_spawn_worker reads "Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."
-      And the "task" property reads "Task for the worker, its first prompt, 1..65536 bytes: goal, done criteria and where to report."
+      And the "task" property reads "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report."

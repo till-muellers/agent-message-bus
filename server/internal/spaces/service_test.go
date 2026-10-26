@@ -204,17 +204,18 @@ func TestAdmitMember(t *testing.T) {
 	if n := countRows(t, e.db, `SELECT COUNT(*) FROM participants WHERE agent_id = ? AND role = 'member'`, member.AgentID); n != 1 {
 		t.Fatalf("participant rows = %d", n)
 	}
+	var agentID int64
 	var space, tok2 string
 	err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
 		var err error
-		space, tok2, err = e.svc.AdmitMember(ctx, tx, member.SpaceID, "work")
+		agentID, space, tok2, err = e.svc.AdmitMember(ctx, tx, member.SpaceID, "work")
 		return err
 	})
 	if err != nil {
 		t.Fatalf("re-admit: %v", err)
 	}
-	if space != "alpha" || tok2 == tok1 {
-		t.Fatalf("re-admit = %q, %q (first token %q)", space, tok2, tok1)
+	if agentID != member.AgentID || space != "alpha" || tok2 == tok1 {
+		t.Fatalf("re-admit = %d, %q, %q (first token %q)", agentID, space, tok2, tok1)
 	}
 	again, err := e.auth.Authenticate(ctx, tok2)
 	if err != nil || again != member {

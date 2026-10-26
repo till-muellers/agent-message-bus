@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/admin"
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
@@ -33,5 +34,6 @@ func Routes(streamRoot context.Context, a *auth.Service, ib *inbox.Service, inv 
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Agent-Bus-Protocol", strconv.Itoa(Protocol))
 	_, _ = w.Write([]byte("ok"))
 }
