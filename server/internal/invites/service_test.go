@@ -76,7 +76,7 @@ func TestAcceptOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	if got.Name != "worker" || got.Space != "demo" || got.Task != "" {
+	if got.Name != "worker" || got.Space != "demo" || got.Token == "" {
 		t.Fatalf("admission = %+v", got)
 	}
 	p, err := e.auth.Authenticate(ctx, got.Token)
@@ -89,25 +89,6 @@ func TestAcceptOnce(t *testing.T) {
 	}
 	_, err = e.svc.Accept(ctx, inv.Code)
 	apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid or expired invite code")
-}
-
-func TestAcceptReturnsTask(t *testing.T) {
-	t.Parallel()
-	tests := []struct{ name, task string }{
-		{"short task", "fix the bug"},
-		{"task at the limit", strings.Repeat("x", domain.MaxBodyBytes)},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			e := newEnv(t)
-			inv := mustCreate(t, e, "worker", &tc.task)
-			got, err := e.svc.Accept(context.Background(), inv.Code)
-			if err != nil || got.Task != tc.task {
-				t.Fatalf("admission = %+v, %v; want task of %d bytes", got.Name, err, len(tc.task))
-			}
-		})
-	}
 }
 
 func TestAcceptRejects(t *testing.T) {

@@ -33,7 +33,7 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 		Creation:   []spaces.CreationHook{msgSvc},
 		Revocation: []spaces.RevocationHook{invites.Revocation{}},
 	})
-	invSvc := invites.NewService(conn, spaceSvc, time.Now)
+	invSvc := invites.NewService(conn, spaceSvc, inboxSvc, time.Now)
 	reg := tools.New(tools.Deps{
 		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc, Invites: invSvc,
 	})

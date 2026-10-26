@@ -50,7 +50,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Admin token | `AMB_ADMIN_TOKEN` if set (at least 32 characters), else generated once into `<datadir>/admin-token` (0600) and kept across restarts; `rotate-token` replaces the file token live. It authenticates as the bootstrap admin `admin`. |
 | Minted admin | An admin agent created by any admin with `bus_mint_admin`; its tokens are `amb_admin_` + 43 base64url characters, stored hashed, not bound to a space. Re-minting issues an additional token. Minted admin tokens survive `rotate-token`, and minted admins can't replace the instance admin token. `bus_list_admins` lists every admin; `bus_revoke_admin` deletes a minted admin's tokens and participations (the agent row stays). |
 | Leader token | Minted by the admin. Not bound to a space. Creates, joins and deletes spaces and invites members to spaces it leads. Minting again for the same leader issues an additional token. |
-| Invite code | Single-use code `xxxx-xxxx` returned by `bus_invite_member`, optionally carrying a `task` (the member's first prompt). Stored hashed, expires after 10 minutes, cancelled by `bus_revoke_member` for that name. Redeemed with `POST /v1/invites/accept` (code as bearer) for a member token and the task. |
+| Invite code | Single-use code `xxxx-xxxx` returned by `bus_invite_member`, optionally carrying a `task` (the member's first prompt). Stored hashed with the inviter's name, expires after 10 minutes, cancelled by `bus_revoke_member` for that name. Redeemed with `POST /v1/invites/accept` (code as bearer) for a member token; the task then arrives as the member's first inbox entry, a `direct_message` from the inviter. |
 | Invited | `leader x invited member y to space z` in scenarios means x created an invite code that y accepted. |
 | Member token | Minted by accepting an invite code. Valid in exactly one space. Accepting a new invite issues an additional token. Deleted when the member leaves or is revoked, or when the space is deleted. |
 | Space | A named workspace. Every space has the topic `all`. |
@@ -70,7 +70,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 |---|---|
 | [auth.feature](auth.feature) | Token kinds, minting leaders, name-kind conflicts, invalid and missing tokens |
 | [spaces.feature](spaces.feature) | Listing, creating, joining and deleting spaces; participants; whoami; the space access gate |
-| [invites.feature](invites.feature) | Creating invite codes with an optional task; redeeming them once via `POST /v1/invites/accept`; expiry, normalization, rejection, cancellation by revoke |
+| [invites.feature](invites.feature) | Creating invite codes with an optional task; redeeming them once via `POST /v1/invites/accept`; the task delivered as a direct message from the inviter; expiry, normalization, rejection, cancellation by revoke |
 | [membership.feature](membership.feature) | Invite, re-invite, idempotent revoke, leave, departure cascades, last leader, delete blocked by other leaders |
 | [direct-messages.feature](direct-messages.feature) | Direct messages and critical delivery |
 | [topics.feature](topics.feature) | The `all` rules; create, subscribe, unsubscribe, send and close topics; name reuse |

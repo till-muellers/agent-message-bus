@@ -80,10 +80,15 @@ func TestHappyPath(t *testing.T) {
 	lead := setUpSpace(t, srv)
 	var inv struct{ Name, Space, Code, ExpiresAt string }
 	mustCall(t, srv, lead, "bus_invite_member", `{"space":"proj","name":"worker","task":"say hi"}`, &inv)
-	var mem struct{ Name, Space, Token, Task string }
+	var mem struct{ Name, Space, Token string }
 	if status := post(t, srv, "/v1/invites/accept", inv.Code, "", &mem); status != http.StatusOK ||
-		mem.Name != "worker" || mem.Space != "proj" || mem.Task != "say hi" {
+		mem.Name != "worker" || mem.Space != "proj" || mem.Token == "" {
 		t.Fatalf("accept: status %d %+v", status, mem)
+	}
+	var first []inbox.Entry
+	mustCall(t, srv, mem.Token, "bus_inbox_read", `{}`, &first)
+	if len(first) != 1 || first[0].From != "boss" || first[0].Body != "say hi" || first[0].Class != inbox.ClassQueue {
+		t.Fatalf("worker's first entries = %+v, want the task from boss", first)
 	}
 	mustCall(t, srv, lead, "bus_create_topic", `{"space":"proj","topic":"news"}`, nil)
 	mustCall(t, srv, mem.Token, "bus_send_topic", `{"space":"proj","topic":"news","body":"hi"}`, nil)

@@ -135,6 +135,8 @@ func TestLedgerDocumentsSpawnWorker(t *testing.T) {
 		"**Result:** `{name, space, launcher}`",
 		"each worker needs its own name",
 		"a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand",
+		"the task is delivered to the worker as a direct message from the caller (a leader or an admin)",
+		"| `task` | string | no | Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report. |",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Fatalf("ledger lacks %q", want)

@@ -62,7 +62,7 @@ func invite(ctx context.Context, e env, lead auth.Principal, space, name string)
 		if err != nil {
 			return err
 		}
-		_, tok, err = e.svc.AdmitMember(ctx, tx, id, name)
+		_, _, tok, err = e.svc.AdmitMember(ctx, tx, id, name)
 		return err
 	})
 	return tok, err
