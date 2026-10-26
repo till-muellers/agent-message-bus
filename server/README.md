@@ -87,8 +87,11 @@ Every tool's arguments, result shape, example call and error codes are listed in
 |`GET /web/api/spaces/{space}/blackboards/{board}/threads`|session cookie|The `bus_list_threads` result.|
 |`GET /web/api/spaces/{space}/threads/{id}`|session cookie|The `bus_read_thread` result; a thread of another space is 404.|
 |`GET /web/api/inbox?after=&limit=`|session cookie|The signed-in agent's own entries, like `bus_inbox_read` (`limit` 1..500, default 100), but it never acknowledges, never marks mail noticed and never takes the inbox stream slot.|
+|`GET /web/api/admins`|admin session|The `bus_list_admins` result.|
+|`POST /web/api/admins`|admin session + `X-CSRF-Token`|Body `{"name"}`; the `bus_mint_admin` result `{name, token}`. The token is shown in this response only (`Cache-Control: no-store`).|
+|`POST /web/api/admins/{name}/revoke`|admin session + `X-CSRF-Token`|The `bus_revoke_admin` result `{deleted}`; the revoked admin's sessions end.|
 
-Every `/web/api/*` route answers 401 without a session; any other `/web/api/<path>` is 404. Tools run in-process with the session's principal, so access rules and error bodies are those of `/v1/tools`; the `mail` hint never reaches the GUI.
+Every `/web/api/*` route answers 401 without a session; any other `/web/api/<path>` is 404. Leader and member sessions get 403 `admin token required` on the admin routes. The `POST` routes need the header `X-CSRF-Token` equal to the session's `csrf`; a missing or foreign one is 403 `invalid CSRF token` with no side effect. Tools run in-process with the session's principal, so access rules and error bodies are those of `/v1/tools`; the `mail` hint never reaches the GUI.
 
 Sessions live in memory (a restart signs everybody out) for at most 8 hours and keep only the token's hash; the token is re-checked on every request, so `rotate-token`, `bus_revoke_admin` or `bus_revoke_member` end the sessions of that token at once. The cookie never authenticates `/v1/*`. Other methods on GUI routes get 405. Every `/web` response carries a strict `Content-Security-Policy`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
 
