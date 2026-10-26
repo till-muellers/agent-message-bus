@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { BusError } from "../extension/lib/client.ts";
-import { createClient } from "../extension/lib/client.ts";
+import type { BusError } from "../extension/lib/bus/client.ts";
+import { createClient } from "../extension/lib/bus/client.ts";
 import { conflictWarning } from "../extension/lib/conflict.ts";
 import { type Entry, runInboxLoop } from "../extension/lib/inbox.ts";
 import { callsTo, entry, errorResponse, fakeBus, frame, streamOf, type ToolHandler, URL_ } from "./fakes.ts";

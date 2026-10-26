@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BusError, createClient } from "../extension/lib/client.ts";
+import { BusError, createClient } from "../extension/lib/bus/client.ts";
 import { CODE, errorResponse, fakeBus, URL_ } from "./fakes.ts";
 
 describe("client", () => {

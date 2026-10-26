@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { access, chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FetchLike } from "./client.ts";
+import type { FetchLike } from "./bus/client.ts";
 
 export const RELEASES_URL = "https://api.github.com/repos/till-muellers/agent-message-bus/releases/latest";
 

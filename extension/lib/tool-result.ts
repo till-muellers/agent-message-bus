@@ -1,5 +1,5 @@
 /** The result shape every `bus_*` tool returns to omp. */
-import { errorMessage } from "./errors.ts";
+import { errorMessage } from "./bus/errors.ts";
 
 export interface ToolResult {
 	content: { type: "text"; text: string }[];

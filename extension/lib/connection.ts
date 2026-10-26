@@ -4,7 +4,7 @@
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { activateBusTools, deactivateBusTools, deactivateTools } from "./activation.ts";
-import type { BusClient } from "./client.ts";
+import type { BusClient } from "./bus/client.ts";
 import { type ActiveCredentials, type CredentialStore, resolveActive, type SessionCredentials } from "./credentials.ts";
 import { createDeliver } from "./deliver.ts";
 import type { InboxLoopOptions } from "./inbox.ts";

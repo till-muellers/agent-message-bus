@@ -5,9 +5,9 @@
  * text, the command description and the dispatch are built from.
  */
 import { type CommandResult, parseArgs } from "./shared/command.ts";
-import type { BusClient } from "./client.ts";
+import type { BusClient } from "./bus/client.ts";
 import { type CredentialStore, resolveActive, type SessionCredentials, trimUrl } from "./credentials.ts";
-import { errorMessage } from "./errors.ts";
+import { errorMessage } from "./bus/errors.ts";
 import { type ServerCli, serverCommand } from "./server.ts";
 import type { SpawnRequest, SpawnResult } from "./spawn.ts";
 

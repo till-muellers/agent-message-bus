@@ -4,7 +4,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { activateBusTools, deactivateBusTools, deactivateTools } from "../extension/lib/activation.ts";
 import { resolveBinary } from "../extension/lib/binary.ts";
-import type { FetchLike } from "../extension/lib/client.ts";
+import type { FetchLike } from "../extension/lib/bus/client.ts";
 import { assetName, expectedSum, RELEASES_URL } from "../extension/lib/download.ts";
 import type { Runner } from "../extension/lib/runner.ts";
 import { createServerCli } from "../extension/lib/server.ts";

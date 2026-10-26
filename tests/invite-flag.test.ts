@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Joined } from "../extension/lib/accept.ts";
-import { BusError } from "../extension/lib/client.ts";
+import { BusError } from "../extension/lib/bus/client.ts";
 import { createInviteFlag } from "../extension/lib/invite-flag.ts";
 import { CODE, URL_ } from "./fakes.ts";
 

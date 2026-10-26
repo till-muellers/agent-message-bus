@@ -1,9 +1,9 @@
 /** Mirrors the bus server's tool registry into the omp session. */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import type { BusClient, RemoteTool } from "./client.ts";
+import type { BusClient, RemoteTool } from "./bus/client.ts";
 import type { ActiveCredentials } from "./credentials.ts";
-import { errorMessage, NOT_LOGGED_IN } from "./errors.ts";
-import { toZod } from "./schema.ts";
+import { errorMessage, NOT_LOGGED_IN } from "./bus/errors.ts";
+import { toZod } from "./bus/schema.ts";
 import { toolResult } from "./tool-result.ts";
 
 /** Per-session registration: tools are fetched and registered once; logout does not reset it. */

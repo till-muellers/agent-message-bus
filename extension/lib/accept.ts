@@ -3,7 +3,7 @@
  * session's identity. Restarting the connection and sending the first prompt are the caller's.
  */
 import type { CommandResult } from "./shared/command.ts";
-import type { BusClient } from "./client.ts";
+import type { BusClient } from "./bus/client.ts";
 import { type SessionCredentials, trimUrl } from "./credentials.ts";
 import type { SessionIdentity } from "./session-identity.ts";
 

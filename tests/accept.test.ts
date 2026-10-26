@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { acceptInvite } from "../extension/lib/accept.ts";
-import { createClient } from "../extension/lib/client.ts";
+import { createClient } from "../extension/lib/bus/client.ts";
 import type { ActiveCredentials, SessionCredentials } from "../extension/lib/credentials.ts";
 import { CODE, fakeBus, URL_ } from "./fakes.ts";
 

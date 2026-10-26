@@ -1,7 +1,7 @@
 /** Inbox stream consumer: the wire entry type and the reconnecting deliver+ack loop. */
-import { BusError, type BusClient } from "./client.ts";
+import { BusError, type BusClient } from "./bus/client.ts";
 import type { ActiveCredentials } from "./credentials.ts";
-import { parseSse } from "./sse.ts";
+import { parseSse } from "./bus/sse.ts";
 
 export type EntryType = "direct_message" | "topic_message" | "topic_closed" | "thread_post" | "thread_removed" | "blackboard_removed";
 

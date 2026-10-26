@@ -3,9 +3,9 @@
  * opens `omp <leader's extension flags> --cwd <cwd> --bus-url <url> --bus-accept <code>`, which joins the space by
  * itself. The code is never returned.
  */
-import { BusError, type BusClient } from "./client.ts";
+import { BusError, type BusClient } from "./bus/client.ts";
 import type { ActiveCredentials } from "./credentials.ts";
-import { errorMessage, NOT_LOGGED_IN } from "./errors.ts";
+import { errorMessage, NOT_LOGGED_IN } from "./bus/errors.ts";
 import type { LaunchCommand, LaunchContext, Launcher } from "./launch/launcher.ts";
 import { pickLauncher } from "./launch/select.ts";
 

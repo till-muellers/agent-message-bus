@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { createClient, type FetchLike, type RemoteTool } from "../extension/lib/client.ts";
-import type { JsonSchema } from "../extension/lib/schema.ts";
+import { createClient, type FetchLike, type RemoteTool } from "../extension/lib/bus/client.ts";
+import type { JsonSchema } from "../extension/lib/bus/schema.ts";
 import { INBOX_TOOLS, registerRemoteTools, type RemoteToolsOptions } from "../extension/lib/tools.ts";
 import { errorResponse, URL_, z } from "./fakes.ts";
 
