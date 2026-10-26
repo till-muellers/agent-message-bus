@@ -15,6 +15,7 @@ import (
 type admission interface {
 	AuthorizeInvite(ctx context.Context, tx db.DBTX, p auth.Principal, space, name string) (int64, error)
 	AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, space, token string, err error)
+	AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Principal, space string) (int64, error)
 }
 
 // deliverer stores inbox entries inside a transaction and publishes them after commit.
@@ -38,6 +39,13 @@ type Admission struct {
 	Name  string `json:"name"`
 	Space string `json:"space"`
 	Token string `json:"token"`
+}
+
+// Pending is an open invite as the web GUI lists it: never the code.
+type Pending struct {
+	Name      string `json:"name"`
+	InvitedBy string `json:"invitedBy"`
+	ExpiresAt string `json:"expiresAt"` // RFC3339 UTC
 }
 
 // Service creates and redeems invite codes.
@@ -134,4 +142,23 @@ func taskEntry(r row, agentID int64, space string) []inbox.Entry {
 	}
 	return []inbox.Entry{{AgentID: agentID, SpaceID: r.spaceID, Space: space,
 		Type: inbox.DirectMessage, From: r.invitedBy, Body: r.task.String}}
+}
+
+// ListPending returns the open invites of space, soonest expiry first; redeemed, expired and
+// revoked codes are gone. Leaders of the space and admins.
+func (s *Service) ListPending(ctx context.Context, p auth.Principal, space string) ([]Pending, error) {
+	spaceID, err := s.admit.AuthorizeInvites(ctx, s.db, p, space)
+	if err != nil {
+		return nil, err
+	}
+	return selectPending(ctx, s.db, spaceID, s.now().Unix())
+}
+
+// CountPending returns how many invites of space are open; leaders of the space and admins.
+func (s *Service) CountPending(ctx context.Context, p auth.Principal, space string) (int, error) {
+	spaceID, err := s.admit.AuthorizeInvites(ctx, s.db, p, space)
+	if err != nil {
+		return 0, err
+	}
+	return countPending(ctx, s.db, spaceID, s.now().Unix())
 }

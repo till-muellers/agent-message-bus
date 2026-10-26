@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
@@ -67,4 +68,39 @@ func deleteForName(ctx context.Context, q db.DBTX, spaceID int64, name string) (
 		return false, fmt.Errorf("counting deleted invites for %s: %w", name, err)
 	}
 	return n > 0, nil
+}
+
+// selectPending returns the invites of spaceID still open at now (unix seconds), soonest
+// expiry first, then by name; never the code.
+func selectPending(ctx context.Context, q db.DBTX, spaceID, now int64) ([]Pending, error) {
+	rows, err := q.QueryContext(ctx, `SELECT name, invited_by, expires_at FROM invites
+		WHERE space_id = ? AND expires_at > ? ORDER BY expires_at, name`, spaceID, now)
+	if err != nil {
+		return nil, fmt.Errorf("listing open invites of space %d: %w", spaceID, err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := []Pending{}
+	for rows.Next() {
+		var p Pending
+		var expiresAt int64
+		if err := rows.Scan(&p.Name, &p.InvitedBy, &expiresAt); err != nil {
+			return nil, fmt.Errorf("scanning open invite: %w", err)
+		}
+		p.ExpiresAt = time.Unix(expiresAt, 0).UTC().Format(time.RFC3339)
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating open invites: %w", err)
+	}
+	return out, nil
+}
+
+// countPending counts the invites of spaceID still open at now (unix seconds).
+func countPending(ctx context.Context, q db.DBTX, spaceID, now int64) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM invites WHERE space_id = ? AND expires_at > ?`, spaceID, now).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("counting open invites of space %d: %w", spaceID, err)
+	}
+	return n, nil
 }

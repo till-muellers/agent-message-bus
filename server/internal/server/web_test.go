@@ -216,8 +216,10 @@ func (w *webWorld) expectEnded(t *testing.T, c *http.Cookie) {
 
 func (w *webWorld) expectAlive(t *testing.T, c *http.Cookie) {
 	t.Helper()
-	if status, body := w.status(t, http.MethodGet, "/web/session", c); status != http.StatusOK {
-		t.Fatalf("live session: %d %s", status, body)
+	for _, path := range []string{"/web/session", "/web/api/state"} {
+		if status, body := w.status(t, http.MethodGet, path, c); status != http.StatusOK {
+			t.Fatalf("live session on %s: %d %s", path, status, body)
+		}
 	}
 }
 

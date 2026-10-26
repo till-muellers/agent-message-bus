@@ -87,7 +87,7 @@ func (g *Web) signOut(w http.ResponseWriter, r *http.Request) {
 
 // describe returns p's kind, name and (members) space.
 func (g *Web) describe(ctx context.Context, p auth.Principal) (sessionBody, error) {
-	who, err := g.who.Whoami(ctx, p)
+	who, err := g.spaces.Whoami(ctx, p)
 	if err != nil {
 		return sessionBody{}, err
 	}

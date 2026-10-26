@@ -22,6 +22,19 @@ func (s *Service) AuthorizeInvite(ctx context.Context, tx db.DBTX, p auth.Princi
 	return m.SpaceID, nil
 }
 
+// AuthorizeInvites checks that p may list or cancel the invites of space (its leaders and
+// admins) and returns the space id.
+func (s *Service) AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Principal, space string) (int64, error) {
+	m, err := s.r.ResolveTx(ctx, q, p, space)
+	if err != nil {
+		return 0, err
+	}
+	if err := requireLeaderRole(m, "list or cancel invites"); err != nil {
+		return 0, err
+	}
+	return m.SpaceID, nil
+}
+
 // AdmitMember mints a member token for name in spaceID, adding the participant if new, and
 // returns the member's agent id, the space name and the token.
 func (s *Service) AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, space, token string, err error) {

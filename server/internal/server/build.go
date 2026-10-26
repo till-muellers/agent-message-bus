@@ -43,10 +43,12 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 		Revocation: []spaces.RevocationHook{invites.Revocation{}},
 	})
 	invSvc := invites.NewService(conn, spaceSvc, inboxSvc, time.Now)
+	ov := overview.NewService(resolver, spaceSvc, msgSvc, bbSvc)
 	reg := tools.New(tools.Deps{
 		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc, Invites: invSvc,
-		Overview: overview.NewService(resolver, spaceSvc, msgSvc, bbSvc),
+		Overview: ov,
 	})
-	gui := web.New(web.Deps{Auth: authSvc, Who: spaceSvc, Dist: dist, Now: time.Now})
+	gui := web.New(web.Deps{Auth: authSvc, Spaces: spaceSvc, Overview: ov, Invites: invSvc, Inbox: inboxSvc,
+		Tools: reg, Dist: dist, Now: time.Now})
 	return Handlers{API: Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, shutdown), Web: WebRoutes(gui)}, nil
 }

@@ -306,6 +306,7 @@ type Pending struct {
     ExpiresAt string `json:"expiresAt"` // RFC3339 UTC
 }
 func (s *Service) ListPending(ctx context.Context, p auth.Principal, space string) ([]Pending, error) // never the code [W1b]
+func (s *Service) CountPending(ctx context.Context, p auth.Principal, space string) (int, error) // open-invite count of the space list, same gate [W1b]
 ```
 
 `spaces.AuthorizeInvites`: resolve, `Leads()` else `forbidden "only leaders may list or cancel invites"` (`gui-invite-cancel.feature:106-116`). `Create` generates the invite id (8 random bytes, hex) from slice 10 on; `bus_invite_member`'s result does not expose it.
