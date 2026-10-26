@@ -19,6 +19,7 @@ function commandDeps(store: CredentialStore, client: BusClient, session: Session
 		spawns: [] as unknown[],
 		pluginVersion: "0.2.0",
 		installedPluginVersion: async () => undefined as string | undefined,
+		gate: { check: async () => "ok" as const, last: () => ({ url: URL_, protocol: 2 as number | undefined }) },
 		restart: async () => void deps.restarts++,
 		stop: async () => void deps.stops++,
 		accept: async (url: string, code: string) => {
@@ -93,7 +94,9 @@ describe("runCommand", () => {
 		const promoted = createSessionCredentials(undefined);
 		promoted.promote({ url: URL_, token: "lead-tok" });
 		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), client, promoted);
-		expect((await runCommand("status", deps)).message).toBe(`${URL_}: leader lead; spaces: none\nextension 0.2.0\ninstalled plugin unknown`);
+		expect((await runCommand("status", deps)).message).toBe(
+			`${URL_}: leader lead; spaces: none\nserver protocol 2 (minimum 2)\nextension 0.2.0\ninstalled plugin unknown`,
+		);
 	});
 
 	test("status shows the extension version, the installed plugin version and the warning when the installed plugin is older", async () => {
@@ -101,15 +104,31 @@ describe("runCommand", () => {
 		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), client);
 		deps.installedPluginVersion = async () => "0.1.0";
 		expect((await runCommand("status", deps)).message).toBe(
-			`${URL_}: member w; spaces: none\nextension 0.2.0\ninstalled plugin 0.1.0\nthe installed omp plugin 0.1.0 is older than the extension protocol 0.2.0; run omp plugin upgrade @till-muellers/omp-agent-message-bus`,
+			`${URL_}: member w; spaces: none\nserver protocol 2 (minimum 2)\nextension 0.2.0\ninstalled plugin 0.1.0\nthe installed omp plugin 0.1.0 is older than the extension protocol 0.2.0; run omp plugin upgrade @till-muellers/omp-agent-message-bus`,
 		);
+	});
+
+	test("status shows the server protocol and the minimum it needs", async () => {
+		const client = clientWith({ tools: { bus_whoami: whoami({ mem: { kind: "member", name: "w", spaces: [] } }) } });
+		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), client);
+		deps.gate = { check: async () => "ok", last: () => ({ url: URL_, protocol: 2 }) };
+		expect((await runCommand("status", deps)).message).toContain("server protocol 2 (minimum 2)");
+	});
+
+	test("status shows a server without a protocol as none", async () => {
+		const client = clientWith({ tools: { bus_whoami: whoami({ mem: { kind: "member", name: "w", spaces: [] } }) } });
+		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), client);
+		deps.gate = { check: async () => "ok", last: () => ({ url: URL_, protocol: undefined as number | undefined }) };
+		expect((await runCommand("status", deps)).message).toContain("server protocol none (minimum 2)");
 	});
 
 	test("status shows no warning when the installed plugin matches the extension", async () => {
 		const client = clientWith({ tools: { bus_whoami: whoami({ mem: { kind: "member", name: "w", spaces: [] } }) } });
 		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), client);
 		deps.installedPluginVersion = async () => "0.2.0";
-		expect((await runCommand("status", deps)).message).toBe(`${URL_}: member w; spaces: none\nextension 0.2.0\ninstalled plugin 0.2.0`);
+		expect((await runCommand("status", deps)).message).toBe(
+			`${URL_}: member w; spaces: none\nserver protocol 2 (minimum 2)\nextension 0.2.0\ninstalled plugin 0.2.0`,
+		);
 	});
 
 	test("logout clears the stored file, the session override and the env credentials with no fallback, and stops", async () => {

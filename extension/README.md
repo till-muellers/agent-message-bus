@@ -136,3 +136,7 @@ The server allows one live inbox stream per agent, so each agent identity belong
 3. a download of the latest GitHub release of `till-muellers/agent-message-bus` for this platform, verified against the release's `SHA256SUMS` and cached under `<PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus/bin/<version>/`.
 
 Server behaviour (single instance per data dir, admin token file) is described in [`server/README.md`](../server/README.md).
+
+## Compatibility
+
+This plugin needs **server protocol 2** or newer. The server reports its protocol in the `Agent-Bus-Protocol` header of `GET /healthz`; a server without that header speaks no protocol. Before the plugin redeems an invite code or activates a bus tool, it probes the server and refuses one that is too old with `agent-bus: the server at <url> is too old (protocol none, this plugin needs 2); upgrade the agent-message-bus server`. The invite code stays unused, so it still works against a newer server. `/bus status` shows `server protocol <n> (minimum 2)`. A probe that fails (no answer) is not a refusal: the normal request fails and retries as before.
