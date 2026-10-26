@@ -133,7 +133,7 @@ Feature: Space membership
       When member "worker" asks who it is
       Then the call fails with unauthenticated "invalid token"
 
-    Scenario: The last leader cannot leave
+    Scenario: The last leader cannot leave while other participants remain
       Given leader "lead" invited member "worker" to space "demo"
       When leader "lead" leaves space "demo"
       Then the call fails with conflict "last leader cannot leave; delete the space instead"
@@ -149,6 +149,13 @@ Feature: Space membership
     Scenario: An admin that has not joined cannot leave a space
       When the admin leaves space "demo"
       Then the call fails with forbidden "not a participant of space demo"
+
+    Scenario: A lone leader may leave and the space is deleted
+      # No empty spaces (no-empty-spaces.feature).
+      Given leader "lead2" created space "solo"
+      When leader "lead2" leaves space "solo"
+      Then the call succeeds
+      And the space "solo" no longer exists
 
   Rule: Departure (leave or revoke) cleans up in a fixed order within one transaction
 

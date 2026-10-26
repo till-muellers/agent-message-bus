@@ -53,7 +53,8 @@ func spaceLifecycleTools(s *spaces.Service) []Tool {
 			"Joins an existing space as a leader (an admin with role admin); a space can have several leaders.",
 			s, (*spaces.Service).Join),
 		spaceOp("bus_leave_space", "Participants.",
-			"Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave. "+
+			"Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave "+
+				"while others remain, and the last participant's departure deletes the space. "+
 				"Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted.",
 			s, (*spaces.Service).Leave),
 		spaceOp("bus_delete_space", "Leaders of the space once no other leader remains, and admins.",
@@ -75,7 +76,8 @@ func memberTools(s *spaces.Service) []Tool {
 		define("bus_revoke_member", accessSpaceLeaders,
 			"Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending "+
 				"invite codes for the space; idempotent, deleted reports whether anything was removed. "+
-				"Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included.",
+				"Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included, "+
+				"and the space is deleted when nobody remains.",
 			"{deleted}",
 			memberReq(), memberProps(), func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
 				deleted, err := s.Revoke(ctx, p, a.Space, a.Name)
