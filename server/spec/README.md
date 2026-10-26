@@ -18,6 +18,7 @@ flowchart LR
     rpc["/v1/tools<br/>JSON RPC"]
     sse["/v1/inbox/stream<br/>SSE"]
     acc["/v1/invites/accept<br/>invite code → member token"]
+    web["/web on AMB_WEB_ADDR<br/>web GUI, cookie sessions"]
     reg["tool registry (34 bus_* tools)"]
     ov["overview<br/>read composition, no table"]
     feat["auth · spaces · invites · messaging · blackboards · inbox"]
@@ -28,6 +29,8 @@ flowchart LR
   ext -- "tool calls, /bus commands" --> rpc
   ext -- "inbox stream + bus_inbox_ack" --> sse
   ext -- "/bus accept" --> acc
+  browser["browser"] -- "session cookie" --> web
+  web -- "re-validates token, reads" --> feat
   acc --> feat
   mcp --> reg
   rpc --> reg
@@ -73,6 +76,8 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Notice | "You have mail": what waits in a mailbox scope (waiting and critical counts, space names), never message bodies. Due once per unnoticed edge; taking it marks the scope's edges `noticed`. Agents see it as the hint on tool results. |
 | Hint | The notice on the first successful tool result after an unnoticed edge: the RPC sibling key `mail` or a trailing MCP text block. An edge is also noticed when `bus_inbox_read`, `bus_wait` or the inbox stream returns it; the web GUI's reads never mark it. See [mail-hint.feature](mail-hint.feature). |
 | Guide | The agent guide: how leaders, members and admins work on the bus. One embedded Markdown text (`internal/guide/guide.md`, ≤ 4000 characters), served as the MCP `instructions`, as `GET /v1/guide` and in TOOLS.md. See [guide.feature](guide.feature). |
+| Web GUI | The browser application served on its own listener `AMB_WEB_ADDR` (default `127.0.0.1:8081`, empty or `off` disables it); the API listener `AMB_ADDR` serves no `/web` route. Read-only in the first milestone. See [web/gui-access.feature](web/gui-access.feature). |
+| Web session | What signing in to the web GUI with a token (`POST /web/session`, any kind) creates: an opaque `amb_session` cookie (`Path=/web`, HttpOnly, SameSite=Strict, Secure over TLS) that maps to the token's hash in memory for at most 8 hours. The token is re-validated on every request, so rotating or revoking it ends the session. A cookie is never a bearer on `/v1/*`. |
 
 ## Features
 
@@ -100,6 +105,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [mail-notice.feature](mail-notice.feature) | The "You have mail" notice: edge-triggered per mailbox scope (empty → non-empty), one per delivery transaction, re-armed by a full acknowledgement, critical entries always notify, persisted across restarts, no bodies |
 | [mail-hint.feature](mail-hint.feature) | The "You have mail" hint on tool results: once per edge, the RPC `mail` field and the MCP hint text, reads, waits and the stream count as told, never on `bus_inbox_ack`'s own entries, leader and admin scopes, web reads never mark |
 | [guide.feature](guide.feature) | The agent guide: MCP `instructions` (the same for every token, ≤ 4000 characters), `GET /v1/guide` (bearer, `text/markdown`), the TOOLS.md section "Working on the bus", the statements it must cover, and that it never mentions a skill |
+| [web/gui-access.feature](web/gui-access.feature) | The web GUI's own listener (`AMB_WEB_ADDR`), signing in with a token for a session cookie, re-validation on every request, sign-out, read-only routes (405), the cookie never acting as a bearer |
 
 ## Design decisions
 
@@ -113,7 +119,8 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 - **Local instance via a state file.** `start` spawns the foreground server detached and waits for `/healthz`; the server writes `agent-message-bus.state.json` (pid, url, start time) and removes it on exit. A state file whose url doesn't answer is stale and is removed. `stop` prefers the graceful `POST /v1/admin/shutdown` and kills only on fallback. Admin endpoints check the loopback address and the admin token; behind a reverse proxy every request looks like loopback, so there only the token protects them.
 - **No empty spaces.** Every departure (leave, revoke) ends in `removeParticipant`, which counts the remaining participants in the same transaction and deletes the space when none remain; the cascades remove its topics, boards, invites, member tokens and inbox rows, and entries the departure hooks produced for it are dropped. So the last leader may leave when it is alone, but not while others remain.
 - **One long-poll seam.** `bus_wait` is the only call that blocks. Like the stream it subscribes to `inbox/<agentID>` before it reads, then re-reads on every wake-up; it ends on the first matching entry, the timeout, a disconnect, server shutdown or a dropped subscription (one more read). It never acknowledges and never takes the stream slot, but the agent counts as connected while it waits. The API server sets no read, write or idle timeout so a 300-second wait is never cut.
-- **No thread claiming and no UI.** Both are out of scope.
+- **No thread claiming.** Out of scope.
+- **The web GUI on its own listener.** The GUI holds an admin session in a browser, so it gets its own address (`AMB_WEB_ADDR`, loopback by default): the operator decides its exposure separately from the API, and `/web` never exists on the API listener. Sessions keep only the token's hash in memory and re-check it on every request; failed sign-ins are rate-limited per IP.
 
 ## Known limitations
 

@@ -29,13 +29,13 @@ Conventions and working method for contributors and coding agents in this repo.
 - Tool ledger: `cd server && go run ./cmd/tooldoc > TOOLS.md`
 
 ## Architecture
-- `server/main.go`: wiring and CLI dispatch only, no logic: config, CLI dispatch, DB, migrations, `server.Build`, `httpserver.Serve`.
+- `server/main.go`: wiring and CLI dispatch only, no logic: config, CLI dispatch, DB, migrations, `server.Build`, the API and web GUI listeners, `server.Run`.
 - `server/internal/<feature>/`: one folder per feature (`auth`, `inbox`, `spaces`, `invites`, `messaging`, `blackboards`, `overview`). `internal/guide` is not a feature: it holds only the embedded guide text (below).
   - `service.go`: business logic
   - `repository.go`: all SQL of the feature (interfaces defined where they are used)
   - `*_test.go`: table-driven tests next to the code, real SQLite via `internal/platform/db/dbtest`
 - **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`, `spaces.RevocationHook`, passed together in the `spaces.Hooks` parameter object) and service methods, inside the caller's transaction. `internal/overview` is a read composition: it owns no table, reads only through the spaces, messaging and blackboards services, and only `internal/tools` and the `internal/server` wiring import it.
-- Transports are thin: `internal/tools` (the handler layer: one registry of `bus_*` tools), `internal/rpc`, `internal/mcpserver`, `internal/admin`; `internal/server` composes everything (`Build`, routes).
+- Transports are thin: `internal/tools` (the handler layer: one registry of `bus_*` tools), `internal/rpc`, `internal/mcpserver`, `internal/admin`, `internal/web` (the web GUI backend: embedded app, cookie sessions re-validated per request; served only on its own listener `AMB_WEB_ADDR`, never on the API listener); `internal/server` composes everything (`Build` returns the API and GUI handlers, `Routes`/`WebRoutes`, `Run` serves both listeners).
 - `internal/guide`: the agent guide (`guide.md`, embedded, ≤ 4000 characters, the same for every token). It is served as the MCP `instructions`, as `GET /v1/guide` and as the TOOLS.md section "Working on the bus"; edit `guide.md`, then regenerate TOOLS.md.
 - `internal/domain/`: business rules shared by features (names, body and title limits).
 - `internal/platform/`: shared infra (apperr, db, broker, httpx, httpserver, config, instance, detach); only for things used by 2+ packages.
@@ -112,7 +112,7 @@ Facts that are not obvious from the code and that cost time to find out:
 
 **Server**
 - `agent-message-bus start` detaches the server and returns at once; `stop` ends it.
-- For a throwaway instance, set `AMB_ADDR=127.0.0.1:<port>`, `AMB_DB_PATH=<temp>/x.db` and `AMB_ADMIN_TOKEN=<32+ chars>`. The log is written next to the db.
+- For a throwaway instance, set `AMB_ADDR=127.0.0.1:<port>`, `AMB_DB_PATH=<temp>/x.db` and `AMB_ADMIN_TOKEN=<32+ chars>`. The web GUI listens on `AMB_WEB_ADDR` (default `127.0.0.1:8081`): set `AMB_WEB_ADDR=127.0.0.1:<port2>` or `off`, or a second instance fails to bind it. The log is written next to the db.
 - The instance admin token authenticates as the bootstrap admin agent `admin` (kind admin), created on the first start; `bus_whoami` with it returns name `admin`. A dev DB that holds a leader or member named `admin` refuses to start: delete it.
 - The HTTP API is `POST /v1/tools/<name>` with the JSON args as the body and `Authorization: Bearer <token>`. The result comes back as `{"result": …}`. RPC results may carry `"mail": {"waiting", "critical", "spaces"}`: once, on the first result after new mail reached an empty mailbox (or a critical entry arrived); `bus_inbox_read`, `bus_wait` or the SSE stream returning the entry counts as told, and a full `bus_inbox_ack` lets the next mail notify again. Strict parsers must allow the extra key.
 

@@ -3,7 +3,7 @@ Feature: Transports
   I want the same tool registry over a JSON web API and over MCP
   So that any client can call the bus with a bearer token
 
-  # Routes:
+  # Routes on the API listener (AMB_ADDR):
   #   GET  /healthz             no auth
   #   GET  /v1/tools            bearer auth
   #   POST /v1/tools/{name}     bearer auth
@@ -12,6 +12,8 @@ Feature: Transports
   #   /mcp                      MCP streamable HTTP, bearer auth
   #   POST /v1/admin/*          loopback + admin token (see "Admin endpoints")
   # Error body: {"error":{"code":"<code>","message":"<message>"}}
+  # The web GUI (/web/*) has its own listener, AMB_WEB_ADDR (default 127.0.0.1:8081; see
+  # web/gui-access.feature). The API listener serves no /web route.
 
   Background:
     Given the bus is running with admin token "admin-token-0123456789-0123456789-abcdef"
@@ -294,6 +296,22 @@ Feature: Transports
         | too short | {"token":"x"} | admin token must be at least 32 characters |
         | bad JSON  | {             | invalid JSON body                          |
 
+  Rule: The web GUI is not served on the API listener
+
+    Scenario Outline: GET <path> on the API listener
+      When a client requests GET <path> on the API listener
+      Then the response status is 404
+
+      Examples:
+        | path           |
+        | /web/          |
+        | /web/session   |
+        | /web/api/state |
+
+    Scenario: The GUI listener serves only /web
+      When a client requests GET /healthz on the web GUI listener
+      Then the response status is 404
+
   Rule: Graceful shutdown
 
     Scenario: Stopping the server cancels streams and shuts down gracefully
@@ -307,3 +325,19 @@ Feature: Transports
       When the server is started on address "bad:addr:x"
       Then it fails with an error starting with "serve:"
       And the inbox streams are not cancelled
+
+    Scenario: Stopping the server shuts down both listeners
+      Given the server is listening on "127.0.0.1:0" and the web GUI on another "127.0.0.1:0"
+      When the server's context is cancelled
+      Then all inbox streams are cancelled
+      And both listeners stop without error
+
+    Scenario: A failing web GUI listener stops the API listener too
+      Given the server is listening on "127.0.0.1:0" and the web GUI listener fails
+      Then the API listener shuts down gracefully
+      And it fails with an error starting with "web listener: serve:"
+
+    Scenario: A disabled web GUI leaves the API alone
+      Given AMB_WEB_ADDR is "off"
+      When the server starts
+      Then only the API listener is opened

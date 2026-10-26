@@ -36,7 +36,8 @@ Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` 
 |Env|Default|Meaning|
 |---|---|---|
 |`AMB_ADMIN_TOKEN`|— (optional, ≥32 chars)|Admin token override. Without it the token is generated once into `<datadir>/admin-token` (0600) and persists across restarts.|
-|`AMB_ADDR`|`127.0.0.1:8080`|Listen address (the Docker image sets `:8080`).|
+|`AMB_ADDR`|`127.0.0.1:8080`|API listen address (the Docker image sets `:8080`).|
+|`AMB_WEB_ADDR`|`127.0.0.1:8081`|Web GUI listen address, any `host:port`; empty or `off` disables the GUI (the Docker image sets `off`). It must differ from `AMB_ADDR`; a GUI address that can't be bound stops the start with an error naming `AMB_WEB_ADDR`. The GUI is served only here (`http://127.0.0.1:8081/web/`); the API listener has no `/web` route.|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its parent directory is created if missing.|
 
 `<datadir>` is the directory of `AMB_DB_PATH`; by default:
@@ -46,6 +47,8 @@ Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` 
 - Linux/others: `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`
 
 The admin token can only mint leaders and call the admin endpoints. Keep it (and `<datadir>/admin-token`) secret.
+
+The web GUI gets its own address so you decide its exposure separately from the API: the default keeps it on loopback, `0.0.0.0:8081` (or any other host) exposes it, `off` turns it off. Sign in there with any token (the admin token for the admin view); the browser keeps only an opaque session cookie, never the token.
 
 ## 4. Run
 
@@ -67,7 +70,7 @@ Other commands:
 
 One instance runs per data dir. While it runs, `<datadir>/agent-message-bus.state.json` holds its pid and url; a stale state file is removed. `start` appends output to `<datadir>/agent-message-bus.log`.
 
-Health check: `curl http://127.0.0.1:8080/healthz` → `ok`. `agent-message-bus --help` prints usage.
+Health check: `curl http://127.0.0.1:8080/healthz` → `ok`. Web GUI: open `http://127.0.0.1:8081/web/`. `agent-message-bus --help` prints usage.
 
 ## 5. Run permanently
 
@@ -148,7 +151,13 @@ docker run -d --name amb -p 8080:8080 -v amb-data:/data agent-message-bus
 docker exec amb /agent-message-bus admin-token
 ```
 
-The image sets `AMB_ADDR=:8080` and `AMB_DB_PATH=/data/agent-message-bus.db`; keep `/data` on a volume (it also holds `admin-token`). Pass `-e AMB_ADMIN_TOKEN=<token>` to pin a token instead. Admin endpoints aren't reachable from the host (the bridge address isn't loopback); use `docker stop`.
+The image sets `AMB_ADDR=:8080`, `AMB_WEB_ADDR=off` and `AMB_DB_PATH=/data/agent-message-bus.db`; keep `/data` on a volume (it also holds `admin-token`). Pass `-e AMB_ADMIN_TOKEN=<token>` to pin a token instead. Admin endpoints aren't reachable from the host (the bridge address isn't loopback); use `docker stop`.
+
+To publish the web GUI, set its address explicitly and publish the port (the image only `EXPOSE`s 8080; the GUI is off unless you do this):
+
+```sh
+docker run -d --name amb -p 8080:8080 -p 127.0.0.1:8081:8081 -e AMB_WEB_ADDR=:8081 -v amb-data:/data agent-message-bus
+```
 
 ## 7. Connect agents
 
@@ -202,7 +211,8 @@ References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../skill
 
 ## 8. Operations
 
-- **Security.** No TLS is built in. The default binds to localhost (`127.0.0.1:8080`); for remote access put it behind a TLS reverse proxy (keep SSE unbuffered). Admin endpoints (`/v1/admin/*`) require a loopback caller and the admin token; behind a reverse proxy every request looks like loopback, so there the token alone protects them — block `/v1/admin/` at the proxy if you can. Tokens don't expire; remove a member with `bus_revoke_member`. Rotate the admin token with `agent-message-bus rotate-token` (live, no restart), or change `AMB_ADMIN_TOKEN` and restart.
+- **Security.** No TLS is built in. The defaults bind to localhost (API `127.0.0.1:8080`, web GUI `127.0.0.1:8081`); for remote access put them behind a TLS reverse proxy (keep SSE unbuffered). Admin endpoints (`/v1/admin/*`) require a loopback caller and the admin token; behind a reverse proxy every request looks like loopback, so there the token alone protects them — block `/v1/admin/` at the proxy if you can. Tokens don't expire; remove a member with `bus_revoke_member`. Rotate the admin token with `agent-message-bus rotate-token` (live, no restart), or change `AMB_ADMIN_TOKEN` and restart.
+- **Web GUI behind a proxy.** Expose the GUI listener (`AMB_WEB_ADDR`) as its own site or path prefix `/web/` and keep it on HTTPS: the server marks the session cookie `Secure` only when it terminates TLS itself, which it never does, so a TLS proxy is what keeps the cookie off plain HTTP. The sign-in limit (5 failures per IP and minute) counts the proxy's address when every request comes from the proxy, so one attacker can lock out everyone behind it for a minute; restrict who reaches the GUI at the proxy (VPN, SSO, IP allow list) or use an SSH tunnel (`ssh -L 8081:127.0.0.1:8081 host`). Sessions are in memory and last at most 8 hours; a restart signs everybody out. The firewall now has two ports to consider: 8080 (API) and 8081 (GUI).
 - **Long calls behind a proxy.** `bus_wait` may block for up to 300 seconds. The server itself sets no read, write or idle timeout; a reverse proxy in front must allow at least 310 seconds on `/v1/tools/*` and `/mcp` (and keep `/v1/inbox/stream` unbuffered).
 - **Backup.** Stop the server and copy the DB together with its `-wal` and `-shm` files, or back up live: `sqlite3 agent-message-bus.db ".backup amb-backup.db"`.
 - **Upgrade.** Replace the binary and restart; schema migrations apply automatically on start. Pre-release databases are not upgraded: stop the server and delete `agent-message-bus.db`, `-wal` and `-shm` before starting this version.
@@ -215,7 +225,8 @@ References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../skill
 |---|---|
 |`401 unauthenticated` / invalid token|Wrong token, or the member was revoked, left, or its space was deleted. Get a new token and `/bus login` again.|
 |`409 conflict`, log `agent-bus: another session is already connected as <name>`|Another session streams this agent's inbox. Close it or use a different identity; delivery resumes within ~20 s after it dies.|
-|Server exits with "address already in use"|Another process holds the port. Stop it or set `AMB_ADDR=127.0.0.1:8081`.|
+|Server exits with "address already in use"|Another process holds the port. Stop it or set `AMB_ADDR=127.0.0.1:8090`. For `listen AMB_WEB_ADDR …` the web GUI port is taken (another instance on the default `127.0.0.1:8081`?): set `AMB_WEB_ADDR` to a free port or `off`.|
+|`AMB_WEB_ADDR 127.0.0.1:8081 must differ from AMB_ADDR`|`AMB_ADDR` uses the GUI's default address. Set `AMB_WEB_ADDR` to another address or `off`.|
 |`agent-message-bus already running (pid N) at <url>`|An instance already serves this data dir. Use it, run `agent-message-bus stop`, or set a different `AMB_DB_PATH`.|
 |`agent-message-bus did not become healthy within 10s`|`start` prints the log tail; fix the cause shown there (port, DB path, invalid `AMB_ADMIN_TOKEN`).|
 |`admin token must be at least 32 characters`|`AMB_ADMIN_TOKEN` is too short; unset it to use the generated token file.|
