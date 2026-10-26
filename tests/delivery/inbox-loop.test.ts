@@ -28,15 +28,13 @@ async function runLoop(streams: (() => Response)[], tools: Record<string, ToolHa
 }
 
 describe("runInboxLoop", () => {
-	test("delivers in order, acks each id, reconnects, and stops on 401", async () => {
+	test("delivers in order, reconnects, and stops on 401; the ack waits for the consumption", async () => {
 		const { bus, delivered, errors } = await runLoop([
-			() => new Response(streamOf([": ping\n\n", frame(entry(1)), frame(entry(2, { critical: true }))])),
+			() => new Response(streamOf([": ping\n\n", frame(entry(1)), frame(entry(2, { class: "interrupt" }))])),
 			() => new Response(streamOf([frame(entry(3))])),
 		]);
 		expect(delivered).toEqual([1, 2, 3]);
-		const acks = callsTo(bus, "/bus_inbox_ack");
-		expect(acks.map(c => c.body)).toEqual([{ upTo: 1 }, { upTo: 2 }, { upTo: 3 }]);
-		expect(acks.every(c => c.auth === "Bearer tok")).toBe(true);
+		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
 		expect(errors).toEqual(["invalid token"]);
 	});
 
@@ -52,15 +50,6 @@ describe("runInboxLoop", () => {
 		controller.abort();
 		const { bus } = await runLoop([], {}, controller.signal);
 		expect(bus.calls).toHaveLength(0);
-	});
-
-	test("an ack failure is reported without reconnecting or redelivering", async () => {
-		const { bus, delivered, errors } = await runLoop([() => new Response(streamOf([frame(entry(1)), frame(entry(2))]))], {
-			bus_inbox_ack: args => (args.upTo === 1 ? errorResponse(500, "internal", "ack failed") : Response.json({ result: { acked: 2 } })),
-		});
-		expect(delivered).toEqual([1, 2]);
-		expect(callsTo(bus, "/bus_inbox_ack").map(c => c.body)).toEqual([{ upTo: 1 }, { upTo: 2 }]);
-		expect(errors).toEqual(["ack failed", "invalid token"]);
 	});
 
 	test("a stream that opens without frames still ends the conflict streak", async () => {

@@ -196,7 +196,7 @@ export interface BootSession {
 }
 
 export interface Sent {
-	message: { customType: string; content: string; display: boolean };
+	message: { customType: string; content: string; display: boolean; details?: unknown };
 	options: unknown;
 }
 
@@ -286,5 +286,9 @@ export async function boot(options: BusExtensionOptions, session: BootSession = 
 		return found;
 	};
 	const run = (args: string) => commands[0].handler(args, ctx);
-	return { tools, tool, notes, warnings, warning, userMessages, sent, emit, run, commands, active: () => active };
+	/** Fires the `context` event with the messages of a model request. */
+	const context = async (messages: readonly unknown[]) => {
+		for (const handler of handlers["context"] ?? []) await handler({ type: "context", messages }, ctx);
+	};
+	return { tools, tool, notes, warnings, warning, userMessages, sent, emit, run, context, commands, active: () => active };
 }

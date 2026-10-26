@@ -40,16 +40,72 @@ describe("inbox streaming", () => {
 		return app;
 	}
 
-	test("session_start streams the inbox: critical → steer, others → followUp", async () => {
+	test("session_start streams the inbox: the class decides the mechanism and the message carries the entry id", async () => {
 		const { sent, warnings } = await runSession("tui");
 		expect(sent).toEqual([
-			{ message: { customType: "agent-bus", content: formatEntry(entry(1)), display: true }, options: { deliverAs: "aside", triggerTurn: false } },
 			{
-				message: { customType: "agent-bus", content: formatEntry(entry(2, { class: "interrupt" })), display: true },
+				message: { customType: "agent-bus", content: formatEntry(entry(1)), display: true, details: { entryIds: [1] } },
+				options: { deliverAs: "aside", triggerTurn: false },
+			},
+			{
+				message: { customType: "agent-bus", content: formatEntry(entry(2, { class: "interrupt" })), display: true, details: { entryIds: [2] } },
 				options: { deliverAs: "steer", triggerTurn: true },
 			},
 		]);
 		expect(warnings).toEqual(["agent-bus: invalid token"]);
+	});
+
+	test("an entry is acked only after a model request carried it", async () => {
+		const bus = fakeBus({ streams: [() => new Response(streamOf([frame(entry(1))]))] });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+		await app.emit("session_start");
+		await app.warning("invalid token");
+		expect(app.sent).toHaveLength(1);
+		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
+		await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message })));
+		expect(callsTo(bus, "/bus_inbox_ack").map(call => call.body)).toEqual([{ upTo: 1 }]);
+		await app.emit("session_shutdown");
+	});
+
+	test("a request without the entry acks nothing", async () => {
+		const bus = fakeBus({ streams: [() => new Response(streamOf([frame(entry(1))]))] });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+		await app.emit("session_start");
+		await app.warning("invalid token");
+		await app.context([{ role: "user", content: "hello" }]);
+		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
+		await app.emit("session_shutdown");
+	});
+
+	test("a reconnect that replays an entry does not hand it over twice", async () => {
+		const bus = fakeBus({ streams: [() => new Response(streamOf([frame(entry(1))])), () => new Response(streamOf([frame(entry(1))]))] });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+		await app.emit("session_start");
+		await app.warning("invalid token");
+		expect(app.sent).toHaveLength(1);
+		await app.emit("session_shutdown");
+	});
+
+	test("a new session delivers the entry the last one did not consume again", async () => {
+		const credentials = { AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), ...credentials };
+		const first = fakeBus({ streams: [() => new Response(streamOf([frame(entry(1))]))] });
+		const app = await boot({ fetchFn: first.fetchFn, env }, { mode: "tui" });
+		await app.emit("session_start");
+		await app.warning("invalid token");
+		await app.emit("session_shutdown");
+		expect(app.sent).toHaveLength(1);
+
+		const second = fakeBus({ streams: [() => new Response(streamOf([frame(entry(1))]))] });
+		// The extension reads the env credentials once and removes them, so the second session gets its own copy.
+		const restarted = await boot({ fetchFn: second.fetchFn, env: { OMP_AGENT_BUS_DIR: env.OMP_AGENT_BUS_DIR, ...credentials } }, { mode: "tui" });
+		await restarted.emit("session_start");
+		await restarted.warning("invalid token");
+		await restarted.emit("session_shutdown");
+		expect(restarted.sent).toHaveLength(1);
 	});
 
 	test("another session holding the stream warns once, retries, and delivers once the stream opens", async () => {

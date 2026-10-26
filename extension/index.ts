@@ -30,6 +30,9 @@ import { agentConfigDir } from "./lib/shared/credential-store.ts";
 import { createClient, type FetchLike } from "./lib/bus/client.ts";
 import { COMMAND_DESCRIPTION, runCommand } from "./lib/commands/command.ts";
 import { createServerGate, type ServerGate } from "./lib/connection/server-gate.ts";
+import { createAckWatermark } from "./lib/delivery/ack-watermark.ts";
+import { createAcker } from "./lib/delivery/acker.ts";
+import { createContextHandler } from "./lib/context/context-handler.ts";
 import { createInviteFlag } from "./lib/commands/invite-flag.ts";
 import { findOnPath, resolveBinary } from "./lib/local-server/binary.ts";
 import { createServerCli, type ServerCli } from "./lib/local-server/server-cli.ts";
@@ -173,6 +176,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		const store = createCredentialStore(env);
 		const client = createClient(options.fetchFn);
 		const gate = createServerGate(options.fetchFn ?? fetch);
+		const watermark = createAckWatermark();
 		const session = createSession({
 			pi,
 			store,
@@ -182,7 +186,11 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 			localTools: [SPAWN_TOOL],
 			sleep: options.sleep,
 			gate,
+			watermark,
 		});
+		// Every model request acks the entries it carried.
+		const acker = createAcker({ client, getActive: session.getActive, warn: session.warn });
+		pi.on("context", createContextHandler({ watermark, ack: acker }));
 		const which = options.which ?? ((name: string) => findOnPath(name, env.PATH));
 		// This plugin's version is the protocol the workers must understand; it is read once at load.
 		const ownVersion = await pluginVersion().catch(() => "unknown");
