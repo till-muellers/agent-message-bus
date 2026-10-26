@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "agent_message_bus",
+  "project_id": "59f22500-e58d-462d-a7c4-bc43f532f734"
+}

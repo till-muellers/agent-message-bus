@@ -17,6 +17,7 @@ Conventions and working method for contributors and coding agents in this repo.
 |`skills/agent-message-bus/`|Agent-facing skill.|
 |`tests/`|Per-module `*.test.ts` (bun) with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_build.py` (pytest).|
 |`scripts/build.py`|Release build: cross-compiles the server and writes `SHA256SUMS`.|
+|`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only by PR.|
 |`.omp/`|This guide and the hard rules (`RULES.md`).|
 
 ## Commands
