@@ -13,6 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Tag matches package version
+        run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"
+
       - uses: actions/setup-go@v7
         with:
           go-version-file: server/go.mod
@@ -21,10 +28,6 @@ jobs:
       - name: Test
         working-directory: server
         run: go test ./...
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.x'
 
       - name: Build release binaries
         run: python scripts/build.py --version "${GITHUB_REF_NAME#v}"
@@ -36,4 +39,4 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "agent-message-bus ${version}" \
-            --notes "Raw agent-message-bus ${version} binaries for windows/linux/darwin (amd64, arm64) plus SHA256SUMS. Download the binary for your platform, verify it with \`sha256sum -c SHA256SUMS --ignore-missing\`, then follow the deployment guide: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/server/DEPLOYMENT.md"
+            --notes "Raw agent-message-bus ${version} binaries for windows/linux/darwin (amd64, arm64) plus SHA256SUMS. Download the binary for your platform, verify it with \`sha256sum -c SHA256SUMS --ignore-missing\`, then follow the deployment guide: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/server/DEPLOYMENT.md. This release resets the database schema: delete the database of a pre-release server before you start this one."
