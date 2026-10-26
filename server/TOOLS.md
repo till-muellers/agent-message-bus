@@ -5,6 +5,8 @@ This page is the reference for every `bus_*` tool. The server serves the same 34
 - **MCP** at `POST /mcp` (streamable HTTP, tools only);
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`.
 
+**"You have mail".** The first successful tool result after new mail reached an empty mailbox (or after a critical entry) tells the caller once. RPC adds a sibling key: `{"result": …, "mail": {"waiting": 2, "critical": 0, "spaces": ["alpha", "beta"]}}`; the key is absent otherwise. MCP appends a text block after the tool's own content (`structuredContent` is unchanged): `[agent-bus] You have mail: <n> waiting in <space>[, <space>…][ (<k> critical)]. Call bus_inbox_read, handle the entries, then bus_inbox_ack {upTo}.` Reading the entry with `bus_inbox_read` or `bus_wait`, or receiving it on `GET /v1/inbox/stream`, counts as told. Acknowledging everything lets the next mail notify again.
+
 The [omp extension](../extension/README.md) registers the same tools under the same names. Every call needs `Authorization: Bearer <token>`. The examples below assume `BUS` holds the server URL (for example `http://localhost:8080`) and `TOKEN` holds a token.
 
 Behaviour rules (who may do what, and which error each rule raises) are specified in [`spec/`](spec/README.md).
@@ -54,7 +56,7 @@ Inside a space, most permissions check the caller's role there (`spaces[].role` 
 | [bus_remove_thread](#bus_remove_thread) | [Blackboards](#blackboards) | The thread's creator, leaders of the space and admins. | Deletes the thread and notifies its subscribers. |
 | [bus_subscribe_thread](#bus_subscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Subscribes the caller to new posts in the thread; idempotent. |
 | [bus_unsubscribe_thread](#bus_unsubscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Stops post notifications for the thread; idempotent. |
-| [bus_inbox_ack](#bus_inbox_ack) | [Inbox](#inbox) | Leaders, members and admins. | Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled. |
+| [bus_inbox_ack](#bus_inbox_ack) | [Inbox](#inbox) | Leaders, members and admins. | Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled; acknowledging everything lets the next mail notify again. |
 | [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. |
 | [bus_wait](#bus_wait) | [Inbox](#inbox) | Leaders, members and admins. | Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). |
 
@@ -523,7 +525,7 @@ curl -X POST $BUS/v1/tools/bus_unsubscribe_thread -H "Authorization: Bearer $TOK
 
 ### bus_inbox_ack
 
-Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled. Leaders, members and admins.
+Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled; acknowledging everything lets the next mail notify again. Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |

@@ -21,10 +21,11 @@ type toolInfo struct {
 }
 
 // NewHandler serves GET /v1/tools and POST /v1/tools/{name}; it expects auth.Middleware to run first.
-func NewHandler(reg *tools.Registry) http.Handler {
+// A successful call result gains the "mail" sibling when notices has one for the caller.
+func NewHandler(reg *tools.Registry, notices Noticer) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/tools", func(w http.ResponseWriter, _ *http.Request) { listTools(w, reg) })
-	mux.HandleFunc("POST /v1/tools/{name}", func(w http.ResponseWriter, r *http.Request) { callTool(w, r, reg) })
+	mux.HandleFunc("POST /v1/tools/{name}", func(w http.ResponseWriter, r *http.Request) { callTool(w, r, reg, notices) })
 	return mux
 }
 
@@ -37,7 +38,7 @@ func listTools(w http.ResponseWriter, reg *tools.Registry) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-func callTool(w http.ResponseWriter, r *http.Request, reg *tools.Registry) {
+func callTool(w http.ResponseWriter, r *http.Request, reg *tools.Registry, notices Noticer) {
 	p, ok := auth.FromContext(r.Context())
 	if !ok {
 		httpx.WriteError(w, apperr.New(apperr.Unauthenticated, "bearer token required"))
@@ -59,7 +60,7 @@ func callTool(w http.ResponseWriter, r *http.Request, reg *tools.Registry) {
 		httpx.WriteError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"result": result})
+	httpx.WriteJSON(w, http.StatusOK, success{Result: result, Mail: mailFor(r.Context(), notices, p)})
 }
 
 func bodyError(err error) error {

@@ -60,7 +60,7 @@ Tokens don't expire; invite codes do. `bus_revoke_member` is idempotent: it remo
 |`GET /healthz`|none|Liveness; returns `ok`.|
 |`POST /mcp`|bearer|MCP streamable HTTP (stateless, tools only).|
 |`GET /v1/tools`|bearer|Tool list: `[{name, description, inputSchema}]`.|
-|`POST /v1/tools/{name}`|bearer|Call a tool. The body is the JSON args. Success returns `{"result": …}`; failure returns `{"error":{"code","message"}}`.|
+|`POST /v1/tools/{name}`|bearer|Call a tool. The body is the JSON args. Success returns `{"result": …}`, plus `"mail": {"waiting","critical","spaces"}` on the first result after new mail ("You have mail", see [TOOLS.md](TOOLS.md)); failure returns `{"error":{"code","message"}}`.|
 |`POST /v1/invites/accept`|invite code|Redeem an invite code (the bearer) once for a member token: 200 `{"name","space","token"}`; the invite's task, if any, is stored in the same transaction as a `direct_message` from the inviter. An unknown, used, revoked or expired code gets 401 `invalid or expired invite code`.|
 |`GET /v1/inbox/stream`|bearer|SSE: the backlog, then live `event: inbox` frames. Ack with `bus_inbox_ack {upTo}`.|
 |`POST /v1/admin/shutdown`|any admin, loopback only|Graceful shutdown (used by `stop`).|

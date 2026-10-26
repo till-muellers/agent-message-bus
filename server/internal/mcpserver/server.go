@@ -16,11 +16,12 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
 
-// NewHandler returns a bearer-authenticated, stateless MCP HTTP handler serving reg.
-func NewHandler(reg *tools.Registry, a *auth.Service) http.Handler {
+// NewHandler returns a bearer-authenticated, stateless MCP HTTP handler serving reg. A
+// successful tool result gains a trailing "You have mail" text block when notices has one.
+func NewHandler(reg *tools.Registry, a *auth.Service, notices Noticer) http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "agent-message-bus", Version: "1"}, nil)
 	for _, t := range reg.List() {
-		srv.AddTool(&mcp.Tool{Name: t.Name, Description: t.Description, InputSchema: t.Schema}, handler(t))
+		srv.AddTool(&mcp.Tool{Name: t.Name, Description: t.Description, InputSchema: t.Schema}, handler(t, notices))
 	}
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
@@ -28,7 +29,7 @@ func NewHandler(reg *tools.Registry, a *auth.Service) http.Handler {
 	return mw(h)
 }
 
-func handler(t tools.Tool) mcp.ToolHandler {
+func handler(t tools.Tool, notices Noticer) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		p, ok := principalOf(req.Extra.TokenInfo)
 		if !ok {
@@ -42,7 +43,12 @@ func handler(t tools.Tool) mcp.ToolHandler {
 		if err != nil {
 			return errorResult(err)
 		}
-		return successResult(out)
+		res, err := successResult(out)
+		if err != nil {
+			return nil, err
+		}
+		addHint(ctx, notices, p, res)
+		return res, nil
 	}
 }
 

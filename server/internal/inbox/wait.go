@@ -39,7 +39,7 @@ func WaitTimeout(seconds *int) (time.Duration, error) {
 // Wait returns p's matching unacknowledged entries at once, or blocks until one arrives,
 // the timeout passes, ctx ends or the service's root ends (each → []). A dropped live
 // subscription ends the wait with one more read. Wait never acknowledges and never takes
-// the stream slot.
+// the stream slot; like ReadMarking it marks the edges it returns noticed.
 func (s *Service) Wait(ctx context.Context, p auth.Principal, q WaitQuery) ([]Entry, error) {
 	live, unsubscribe := s.pub.Subscribe(topic(p.AgentID))
 	defer unsubscribe()
@@ -66,10 +66,14 @@ func (s *Service) Wait(ctx context.Context, p auth.Principal, q WaitQuery) ([]En
 	}
 }
 
-// matching reads p's entries selected by q, at most waitLimit. A read cut short because
-// the caller went away ends the wait with [] like any other disconnect.
+// matching reads p's entries selected by q, at most waitLimit, and marks the edges among
+// them noticed. A read cut short because the caller went away ends the wait with [] like
+// any other disconnect.
 func (s *Service) matching(ctx context.Context, p auth.Principal, q WaitQuery) ([]Entry, error) {
 	es, err := selectMatching(ctx, s.db, p.AgentID, spaceFilter(p), q)
+	if err == nil {
+		err = s.markSeen(ctx, p.AgentID, es)
+	}
 	if err != nil && ctx.Err() != nil {
 		return []Entry{}, nil
 	}

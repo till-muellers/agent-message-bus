@@ -113,7 +113,7 @@ Facts that are not obvious from the code and that cost time to find out:
 - `agent-message-bus start` detaches the server and returns at once; `stop` ends it.
 - For a throwaway instance, set `AMB_ADDR=127.0.0.1:<port>`, `AMB_DB_PATH=<temp>/x.db` and `AMB_ADMIN_TOKEN=<32+ chars>`. The log is written next to the db.
 - The instance admin token authenticates as the bootstrap admin agent `admin` (kind admin), created on the first start; `bus_whoami` with it returns name `admin`. A dev DB that holds a leader or member named `admin` refuses to start: delete it.
-- The HTTP API is `POST /v1/tools/<name>` with the JSON args as the body and `Authorization: Bearer <token>`. The result comes back as `{"result": …}`.
+- The HTTP API is `POST /v1/tools/<name>` with the JSON args as the body and `Authorization: Bearer <token>`. The result comes back as `{"result": …}`. RPC results may carry `"mail": {"waiting", "critical", "spaces"}`: once, on the first result after new mail reached an empty mailbox (or a critical entry arrived); `bus_inbox_read`, `bus_wait` or the SSE stream returning the entry counts as told, and a full `bus_inbox_ack` lets the next mail notify again. Strict parsers must allow the extra key.
 
 **Loading the working-tree extension**
 - Use `omp -e <repo>/extension/index.ts`. In omp 18.12, `--plugin-dir <repo>` did not register the extension's flags.

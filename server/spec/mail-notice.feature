@@ -22,10 +22,10 @@ Feature: "You have mail" notice (edge-triggered)
   #
   # "listens for notices" / "gets a notice" in this file is the server's notice query
   # (inbox.TakeNotice): it returns what waits in the scope and marks the unnoticed edges
-  # noticed. No agent sees a notice yet; the first channel is the tool-result hint
-  # (slice 13b, mail-hint.feature), which also adds what the notice tells the agent to do.
-  # A notice carries no message bodies: it says how many entries are waiting, how many
-  # are critical and in which spaces.
+  # noticed. Agents see it as the tool-result hint (mail-hint.feature): the RPC "mail"
+  # field and the MCP hint text, which tells the agent what to do. A notice carries no
+  # message bodies: it says how many entries are waiting, how many are critical and in
+  # which spaces, and tells the agent to call bus_inbox_read and then bus_inbox_ack.
 
   Background:
     Given the admin minted leader "lead"
@@ -138,6 +138,7 @@ Feature: "You have mail" notice (edge-triggered)
       Given entries from "lead" and "peer" for "worker" in space "alpha" are waiting, one of them critical
       When member "worker" gets a notice for its "alpha" mailbox
       Then the notice names the scope "alpha", the number of waiting entries and that one is critical
+      And the notice tells the agent to call bus_inbox_read and then bus_inbox_ack
       And the notice contains no message body
 
   # Decided (PO-7, round 6): a critical entry always notifies.

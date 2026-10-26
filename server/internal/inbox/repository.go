@@ -3,6 +3,7 @@ package inbox
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
@@ -43,6 +44,11 @@ const scopeOccupiedSQL = `SELECT EXISTS (SELECT 1 FROM inbox WHERE agent_id = ?
 // markNoticedSQL takes agent_id, space filter (twice; 0 = all spaces).
 const markNoticedSQL = `UPDATE inbox SET noticed = 1
 	WHERE agent_id = ? AND (? = 0 OR space_id = ?) AND edge = 1 AND noticed = 0`
+
+// markEntriesNoticedSQL takes agent_id and a JSON array of entry ids; it marks those of
+// them that are unnoticed edges.
+const markEntriesNoticedSQL = `UPDATE inbox SET noticed = 1
+	WHERE agent_id = ? AND edge = 1 AND noticed = 0 AND id IN (SELECT value FROM json_each(?))`
 
 // waitingSQL takes agent_id, space filter (twice; 0 = all spaces); one row per space.
 const waitingSQL = `SELECT s.name, COUNT(*), SUM(i.critical)
@@ -137,6 +143,18 @@ func markNoticed(ctx context.Context, q db.DBTX, agentID, space int64) (int64, e
 		return 0, fmt.Errorf("counting noticed inbox edges: %w", err)
 	}
 	return n, nil
+}
+
+// markEntriesNoticed marks the unnoticed edges among agentID's entries ids noticed.
+func markEntriesNoticed(ctx context.Context, q db.DBTX, agentID int64, ids []int64) error {
+	list, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("encoding inbox entry ids: %w", err)
+	}
+	if _, err := q.ExecContext(ctx, markEntriesNoticedSQL, agentID, string(list)); err != nil {
+		return fmt.Errorf("marking returned inbox edges of agent %d noticed: %w", agentID, err)
+	}
+	return nil
 }
 
 // waitingIn counts agentID's entries in space (0 = all) and names their spaces.
