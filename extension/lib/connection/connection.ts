@@ -145,6 +145,8 @@ export function createConnection(deps: ConnectionDeps): Connection {
 		},
 		async restart() {
 			inbox.stop();
+			// The posts were handed to the session or identity that is going away.
+			unread.clear();
 			const creds = await resolve();
 			if (!creds) noIdentity();
 			if (!creds || !(await connect(creds))) return deactivateTools(pi, ours());

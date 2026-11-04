@@ -210,11 +210,14 @@ describe("blackboard status line", () => {
 		await app.emit("session_shutdown");
 	});
 
-	test("/bus logout removes the bus entry from the status line", async () => {
-		const app = await withPosts();
-		await app.run("logout");
-		expect(app.statuses.has("agent-bus")).toBe(false);
-		await app.emit("session_shutdown");
+	test("/bus logout and a session switch remove the bus entry from the status line", async () => {
+		for (const leave of ["logout", "session_switch"]) {
+			const app = await withPosts();
+			expect(app.statuses.get("agent-bus")).toBe("bus: 2 new posts in plan/7");
+			await (leave === "logout" ? app.run("logout") : app.emit(leave, { type: leave, reason: "new" }));
+			expect({ leave, status: app.statuses.get("agent-bus") }).toEqual({ leave, status: undefined });
+			await app.emit("session_shutdown");
+		}
 	});
 });
 

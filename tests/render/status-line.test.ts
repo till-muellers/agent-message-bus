@@ -56,6 +56,15 @@ describe("the status line", () => {
 		expect(shown).toEqual(["bus: 1 new post in plan/7"]);
 	});
 
+	test("a removed thread or board takes its counts with it", () => {
+		const { it, last } = unread();
+		it.add([post(1, 7), post(2, 8), post(3, 9, { blackboard: "other" })]);
+		it.add([entry(4, { type: "thread_removed", blackboard: "plan", threadId: 7, class: "deferred" })]);
+		expect(last()).toBe("bus: 1 new post in plan/8 · 1 new post in other/9");
+		it.add([entry(5, { type: "blackboard_removed", blackboard: "plan", class: "deferred" })]);
+		expect(last()).toBe("bus: 1 new post in other/9");
+	});
+
 	test("clear removes the bus entry", () => {
 		const { it, last } = unread();
 		it.add([post(1)]);
