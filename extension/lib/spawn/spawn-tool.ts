@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { type JsonSchema, toZod } from "../bus/schema.ts";
 import type { SpawnRequest, SpawnResult } from "./spawn.ts";
+import { presentationOf } from "../tools/presentation.ts";
 import { toolResult } from "../tools/tool-result.ts";
 
 export const SPAWN_TOOL = "bus_spawn_worker";
@@ -19,15 +20,16 @@ interface SpawnParams {
 
 export type Spawn = (req: SpawnRequest, signal?: AbortSignal) => Promise<SpawnResult>;
 
+/** The documented description (`server/internal/tools/ledger_tail.md.tmpl`, `tool-descriptions.feature`). */
 const DESCRIPTION =
-	"Leaders of the space only. Invites member <name> and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself and gets <task> as its first prompt. Returns {name, space, launcher}; the invite code is never exposed.";
+	"Starts a worker agent: invites member `<name>` and starts it as a separate omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window). The worker joins the space by itself; the invite code is never exposed. Pitfalls: the task is delivered to the worker as a direct message from the caller (a leader or an admin); each worker needs its own name; a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand. Leaders of the space and admins.";
 
 const PARAMETERS: JsonSchema = {
 	type: "object",
 	properties: {
-		space: { type: "string", description: "Space name." },
+		space: { type: "string", description: "Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$." },
 		name: { type: "string", description: "Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$." },
-		task: { type: "string", description: "First prompt for the worker." },
+		task: { type: "string", description: "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report." },
 		cwd: { type: "string", description: "Working directory, relative to this session's; defaults to this session's." },
 	},
 	required: ["space", "name"],
@@ -40,6 +42,7 @@ export function spawnToolDefinition(pi: ExtensionAPI, spawn: Spawn): Parameters<
 		label: SPAWN_TOOL,
 		description: DESCRIPTION,
 		parameters: toZod(PARAMETERS, pi.zod),
+		...presentationOf(SPAWN_TOOL),
 		defaultInactive: true,
 		execute: (_toolCallId: string, params: SpawnParams, signal: AbortSignal | undefined, _onUpdate: unknown, ctx: { cwd: string }) => {
 			const cwd = params.cwd === undefined ? ctx.cwd : resolve(ctx.cwd, params.cwd);

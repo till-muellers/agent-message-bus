@@ -224,6 +224,8 @@ export interface BootTool {
 	description: string;
 	parameters: unknown;
 	defaultInactive?: boolean;
+	loadMode?: string;
+	approval?: string;
 	execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }>;
 }
 

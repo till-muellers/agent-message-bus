@@ -5,7 +5,13 @@ import type { JsonSchema } from "../../extension/lib/bus/schema.ts";
 import { registerRemoteTools, type RemoteToolsOptions } from "../../extension/lib/tools/remote-tools.ts";
 import { entry, errorResponse, URL_, z } from "../fakes.ts";
 
-type FakeTool = { name: string; label: string; execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }> };
+type FakeTool = {
+	name: string;
+	label: string;
+	loadMode?: string;
+	approval?: string;
+	execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }>;
+};
 const listTool = (name: string, inputSchema: JsonSchema = { type: "object", properties: {} }): RemoteTool => ({ name, description: name, inputSchema });
 
 function setup(fetchFn: FetchLike, getActive: RemoteToolsOptions["getActive"] = () => ({ url: URL_, token: "t" })) {
@@ -98,5 +104,26 @@ describe("registerRemoteTools", () => {
 		const { options, register } = setup(async () => Response.json(list));
 		expect(await register({ kind: "sub" })).toBe(3);
 		expect(options.state.names).toEqual(["bus_list_blackboards", "bus_read_thread", "bus_add_post"]);
+	});
+
+	test("every registered tool carries its load mode and approval tier, the local bus_wait included", async () => {
+		const list = [listTool("bus_send_direct"), listTool("bus_delete_space"), listTool("bus_wait"), listTool("bus_something_new")];
+		const { tools, register } = setup(async () => Response.json(list));
+		const wait = { dispatcher: () => undefined, forward: async () => [], consumed: () => {} };
+		await register({ wait });
+		expect(tools.map(t => [t.name, t.loadMode, t.approval])).toEqual([
+			["bus_send_direct", "essential", "read"],
+			["bus_delete_space", "discoverable", "write"],
+			["bus_something_new", "discoverable", "write"],
+			["bus_wait", "essential", "read"],
+		]);
+	});
+
+	test("the mail hint a result carries never reaches the model", async () => {
+		const fetchFn: FetchLike = async url =>
+			url.endsWith("/v1/tools") ? Response.json([listTool("bus_whoami")]) : Response.json({ result: { name: "w" }, mail: { waiting: 2, critical: 0, spaces: ["demo"] } });
+		const { tools, register } = setup(fetchFn);
+		await register();
+		expect((await tools[0].execute("id", {})).content[0].text).toBe(JSON.stringify({ name: "w" }, null, 2));
 	});
 });

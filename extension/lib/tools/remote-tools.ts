@@ -6,6 +6,7 @@ import { errorMessage, NOT_LOGGED_IN } from "../bus/errors.ts";
 import { toZod } from "../bus/schema.ts";
 import { toolResult } from "./tool-result.ts";
 import { attribute, ATTRIBUTED_TOOLS } from "./attribution.ts";
+import { presentationOf } from "./presentation.ts";
 import { selectTools } from "./tool-selection.ts";
 import { WAIT_TOOL, type WaitToolDeps, waitToolDefinition } from "./wait-tool.ts";
 
@@ -53,6 +54,7 @@ function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, options: RemoteTools
 		label: tool.name,
 		description: tool.description,
 		parameters: toZod(tool.inputSchema, pi.zod),
+		...presentationOf(tool.name),
 		execute: (_toolCallId: string, params: Record<string, unknown>) =>
 			toolResult(async () => {
 				const current = getActive();
