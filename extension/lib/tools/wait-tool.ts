@@ -1,7 +1,9 @@
 /**
  * `bus_wait` in omp: a local tool with the server tool's name, description and schema (`docs/design/arch/client.md` §3.4).
  * With the session's own inbox stream it returns the entries the dispatcher still holds at once, else it waits in the
- * dispatcher, so the entries it returns never reach omp a second time and count as consumed; without one it forwards the call to the server's `bus_wait`, which acks nothing.
+ * dispatcher, so the entries it returns never reach omp a second time and count as consumed; without one it forwards the
+ * call to the server's `bus_wait`, which acks nothing. What a forwarded call returns is claimed from the dispatcher: an
+ * entry the session's stream delivered meanwhile is left out, and one it delivers later is skipped there.
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { BusError, type RemoteTool } from "../bus/client.ts";
@@ -24,7 +26,9 @@ export interface WaitToolDeps {
 	dispatcher(): Pick<Dispatcher, "takeHeld" | "waitNext"> | undefined;
 	/** Calls the server's `bus_wait` with a transport timeout. */
 	forward(args: WaitArgs, timeoutMs: number, signal?: AbortSignal): Promise<unknown>;
-	/** The ids the tool returned from the stream: consumed. */
+	/** The entries a forwarded call returned that the session's stream has not delivered (`Dispatcher.claim`). */
+	claim(entries: readonly Entry[]): Entry[];
+	/** The ids the tool returned, from the stream or claimed from a forwarded call: consumed. */
 	consumed(ids: readonly number[]): void;
 }
 
@@ -38,10 +42,21 @@ function waitSeconds({ timeoutSeconds = DEFAULT_SECONDS }: WaitArgs): number {
 	return timeoutSeconds;
 }
 
+const isEntry = (value: unknown): value is Entry => typeof (value as { id?: unknown } | null)?.id === "number";
+
+/** The server's answer without the entries the session's own stream delivered; the rest count as consumed. */
+async function forwarded(args: WaitArgs, seconds: number, deps: WaitToolDeps, signal?: AbortSignal): Promise<unknown> {
+	const result = await deps.forward(args, seconds * 1000 + TRANSPORT_MARGIN_MS, signal);
+	if (!Array.isArray(result) || !result.every(isEntry)) return result;
+	const entries = deps.claim(result);
+	if (entries.length > 0) deps.consumed(entries.map(entry => entry.id));
+	return entries;
+}
+
 async function wait(args: WaitArgs, deps: WaitToolDeps, signal?: AbortSignal): Promise<unknown> {
 	const seconds = waitSeconds(args);
 	const dispatcher = deps.dispatcher();
-	if (!dispatcher) return deps.forward(args, seconds * 1000 + TRANSPORT_MARGIN_MS, signal);
+	if (!dispatcher) return forwarded(args, seconds, deps, signal);
 	const filter = { from: args.from, threadId: args.threadId, after: args.after };
 	const held = dispatcher.takeHeld(filter);
 	const entries: Entry[] = held.length > 0 ? held : await dispatcher.waitNext(filter, seconds * 1000, signal);

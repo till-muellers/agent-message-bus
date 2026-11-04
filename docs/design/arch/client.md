@@ -373,6 +373,7 @@ export function consumedEntryIds(messages: readonly AgentMessage[]): number[];
 export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the server's bus_wait from GET /v1/tools */, deps: {
 	dispatcher(): Pick<Dispatcher, "takeHeld" | "waitNext"> | undefined; // undefined while this session holds no open stream
 	forward(args: WaitArgs, timeoutMs: number, signal?: AbortSignal): Promise<unknown>; // server bus_wait, no ack
+	claim(entries: readonly Entry[]): Entry[];   // Dispatcher.claim of the current start (0de.24)
 	consumed(ids: readonly number[]): void;
 }): ToolDefinition;
 ```
@@ -380,6 +381,7 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 - Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, description and `inputSchema` from `GET /v1/tools`); `tool-selection.ts` excludes the server tool from mirroring. Subagents never register it.
 - Order: `takeHeld(filter)` → non-empty returns at once (E10a); else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`).
 - Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`), and no ack. The same value goes into Bun's `fetch` `timeout` (its socket idle timer, 5 min by default): the server sends nothing until the wait ends, so a 300 s wait would otherwise be cut.
+- Race with the session's own stream (0de.24): what a forwarded call returns goes through `Dispatcher.claim`. An entry the stream already handed over is left out of the result. The rest count as handed over, so the stream skips them when it delivers them (and `handedUpTo` passes them). They are also marked consumed: the watermark acks them only after this start's stream received them, so an entry another session streams is never acked here.
 - `timeoutSeconds` outside 1..300 is refused locally with the server's error (`invalid: timeoutSeconds must be 1..300`).
 - Cancellation: the `execute` `signal` (`CA/extensibility/extensions/types.ts:925-933`) aborts the wait; nothing is consumed.
 - Server dependency: slice 9 (server `bus_wait`, contract `{"result":[Entry…]}`) for the schema and the fallback; it ships under protocol 2 (contracts.md §6), so `MIN_SERVER_PROTOCOL` stays 2.

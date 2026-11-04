@@ -117,6 +117,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 	const wait: WaitToolDeps = {
 		dispatcher: () => (inbox.isOpen() ? delivery.dispatcher : undefined),
 		forward: serverWait(client, getActive),
+		claim: entries => delivery.dispatcher.claim(entries),
 		consumed: consume,
 	};
 	const ours = () => [...tools.names, ...localTools];
