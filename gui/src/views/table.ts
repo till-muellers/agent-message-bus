@@ -1,0 +1,16 @@
+import { type ChildArg, h, type VNode } from "../view/h.ts";
+
+export interface Row {
+	key: string;
+	cells: readonly ChildArg[];
+}
+
+/** A table with a header row; rows are keyed so polling re-renders patch them in place. */
+export function table(head: readonly string[], rows: readonly Row[]): VNode {
+	return h(
+		"table",
+		null,
+		h("thead", null, h("tr", { key: "head" }, head.map((title) => h("th", null, title)))),
+		h("tbody", null, rows.map((row) => h("tr", { key: row.key }, row.cells.map((cell) => h("td", null, cell))))),
+	);
+}

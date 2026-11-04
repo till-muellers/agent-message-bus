@@ -30,16 +30,19 @@ gui/
     main.ts             boot: store + api + router + poller + mount
     style.css           the one stylesheet (a file, never inline: CSP)
     api/
-      api-error.ts      ApiError(status, code, message); errorMessage(unknown)
+      api-error.ts      ApiError(status, code, message); errorMessage(unknown); toApiError(unknown)
       http.ts           fetch wrapper: same-origin credentials, JSON, X-CSRF-Token on non-GET, error envelope → ApiError
-      decode.ts         narrowing decoders for every response (unknown → typed); no `as` casts on wire data
-      types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, Invite, ThreadList, Thread, Entry, Admin)
+      decode.ts         narrowing decoder primitives (fields, text, count, flag, oneOf, list) + session; no `as` casts on wire data
+      decode-state.ts   decoders of GET /web/api/state (space list, space detail); later reads get their own decode-<read>.ts
+      types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadList, Thread, Entry, Admin)
       session.ts        signIn(token), restore(), signOut()
-      reads.ts          state(), spaceState(space), threads(space, board), thread(space, id), inbox(after?)
+      reads.ts          spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox(after?) (GUI-4)
       admins.ts         (W2) listAdmins(), mintAdmin(name), revokeAdmin(name)
       mutations.ts      (W3) invite, cancelInvite(space, id) (DELETE), revoke, post, sendTopic, deleteSpace
     state/
       app-state.ts      AppState, Route, Resource<T> types
+      view-data.ts      ViewData: the current route's data, tagged by view kind
+      same-data.ts      deep equality of decoded data (the "no re-render every 5 s" guard)
       actions.ts        Action union
       reducer.ts        pure (state, action) → state
       store.ts          getState / dispatch / subscribe (~30 lines)
@@ -48,6 +51,7 @@ gui/
       routes.ts         parseRoute(hash) → Route; hrefOf(route) → "#/…" (pure)
       hash-source.ts    hashchange → dispatch(navigate)
     poll/
+      load-view.ts      loadView(reads, route): the request behind a route's view (undefined: no data)
       poller.ts         polls the current route's resource every 5 s while visible; backoff on errors; injected clock
     view/
       h.ts              h(tag, props, ...children) → VNode (plain objects)
@@ -56,8 +60,9 @@ gui/
     views/
       layout.ts         header (signed-in name/kind, nav, sign out), error banner
       login.ts          token form
-      spaces.ts         space list with counts (participants, invites)
-      space.ts          participants, topics, blackboards, open invites
+      table.ts          table(head, rows): a header row and keyed rows
+      spaces.ts         space list: leader and member counts, admin names, open invites with leader rights
+      space.ts          participants, topics, blackboards, recent threads, open invites (leader rights)
       board.ts          threads of a blackboard (most recently active first)
       thread.ts         a thread: title, posts with author and time
       inbox.ts          the signed-in agent's own inbox, read-only
@@ -66,7 +71,7 @@ gui/
       shown-once.ts     (W2/W3) invite code or admin token shown once
       forms.ts          (W3) invite, post, send-to-topic forms
     format/
-      time.ts           relative and absolute times
+      time.ts           server time → local "YYYY-MM-DD HH:MM" (absolute: a deep-equal poll does not re-render, so a relative time would go stale)
   tests/                bun test, one file per src module
 ```
 
@@ -111,7 +116,7 @@ export interface AppState {
 export type Action =
 	| { type: "session/restored"; identity: Identity; csrf: string } | { type: "session/signed-out"; error?: string }
 	| { type: "navigate"; route: Route }
-	| { type: "view/loading" } | { type: "view/loaded"; data: ViewData; at: number } | { type: "view/failed"; error: ApiError }
+	| { type: "view/loading" } | { type: "view/loaded"; route: Route; data: ViewData; at: number } | { type: "view/failed"; route: Route; error: ApiError }   // route: answers for a route already left are dropped
 	| { type: "secret/shown"; label: string; secret: string } | { type: "confirm/open"; confirm: PendingConfirm } | { type: "confirm/close" };
 // state/store.ts
 export interface Store { getState(): AppState; dispatch(action: Action): void; subscribe(listener: (s: AppState) => void): () => void; }
@@ -126,11 +131,11 @@ export function createStore(reducer: (s: AppState, a: Action) => AppState, initi
 
 ```ts
 // poll/poller.ts
-export interface Clock { setTimeout(fn: () => void, ms: number): unknown; clearTimeout(id: unknown): void; now(): number; }
-export function createPoller(deps: { load(route: Route): Promise<ViewData>; store: Store; clock: Clock; visible(): boolean; intervalMs?: number }): { start(): void; stop(): void; refreshNow(): void };
+export interface Clock { setTimeout(fn: () => void, ms: number): number; clearTimeout(id: number): void; now(): number; }
+export function createPoller(deps: { load(route: Route): Promise<ViewData> | undefined; store: Store; clock: Clock; visible(): boolean; intervalMs?: number }): { start(): void; stop(): void; refreshNow(): void };
 ```
 
-- Interval 5 s (`web/analysis.md` §3.5), paused while `document.hidden`, immediate refresh on navigation and after a successful mutation; on errors back off 5 → 10 → 30 s. No SSE in milestone 1 (`live-updates.feature` header); `GET /web/api/events` would replace the poller later without touching views.
+- Interval 5 s (`web/analysis.md` §3.5), paused while `document.hidden` (`main.ts` calls `refreshNow` on `visibilitychange` to visible), immediate refresh on sign-in, on navigation and after a successful mutation; on errors back off 5 → 10 → 30 s. A background refresh keeps the shown data (no "Loading…"); only the first load of a route shows it. No SSE in milestone 1 (`live-updates.feature` header); `GET /web/api/events` would replace the poller later without touching views.
 - The GUI never opens `GET /v1/inbox/stream` and never calls `bus_inbox_ack` (`gui-inbox.feature`, `live-updates.feature:63-76`); the inbox view is a read of `GET /web/api/inbox`.
 
 ---

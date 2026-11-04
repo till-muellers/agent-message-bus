@@ -48,3 +48,23 @@ form {
 [role="alert"] {
 	color: #b3261e;
 }
+
+table {
+	border-collapse: collapse;
+}
+
+th,
+td {
+	padding: 0.25rem 1rem 0.25rem 0;
+	text-align: left;
+	vertical-align: top;
+}
+
+th {
+	border-bottom: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+}
+
+h2 {
+	margin: 1.5rem 0 0.5rem;
+	font-size: 1.2rem;
+}

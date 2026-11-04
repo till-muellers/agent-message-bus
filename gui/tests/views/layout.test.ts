@@ -1,13 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import type { Identity } from "../../src/api/types.ts";
+import { ApiError } from "../../src/api/api-error.ts";
 import type { AppState, Route } from "../../src/state/app-state.ts";
+import type { ViewData } from "../../src/state/view-data.ts";
 import { render } from "../../src/views/layout.ts";
+import { spaceDetail, spaceList } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
 const intents = { signIn: (): void => {}, signOut: (): void => {} };
 
 function signedIn(identity: Identity, route: Route = { name: "spaces" }): AppState {
-	return { session: { status: "signed-in", identity, csrf: "c1" }, route };
+	return { session: { status: "signed-in", identity, csrf: "c1" }, route, view: { status: "idle" } };
+}
+
+const admin: Identity = { kind: "admin", name: "admin" };
+const listData: ViewData = { kind: "spaces", list: spaceList };
+
+function mainOf(state: AppState): string {
+	const [main] = findAll(render(state, intents), byTag("main"));
+	return main ? textOf(main) : "";
 }
 
 function navHrefs(state: AppState): (string | undefined)[] {
@@ -17,13 +28,13 @@ function navHrefs(state: AppState): (string | undefined)[] {
 
 describe("the layout", () => {
 	test("an unknown session shows neither the login nor the app", () => {
-		const view = render({ session: { status: "unknown" }, route: { name: "spaces" } }, intents);
+		const view = render({ session: { status: "unknown" }, route: { name: "spaces" }, view: { status: "idle" } }, intents);
 		expect(findAll(view, byTag("form"))).toEqual([]);
 		expect(findAll(view, byTag("nav"))).toEqual([]);
 	});
 
 	test("a signed-out session shows the login", () => {
-		const view = render({ session: { status: "signed-out" }, route: { name: "spaces" } }, intents);
+		const view = render({ session: { status: "signed-out" }, route: { name: "spaces" }, view: { status: "idle" } }, intents);
 		expect(findAll(view, byTag("form"))).toHaveLength(1);
 	});
 
@@ -73,5 +84,40 @@ describe("the layout", () => {
 		const [main] = findAll(view, byTag("main"));
 		expect(main && textOf(main)).toContain("Page not found");
 		expect(main ? findAll(main, byTag("a")).map((a) => a.attrs.href) : []).toEqual(["#/"]);
+	});
+
+	test("the space list shows its data once it is loaded", () => {
+		const state: AppState = { ...signedIn(admin), view: { status: "ready", data: listData, at: 1 } };
+		expect(findAll(render(state, intents), byTag("table"))).toHaveLength(1);
+	});
+
+	test("a space page shows its detail once it is loaded", () => {
+		const route: Route = { name: "space", space: "demo" };
+		const state: AppState = { ...signedIn(admin, route), view: { status: "ready", data: { kind: "space", detail: spaceDetail }, at: 1 } };
+		expect(findAll(render(state, intents), byTag("h1")).map(textOf)).toEqual(["demo"]);
+	});
+
+	test("the first load of a page says it is loading", () => {
+		expect(mainOf({ ...signedIn(admin), view: { status: "loading" } })).toContain("Loading");
+	});
+
+	test("a failed load shows the server's message and keeps the last data", () => {
+		const error = new ApiError(0, "network", "the server is unreachable");
+		const state: AppState = { ...signedIn(admin), view: { status: "error", error, last: listData } };
+		const view = render(state, intents);
+		const [alert] = findAll(view, (n) => n.attrs.role === "alert");
+		expect(alert && textOf(alert)).toBe("the server is unreachable");
+		expect(findAll(view, byTag("table"))).toHaveLength(1);
+	});
+
+	test("a forbidden or unknown space shows only the server's message", () => {
+		const error = new ApiError(404, "not_found", "space ghost not found");
+		const state: AppState = { ...signedIn(admin, { name: "space", space: "ghost" }), view: { status: "error", error } };
+		expect(mainOf(state)).toBe("space ghost not found");
+	});
+
+	test("data of another page is never shown", () => {
+		const state: AppState = { ...signedIn(admin, { name: "space", space: "demo" }), view: { status: "ready", data: listData, at: 1 } };
+		expect(findAll(render(state, intents), byTag("table"))).toEqual([]);
 	});
 });
