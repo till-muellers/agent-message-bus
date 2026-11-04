@@ -118,7 +118,7 @@ def resolve_out(out: str) -> Path:
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Cross-compile agent-message-bus release binaries.")
+    parser = argparse.ArgumentParser(description="Build the GUI, then cross-compile the release binaries.")
     parser.add_argument("--version", default="dev", help="version embedded in artifact names (default: dev)")
     parser.add_argument("--out", default="dist", help="output directory, relative to the repo root (default: dist)")
     parser.add_argument("--skip-gui", action="store_true", help="build Go only, embedding the current GUI dist dir")

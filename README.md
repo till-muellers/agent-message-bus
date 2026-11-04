@@ -127,7 +127,7 @@ bun run typecheck            # tsc --noEmit with the GUI's own tsconfig
 bun run build                # writes server/internal/web/dist/; rebuild the server to embed it
 ```
 
-From the repo root, `bun run test:gui` and `bun run build:gui` do the same.
+From the repo root, `bun run test:gui` runs the GUI tests and `bun run build:gui` the build.
 
 `python scripts/build.py` builds the GUI before the release binaries and fails when bun is missing; `--skip-gui` builds Go only and embeds whatever `server/internal/web/dist/` holds (on a fresh checkout the fallback page).
 

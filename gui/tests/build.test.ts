@@ -42,4 +42,11 @@ describe("the GUI build", () => {
 		await buildGui(out);
 		expect(existsSync(join(out, ".gitkeep"))).toBe(true);
 	});
+
+	test("the command line builds into the directory given by --out", () => {
+		const out = tempOut();
+		const run = Bun.spawnSync([process.execPath, join(import.meta.dir, "..", "scripts", "build.ts"), "--out", out]);
+		expect(run.exitCode).toBe(0);
+		expect(existsSync(join(out, "index.html"))).toBe(true);
+	});
 });

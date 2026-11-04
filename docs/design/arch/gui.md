@@ -66,7 +66,7 @@ gui/
   tests/                bun test, one file per src module
 ```
 
-Why a separate package (web analysis §3.6): the root `package.json` **is the omp plugin** (`@till-muellers/omp-agent-message-bus`, installed from GitHub), and the GUI is not part of the plugin; the Go module must stay free of `node_modules`. `gui/package.json` adds no new package names (only `typescript` and `@types/bun`, already root devDependencies), so it needs no extra approval beyond PO-10. The root `tsconfig.json` keeps `include: ["extension", "tests"]` (unchanged), so the root `tsc` and `bun test tests/` never see `gui/`.
+Why a separate package (web analysis §3.6): the root `package.json` **is the omp plugin** (`@till-muellers/omp-agent-message-bus`, installed from GitHub), and the GUI is not part of the plugin; the Go module must stay free of `node_modules`. `gui/package.json` adds no new package names (only `typescript` and `@types/bun`, already root devDependencies), so it needs no extra approval beyond PO-10. The root `tsconfig.json` keeps `include: ["extension", "tests"]` (unchanged) and the root `bunfig.toml` sets the test root to `tests` (bun's path arguments are substring filters, so `bun test tests/` alone would match `gui/tests/`), so the root `tsc` and `bun test` never see `gui/`.
 
 `gui/tsconfig.json` (key options): `strict`, `noEmit`, `allowImportingTsExtensions`, `verbatimModuleSyntax`, `isolatedModules`, `noUncheckedIndexedAccess`, `lib: ["ESNext", "DOM", "DOM.Iterable"]`, `types: ["bun"]`, `moduleResolution: "bundler"`. Imports use `.ts` extensions (`.omp/AGENTS.md` TypeScript rules).
 

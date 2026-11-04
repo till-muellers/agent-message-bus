@@ -40,7 +40,7 @@ export async function buildGui(outDir: string): Promise<void> {
 }
 
 if (import.meta.main) {
-	const { values } = parseArgs({ options: { out: { type: "string", default: DEFAULT_OUT } } });
+	const { values } = parseArgs({ options: { out: { type: "string" } } });
 	const outDir = resolve(values.out ?? DEFAULT_OUT);
 	await buildGui(outDir);
 	console.log(`GUI built into ${outDir}`);

@@ -186,6 +186,6 @@ go test -race ./...            # needs CGO; or: docker run --rm -v "$PWD:/src" -
 cd ..
 bun test
 bun run typecheck
-cd gui && bun test && bun run typecheck && cd ..
+(cd gui && bun test && bun run typecheck)
 pytest tests
 ```
