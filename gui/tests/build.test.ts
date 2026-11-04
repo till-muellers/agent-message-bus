@@ -26,6 +26,15 @@ describe("the GUI build", () => {
 		expect(existsSync(join(out, "assets", src ?? ""))).toBe(true);
 	});
 
+	test("index.html links the hashed stylesheet it wrote", async () => {
+		const out = tempOut();
+		await buildGui(out);
+		const html = readFileSync(join(out, "index.html"), "utf8");
+		const href = html.match(/<link rel="stylesheet" href="\/web\/assets\/(style-[^"]+\.css)">/)?.[1];
+		expect(href).toBeDefined();
+		expect(existsSync(join(out, "assets", href ?? ""))).toBe(true);
+	});
+
 	test("stale assets of an earlier build are removed", async () => {
 		const out = tempOut();
 		mkdirSync(join(out, "assets"));
@@ -33,7 +42,7 @@ describe("the GUI build", () => {
 		await buildGui(out);
 		const files = readdirSync(join(out, "assets"));
 		expect(files).not.toContain("main-stale.js");
-		expect(files).toHaveLength(1);
+		expect(files).toHaveLength(2);
 	});
 
 	test("files next to the assets, such as the embed placeholder, are kept", async () => {
