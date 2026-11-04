@@ -109,12 +109,19 @@ Before it invites anybody, the spawn checks the plugin version the worker would 
 Only top-level sessions stream the inbox; subagents don't.
 
 
-The extension holds `GET /v1/inbox/stream` open. For each `inbox` event it sends a custom message (`customType: "agent-bus"`, displayed) that carries the id of the entry. The entry is acked (`bus_inbox_ack {upTo: id}`) once a model request contains that message: the ack advances over the consumed entries in order, so an entry that is consumed before an older one holds the ack until the older one is consumed too. The ack deletes the acked entries on the server. A failed ack is logged as `agent-bus: <message>`; the entries stay on the server and are replayed on the next connection.
+The extension holds `GET /v1/inbox/stream` open. For each `inbox` event it sends a custom message (`customType: "agent-bus"`, displayed) whose details carry the entry (`details.entryIds` and `details.entries`, the entry's known fields). The entry is acked (`bus_inbox_ack {upTo: id}`) once a model request contains that message: the ack advances over the consumed entries in order, so an entry that is consumed before an older one holds the ack until the older one is consumed too. The ack deletes the acked entries on the server. A failed ack is logged as `agent-bus: <message>`; the entries stay on the server and are replayed on the next connection.
+
+The model sees one fenced envelope per entry, the same text in every mode (`tui`, `rpc`, `print`, `json`):
 
 ```text
+<agent-bus-entry space="<space>" type="<type>" from="<sender>" id="<id>"[ critical="true"]>
 [agent-bus] <space> · <where> · from <sender>[ · CRITICAL]
 <body>
+<reply hint>
+</agent-bus-entry>
 ```
+
+`<where>` is `direct`, `topic #<t>`, `topic #<t> closed`, `thread <id> "<title>" on <board>`, `thread <id> "<title>" removed` or `blackboard <board> removed`. The reply hint names the tool to answer with: `Reply: bus_send_direct {space, to}.` for a direct message, `Reply: bus_send_topic {space, topic}, or bus_send_direct {space, to}.` for a topic message, `Full thread: bus_read_thread {space, threadId}. Answer: bus_add_post {space, threadId}.` for a thread post; lifecycle notices have none. Sender, space and `critical` come from the entry's fields. In the body and the thread title, `<agent-bus-entry`, `</agent-bus-entry`, `<agent-bus-context` and `</agent-bus-context` are escaped as `&lt;…`, so a body cannot close the envelope or forge another one; a forged `[agent-bus] … · CRITICAL` line stays inside the envelope as plain body text.
 
 The server stamps every entry with a delivery **class**; the class and the phase of the session decide how the entry enters it:
 

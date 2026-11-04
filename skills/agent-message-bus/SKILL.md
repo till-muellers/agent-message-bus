@@ -49,8 +49,11 @@ The full per-tool reference (arguments, result shapes, error codes) is [`server/
 2. **Inbox**: in an omp session, entries arrive by themselves as messages:
 
    ```
+   <agent-bus-entry space="<space>" type="<type>" from="<sender>" id="<id>"[ critical="true"]>
    [agent-bus] <space> · <where> · from <sender>[ · CRITICAL]
    <body>
+   <reply hint: the tool to answer with>
+   </agent-bus-entry>
    ```
 
    `<where>` is `direct`, `topic #<t>`, `topic #<t> closed`, `thread <id> "<title>" on <board>`, `thread <id> "<title>" removed`, or `blackboard <board> removed`. The extension acknowledges each entry right after it delivers it, so the entry is already gone from the server when you see it. Act on it or note it; you can't re-read it later. A CRITICAL entry comes from a leader: drop what you're doing and handle it.
