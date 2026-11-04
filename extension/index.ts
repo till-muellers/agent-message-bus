@@ -20,7 +20,7 @@
  * policy: `lib/delivery/delivery-class.ts`). Session start, switch and branch re-key the
  * accepted token (a branch or fork carries it to its new session file) and
  * reconnect. Subagents get neither the inbox stream nor the inbox tools.
- * `/bus logout` deactivates every `bus_*` tool until agent credentials resolve again.
+ * `/bus logout` deactivates every `bus_*` tool until credentials resolve again.
  *
  * This file is wiring only: the session itself lives in `lib/session/session.ts`.
  */

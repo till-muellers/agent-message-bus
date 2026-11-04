@@ -19,15 +19,18 @@ const ACCEPTED: ActiveCredentials = { url: "http://accepted", token: "accepted-t
 const STORED: StoredCredentials = { url: "http://stored", token: "stored-tok" };
 
 describe("resolve", () => {
-	test("precedence: promote > env > accepted > stored agent token", () => {
-		const stored = { url: STORED.url, token: STORED.token };
+	test("precedence: promote > env > accepted > stored agent token > stored admin token", () => {
+		const stored = { url: STORED.url, token: STORED.token, adminToken: "admin-tok" };
+		const adminOnly = { url: "http://admin/", adminToken: "admin-tok" };
 		const cases: { name: string; build: () => SessionCredentials; stored?: StoredCredentials; want?: ResolvedCredentials }[] = [
 			{ name: "promote wins over everything", build: () => promoteThenEnv(), stored, want: { ...PROMOTED, source: "promote" } },
 			{ name: "env wins over accepted and stored", build: () => envThenAccepted(), stored, want: { ...ENV, source: "env" } },
 			{ name: "accepted wins over stored", build: () => acceptedOnly(), stored, want: { ...ACCEPTED, source: "accepted" } },
-			{ name: "the stored agent token is the last resort", build: () => empty(), stored, want: { url: "http://stored", token: "stored-tok", source: "stored-agent" } },
+			{ name: "the stored agent token wins over the stored admin token", build: () => empty(), stored, want: { url: "http://stored", token: "stored-tok", source: "stored-agent" } },
+			{ name: "the stored admin token is the last resort", build: () => empty(), stored: adminOnly, want: { url: "http://admin", token: "admin-tok", source: "stored-admin" } },
+			{ name: "a promoted leader wins over the stored admin token", build: () => promoteThenEnv(), stored: adminOnly, want: { ...PROMOTED, source: "promote" } },
 			{ name: "nothing resolves without a stored token", build: () => empty(), want: undefined },
-			{ name: "an admin-only store has no agent session", build: () => empty(), stored: { url: "http://admin" }, want: undefined },
+			{ name: "a store with only a url has no session", build: () => empty(), stored: { url: "http://none" }, want: undefined },
 		];
 		for (const c of cases) {
 			expect({ name: c.name, resolved: c.build().resolve(c.stored) }).toEqual({ name: c.name, resolved: c.want });

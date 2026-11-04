@@ -99,6 +99,14 @@ describe("runCommand", () => {
 		);
 	});
 
+	test("status of an admin-only login shows that admin; the stored agent token wins over it", async () => {
+		const client = clientWith({ tools: { bus_whoami: whoami({ adm: { kind: "admin", name: "admin", spaces: [] }, mem: { kind: "member", name: "w", spaces: [] } }) } });
+		const adminOnly = commandDeps(memoryStore({ url: `${URL_}/`, adminToken: "adm" }), client);
+		const both = commandDeps(memoryStore({ url: URL_, adminToken: "adm", token: "mem" }), client);
+		expect((await runCommand("status", adminOnly)).message.split("\n")[0]).toBe(`${URL_}: admin admin; spaces: none`);
+		expect((await runCommand("status", both)).message.split("\n")[0]).toBe(`${URL_}: member w; spaces: none`);
+	});
+
 	test("status shows the extension version, the installed plugin version and the warning when the installed plugin is older", async () => {
 		const client = clientWith({ tools: { bus_whoami: whoami({ mem: { kind: "member", name: "w", spaces: [] } }) } });
 		const deps = commandDeps(memoryStore({ url: URL_, token: "mem" }), client);

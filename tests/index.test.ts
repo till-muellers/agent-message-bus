@@ -135,21 +135,18 @@ describe("inbox streaming", () => {
 		}
 	});
 
-	test("promote streams as the minted leader without writing its token to credentials.json; a new session forgets it", async () => {
+	test("promote streams as the minted leader instead of the stored admin, never writes its token, and a new session forgets it", async () => {
 		const env = { OMP_AGENT_BUS_DIR: await tempDir() };
 		const store = createCredentialStore(env);
 		await store.save({ url: URL_, adminToken: "adm" });
-		const bus = fakeBus({
-			streams: [() => new Response(streamOf([frame(entry(1))]))],
-			tools: { bus_mint_leader: args => Response.json({ result: { name: args.name, token: "lead-tok" } }) },
-		});
+		const bus = fakeBus({ tools: { bus_mint_leader: args => Response.json({ result: { name: args.name, token: "lead-tok" } }) } });
 		const app = await boot({ fetchFn: bus.fetchFn, env });
 		await app.emit("session_start");
 		await app.run("promote lead");
-		await app.warning("invalid token");
 		await app.emit("session_shutdown");
 		await app.emit("session_start");
-		expect(callsTo(bus, "/v1/inbox/stream").map(c => c.auth)).toEqual(["Bearer lead-tok", "Bearer lead-tok"]);
+		await app.emit("session_shutdown");
+		expect(callsTo(bus, "/v1/inbox/stream").map(c => c.auth)).toEqual(["Bearer adm", "Bearer lead-tok", "Bearer adm"]);
 		expect(await store.load()).toEqual({ url: URL_, adminToken: "adm" });
 	});
 });
@@ -417,15 +414,18 @@ describe("tool activation and credentials", () => {
 		expect(app.active()).toEqual(["read", "bus_list_spaces", "bus_spawn_worker"]);
 	});
 
-	test("an admin login without agent credentials switches no bus tool on", async () => {
+	test("an admin-only login is a full agent session of that admin: its tools are active and its inbox stream opens", async () => {
 		const env = { OMP_AGENT_BUS_DIR: await tempDir() };
-		const bus = fakeBus({ tools: { bus_whoami: () => Response.json({ result: { kind: "admin", spaces: [] } }) } });
+		const schema = { type: "object" as const, properties: {} };
+		const list = ["bus_mint_admin", "bus_list_admins", "bus_revoke_admin", "bus_inbox_read", "bus_inbox_ack"].map(name => ({ name, description: name, inputSchema: schema }));
+		const bus = fakeBus({ list, tools: { bus_whoami: () => Response.json({ result: { kind: "admin", name: "ops", spaces: [] } }) } });
 		const app = await boot({ fetchFn: bus.fetchFn, env });
 		await app.emit("session_start");
 		await app.run(`login ${URL_} adm`);
 		await app.emit("session_shutdown");
 		expect(app.notes).toEqual(["Admin token stored. Run /bus promote <leader-name> to act as a leader."]);
-		expect(app.active()).toEqual(["read", "bus_foreign"]);
+		expect(app.active()).toEqual(["read", "bus_foreign", "bus_mint_admin", "bus_list_admins", "bus_revoke_admin", "bus_inbox_read", "bus_spawn_worker"]);
+		expect(callsTo(bus, "/v1/inbox/stream").map(c => c.auth)).toEqual(["Bearer adm"]);
 	});
 
 	test("env credentials are deleted from the environment at load, used from memory, and logout leaves no env fallback", async () => {
@@ -691,7 +691,7 @@ describe("local server", () => {
 		return { runs, runner };
 	}
 
-	test("/bus server start runs start, status --json, admin-token; stores the admin credentials and switches no bus tool on without agent credentials", async () => {
+	test("/bus server start runs start, status --json, admin-token; stores the admin credentials and acts as that admin without agent credentials", async () => {
 		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_BIN: "/opt/amb" };
 		const store = createCredentialStore(env);
 		await store.save({ url: URL_, token: "mem" });
@@ -706,7 +706,7 @@ describe("local server", () => {
 			["/opt/amb", "admin-token"],
 		]);
 		expect(await store.load()).toEqual({ url: "http://127.0.0.1:8080", adminToken: "amb_admin_secret" });
-		expect(app.active()).toEqual(["read"]);
+		expect(app.active()).toEqual(["read", "bus_list_spaces", "bus_spawn_worker"]);
 		expect(app.notes[1]).toBe("Agent message bus running at http://127.0.0.1:8080; admin token stored. Run /bus promote <leader-name> to act as a leader.");
 	});
 
