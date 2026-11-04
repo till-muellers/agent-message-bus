@@ -70,6 +70,27 @@ export function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
 	});
 }
 
+/** An inbox stream that stays open: `opened` resolves once the extension reads it; `push` sends an entry, `close` ends it. */
+export function liveStream() {
+	const encoder = new TextEncoder();
+	const opened = Promise.withResolvers<void>();
+	let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+	// No queue to fill ahead: `pull` runs only when the extension reads.
+	const body = new ReadableStream<Uint8Array>(
+		{
+			start: c => void (controller = c),
+			pull: () => opened.resolve(),
+		},
+		{ highWaterMark: 0 },
+	);
+	return {
+		response: () => new Response(body),
+		opened: opened.promise,
+		push: (e: Entry) => controller?.enqueue(encoder.encode(frame(e))),
+		close: () => controller?.close(),
+	};
+}
+
 export function entry(id: number, extra: Partial<Entry> = {}): Entry {
 	return { id, space: "demo", type: "direct_message", from: "lead", critical: false, class: "queue", body: `body ${id}`, createdAt: "t", ...extra };
 }

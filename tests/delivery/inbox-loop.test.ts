@@ -15,16 +15,18 @@ async function runLoop(streams: (() => Response)[], tools: Record<string, ToolHa
 	const errors: string[] = [];
 	const conflicts: string[] = [];
 	const delays: number[] = [];
+	const open: boolean[] = [];
 	await runInboxLoop({
 		client: createClient(bus.fetchFn),
 		getActive: () => ({ url: URL_, token: "tok" }),
 		signal,
-		dispatcher: { receive: (e: Entry) => void delivered.push(e.id), handedUpTo: async () => true } satisfies Dispatcher,
+		dispatcher: { receive: (e: Entry) => void delivered.push(e.id), handedUpTo: async () => true, waitNext: async () => [] } satisfies Dispatcher,
 		onError: error => void errors.push(error.message),
 		onConflict: async (error: BusError) => void conflicts.push(error.code),
+		onStream: isOpen => void open.push(isOpen),
 		sleep: async ms => void delays.push(ms),
 	});
-	return { bus, delivered, errors, conflicts, delays };
+	return { bus, delivered, errors, conflicts, delays, open };
 }
 
 describe("runInboxLoop", () => {
@@ -63,6 +65,11 @@ describe("runInboxLoop", () => {
 		expect(conflicts).toEqual(["conflict", "conflict"]);
 		expect(delays).toEqual([1000, 2000, 1000, 2000]);
 		expect(errors).toEqual(["invalid token"]);
+	});
+
+	test("the stream is reported open while it is read and closed when it ends; a refused open reports nothing", async () => {
+		const { open } = await runLoop([() => new Response(streamOf([frame(entry(1))])), conflict, () => new Response(streamOf([]))]);
+		expect(open).toEqual([true, false, true, false]);
 	});
 
 	test("401 and 403 stay fatal", async () => {

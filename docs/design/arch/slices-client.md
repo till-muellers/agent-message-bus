@@ -114,11 +114,11 @@ S4  logs:    omp log lines "agent-bus: …"; server log next to the db
 - **Risks:** `[INFERENCE]` omp keeps one factory per process for subagents (`CA/extensibility/extensions/loader.ts:568-575`) → smoke step 1; failure mode is "no tools" (safe).
 - **Smoke:** S0–S2 with `/bus login <url> <admin>` + `/bus promote lead`; subagent posts → author `lead`; `/bus logout` → subagent's next post fails.
 
-### E6 Local `bus_wait` shadow + dispatcher hold
-- **Goal:** local `bus_wait` with the server schema; dispatcher `takeHeld`/`waitNext`; fallback to server `bus_wait` without a stream; consumed ids count for the watermark (`client.md` §3.4).
-- **Specs:** `omp-tools.feature` `bus_wait` rule (all 9 scenarios); `omp-mail-delivery.feature` rule 4; `omp-delivery.feature` "An entry returned by bus_wait counts as consumed".
-- **Files:** new `tools/wait-tool.ts`; `delivery/dispatcher.ts`, `tools/tool-selection.ts` (shadow), `index.ts`. `MIN_SERVER_PROTOCOL` stays 2: server `bus_wait` (9) ships under protocol 2 (`contracts.md` §6).
-- **Tests:** waiter gets the entry and it is not handed to omp; held entries returned at once; `from`/`threadId`/`after` filters; timeout `[]`; abort consumes nothing; conflict → forwards, no ack; the server fallback call uses a transport timeout of `timeoutSeconds + 10 s` (CR-7, `contracts.md` §2.5); the local shadow's schema equals the server's from `GET /v1/tools` (CR-9).
+### E6 Local `bus_wait` shadow
+- **Goal:** local `bus_wait` with the server schema; dispatcher `waitNext`; fallback to server `bus_wait` without a stream; consumed ids count for the watermark (`client.md` §3.4). The dispatcher holds nothing until E10a, so `takeHeld` and the "held entries returned at once" scenario land with E10a.
+- **Specs:** `omp-tools.feature` `bus_wait` rule (8 of 9 scenarios; "returns at once with the entries still held by the dispatcher" in E10a); `omp-mail-delivery.feature` rule 4; `omp-delivery.feature` "An entry returned by bus_wait counts as consumed".
+- **Files:** new `tools/wait-tool.ts`, `delivery/waiters.ts`, `delivery/consumer.ts`; `delivery/dispatcher.ts`, `delivery/inbox-loop.ts` + `inbox-runner.ts` (stream open/closed), `bus/client.ts` (`callTool` signal and transport timeout), `tools/remote-tools.ts` (registers the shadow), `connection/connection.ts` (owns watermark and acker), `session/session.ts`, `context/context-handler.ts`, `index.ts`. `MIN_SERVER_PROTOCOL` stays 2: server `bus_wait` (9) ships under protocol 2 (`contracts.md` §6).
+- **Tests:** waiter gets the entry and it is not handed to omp; `from`/`threadId`/`after` filters; timeout `[]`; abort consumes nothing; conflict → forwards, no ack; the server fallback call uses a transport timeout of `timeoutSeconds + 10 s` (CR-7, `contracts.md` §2.5); the local shadow's schema equals the server's from `GET /v1/tools` (CR-9).
 - **Docs:** `extension/README.md` "Tools" (`bus_wait` in omp).
 - **Depends on:** server 9, E2. **Size:** M.
 - **Risks:** the fallback call needs a transport timeout ≥ `timeoutSeconds + 10 s` (contracts.md §2.5); `bus_wait` name collides with the server tool if mirroring forgets the shadow → selection test.
@@ -184,12 +184,12 @@ S4  logs:    omp log lines "agent-bus: …"; server log next to the db
 - **Smoke:** S0–S1, `/bus spawn demo w1 "say hello on topic all"` from lead (tui worker starts working on the DM); `omp -p "do the task in your inbox" --bus-url … --bus-accept <code>` → the run's answer reflects the task.
 
 ### E10a Blackboard notices (PO-5)
-- **Goal:** compact post notices; per-thread coalescing of `holdable` (queue-class) entries that carry a `threadId` while busy; mechanisms only from `mechanismFor` (so `interrupt` posts steer in full and `deferred` notices wait for the next turn without special code) (`client.md` §3.5).
-- **Specs:** `omp-parity/omp-blackboards.feature` rules 1-3.
-- **Files:** new `delivery/post-notices.ts`; `delivery/dispatcher.ts`, `render/envelope.ts` (`postNotice`).
-- **Tests:** short/long post text; 3 posts within the window → one message with 3 `entryIds`, acked together; different threads separate; idle → no hold; lifecycle → `nextTurn`.
+- **Goal:** compact post notices; per-thread coalescing of `holdable` (queue-class) entries that carry a `threadId` while busy; mechanisms only from `mechanismFor` (so `interrupt` posts steer in full and `deferred` notices wait for the next turn without special code) (`client.md` §3.5). The dispatcher hold comes with it: `takeHeld`, so `bus_wait` returns held entries at once (moved from E6).
+- **Specs:** `omp-parity/omp-blackboards.feature` rules 1-3; `omp-tools.feature` "bus_wait returns at once with the entries still held by the dispatcher".
+- **Files:** new `delivery/post-notices.ts`; `delivery/dispatcher.ts` (hold + `takeHeld`), `tools/wait-tool.ts` (`takeHeld` before `waitNext`), `render/envelope.ts` (`postNotice`).
+- **Tests:** short/long post text; 3 posts within the window → one message with 3 `entryIds`, acked together; different threads separate; idle → no hold; lifecycle → `nextTurn`; held entries returned at once by `bus_wait` and never handed to omp afterwards.
 - **Docs:** `extension/README.md` "Inbox delivery" (notices).
-- **Depends on:** E2, E5a, E6 (held entries are takeable by `bus_wait`). **Size:** M.
+- **Depends on:** E2, E5a, E6. **Size:** M.
 - **Risks:** `[INFERENCE]` window vs step boundary → smoke step 1; tune the window constant.
 - **Smoke:** worker busy in `sleep 20`; `peer` posts 3 times to a subscribed thread within 1 s → one notice after the tool returns; a 200-line post → head + "lines left out".
 

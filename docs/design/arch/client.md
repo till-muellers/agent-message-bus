@@ -327,13 +327,14 @@ No upstream-pi fallback (PO-6): `followUp` is gone from the extension, and there
 // lib/delivery/dispatcher.ts — one per connection start; reset on restart (session switch drops asides, R2)
 export interface Dispatcher {
 	receive(entry: Entry): void;
-	/** bus_wait: held entries matching `filter`, removed from the hold (never handed to omp afterwards). */
+	/** bus_wait (E10a): held entries matching `filter`, removed from the hold (never handed to omp afterwards). */
 	takeHeld(filter: WaitFilter): Entry[];
-	/** bus_wait: the next matching entry, routed to the waiter instead of omp; [] on timeout/abort. */
+	/** bus_wait (E6): the next matching entry, routed to the waiter instead of omp; [] on timeout/abort. */
 	waitNext(filter: WaitFilter, timeoutMs: number, signal?: AbortSignal): Promise<Entry[]>;
 	/** First-prompt bounded wait (E9b): resolves when every id <= `id` was handed over, or after `ms`. */
 	handedUpTo(id: number, ms: number): Promise<boolean>;
 }
+// lib/delivery/waiters.ts — the pending bus_wait calls of a dispatcher (E6)
 export interface WaitFilter { from?: string; threadId?: number; after?: number; }
 export function createDispatcher(deps: { handOver(message: BusMessage, mechanism: Mechanism): void; watermark: AckWatermark; phase: () => SessionPhase; }): Dispatcher;
 ```
@@ -348,6 +349,8 @@ export interface AckWatermark {
 }
 // lib/delivery/acker.ts — calls bus_inbox_ack {upTo}; failures only warned (as today, lib/inbox.ts:58-66)
 export function createAcker(deps: { client: BusClient; getActive(): ActiveCredentials | undefined; warn(m: string): void }): (upTo: number) => Promise<void>;
+// lib/delivery/consumer.ts (E6) — consumed ids → watermark → acker; fed by the context handler and by bus_wait
+export function createConsumer(deps: { watermark: AckWatermark; ack(upTo: number): Promise<void> }): (ids: readonly number[]) => void;
 // lib/delivery/consumption.ts — pure: entry ids of agent-bus messages present in a model request
 export function consumedEntryIds(messages: readonly AgentMessage[]): number[];
 ```
@@ -362,17 +365,17 @@ export function consumedEntryIds(messages: readonly AgentMessage[]): number[];
 
 ```ts
 // lib/tools/wait-tool.ts
-export function waitToolDefinition(pi: ExtensionAPI, deps: {
-	dispatcher(): Dispatcher | undefined;           // undefined when this session holds no stream
-	forward(args: WaitArgs, signal?: AbortSignal): Promise<Entry[]>; // server bus_wait, no ack
+export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the server's bus_wait from GET /v1/tools */, deps: {
+	dispatcher(): Pick<Dispatcher, "waitNext"> | undefined;           // undefined while this session holds no open stream
+	forward(args: WaitArgs, timeoutMs: number, signal?: AbortSignal): Promise<unknown>; // server bus_wait, no ack
 	consumed(ids: readonly number[]): void;
-	schema: JsonSchema;                              // the server's bus_wait inputSchema from GET /v1/tools
 }): ToolDefinition;
 ```
 
-- Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, the server's `inputSchema` from `GET /v1/tools`); `tool-selection.ts` excludes the server tool from mirroring. Subagents never register it.
-- Order: `takeHeld(filter)` → non-empty returns at once; else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`).
-- Without a stream (409 conflict, or stream not open) → `forward` to `POST /v1/tools/bus_wait`, and no ack.
+- Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, description and `inputSchema` from `GET /v1/tools`); `tool-selection.ts` excludes the server tool from mirroring. Subagents never register it.
+- Order: `takeHeld(filter)` → non-empty returns at once (E10a, when the dispatcher starts holding); else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`).
+- Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`), and no ack. The same value goes into Bun's `fetch` `timeout` (its socket idle timer, 5 min by default): the server sends nothing until the wait ends, so a 300 s wait would otherwise be cut.
+- `timeoutSeconds` outside 1..300 is refused locally with the server's error (`invalid: timeoutSeconds must be 1..300`).
 - Cancellation: the `execute` `signal` (`CA/extensibility/extensions/types.ts:925-933`) aborts the wait; nothing is consumed.
 - Server dependency: slice 9 (server `bus_wait`, contract `{"result":[Entry…]}`) for the schema and the fallback; it ships under protocol 2 (contracts.md §6), so `MIN_SERVER_PROTOCOL` stays 2.
 

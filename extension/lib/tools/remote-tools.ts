@@ -7,6 +7,7 @@ import { toZod } from "../bus/schema.ts";
 import { toolResult } from "./tool-result.ts";
 import { attribute, ATTRIBUTED_TOOLS } from "./attribution.ts";
 import { selectTools } from "./tool-selection.ts";
+import { WAIT_TOOL, type WaitToolDeps, waitToolDefinition } from "./wait-tool.ts";
 
 /** Per-session registration: tools are fetched and registered once; logout does not reset it. */
 export interface RegistrationState {
@@ -26,6 +27,23 @@ export interface RemoteToolsOptions {
 	kind: "main" | "sub";
 	/** The id of the subagent that writes through this session; undefined in a main session. */
 	agentId?: string;
+	/** What the local `bus_wait` of a main session waits with; a subagent has none. */
+	wait?: WaitToolDeps;
+}
+
+/** A tool this session registers: its name and how to build its definition. */
+interface Registration {
+	name: string;
+	define(): Parameters<ExtensionAPI["registerTool"]>[0];
+}
+
+/** The tools this session registers: the selected server tools and, in a main session, the local `bus_wait` on the server's schema. */
+function registrations(pi: ExtensionAPI, tools: readonly RemoteTool[], options: RemoteToolsOptions): Registration[] {
+	const { kind, wait } = options;
+	const shadow = kind === "main" && wait ? tools.find(tool => tool.name === WAIT_TOOL) : undefined;
+	const remote = selectTools(tools, kind).map(tool => ({ name: tool.name, define: () => toolDefinition(pi, tool, options) }));
+	if (!shadow || !wait) return remote;
+	return [...remote, { name: WAIT_TOOL, define: () => waitToolDefinition(pi, shadow, wait) }];
 }
 
 function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, options: RemoteToolsOptions): Parameters<ExtensionAPI["registerTool"]>[0] {
@@ -55,12 +73,12 @@ export async function registerRemoteTools(pi: ExtensionAPI, options: RemoteTools
 	if (!active) return 0;
 	const tools = await client.listTools(active.url, active.token);
 	state.registered = true;
-	for (const tool of selectTools(tools, kind)) {
+	for (const { name, define } of registrations(pi, tools, options)) {
 		try {
-			pi.registerTool(toolDefinition(pi, tool, options));
-			state.names.push(tool.name);
+			pi.registerTool(define());
+			state.names.push(name);
 		} catch (error) {
-			warn(`tool ${tool.name} not registered: ${errorMessage(error)}`);
+			warn(`tool ${name} not registered: ${errorMessage(error)}`);
 		}
 	}
 	return state.names.length;
