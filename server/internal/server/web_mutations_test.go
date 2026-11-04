@@ -441,13 +441,21 @@ func TestWebMutationsCSRF(t *testing.T) {
 	}
 }
 
-// TestMutationLogLine swaps the default logger, so it must not run in parallel; the
-// services capture slog.Default() when the world is built.
-func TestMutationLogLine(t *testing.T) {
+// captureLog points slog.Default() (and the log package behind it) at a buffer until t
+// ends. The services capture slog.Default() when the world is built, so build it after
+// this call; a test using it must not run in parallel.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
 	var buf bytes.Buffer
 	prev, prevOut, prevFlags := slog.Default(), log.Writer(), log.Flags()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev); log.SetOutput(prevOut); log.SetFlags(prevFlags) })
+	return &buf
+}
+
+// TestMutationLogLine swaps the default logger, so it must not run in parallel.
+func TestMutationLogLine(t *testing.T) {
+	buf := captureLog(t)
 	w := mutationWorld(t)
 	callTool(t, w.api, w.lead, "bus_create_space", `{"space":"other"}`, nil)
 	s := w.open(t, w.ops)
@@ -463,7 +471,7 @@ func TestMutationLogLine(t *testing.T) {
 		w.send(t, rq.method, rq.path, rq.body, s, s.csrf)
 	}
 	want := []string{"invite demo new", "post demo 1", "send other all", "revoke demo worker", "delete-space other other"}
-	if got := mutationLines(t, &buf, w.ops); strings.Join(got, "|") != strings.Join(want, "|") {
+	if got := mutationLines(t, buf, w.ops); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("web mutation lines = %q, want %q", got, want)
 	}
 }
