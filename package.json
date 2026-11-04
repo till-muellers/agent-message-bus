@@ -33,7 +33,9 @@
 	],
 	"scripts": {
 		"test": "bun test tests/",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"test:gui": "bun test --cwd gui",
+		"build:gui": "bun run --cwd gui build"
 	},
 	"devDependencies": {
 		"@oh-my-pi/pi-coding-agent": "^18.12.6",
