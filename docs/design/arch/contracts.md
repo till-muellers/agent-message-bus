@@ -318,7 +318,7 @@ All need the session and `X-CSRF-Token` equal to the session's `csrf` (missing/f
 | `POST /web/api/spaces/{space}/topics/{topic}/messages` `{"body", "critical"?}` | `bus_send_topic` | `{ok[, receipts]}` |
 | `DELETE /web/api/spaces/{space}` `{"confirm": "<space>"}` | `bus_delete_space` | `{ok}`; bad/missing confirm → 400 `invalid "confirm the deletion of space <space>"` |
 
-Each successful mutation logs `msg="web mutation" actor action space target` (PO-1: log line only, no table, no actions list).
+Each successful mutation logs `msg="web mutation" actor action space target` (PO-1: log line only, no table, no actions list). Actions and targets: `invite` <name>, `revoke` <name>, `post` <thread id>, `send` <topic>, `delete-space` <space>.
 
 ### 10.5 Static assets [W1a] [AD-14]
 - `server/internal/web/embed.go`: `//go:embed all:dist`. Tracked: `server/internal/web/dist/.gitkeep` and `server/internal/web/.gitignore` (`dist/*`, `!dist/.gitkeep`); slice W1a also changes the root `.gitignore` line `dist/` to `/dist/` so the `.gitkeep` can be added. The GUI build (Arch-client) writes `dist/index.html` + `dist/assets/*`; nothing generated is tracked (CR-10). This is PO-10's committed placeholder (approved, option b).

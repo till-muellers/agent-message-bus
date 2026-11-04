@@ -19,6 +19,7 @@ type webWorld struct {
 	api, web     *httptest.Server
 	lead, worker string
 	ops          string // token of minted admin "ops"
+	helper       string // token of member "helper" of space "other", when a test invites it
 }
 
 func newWebWorld(t *testing.T, tls bool) *webWorld {

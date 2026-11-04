@@ -5,9 +5,10 @@ Feature: Web GUI access and sessions
 
   # Moved from docs/design/specs/web/gui-access.feature (slice W1a).
   #
-  # The web GUI is a read-only view served by the bus binary itself (single
-  # static binary, no extra process). It is a transport, like internal/rpc and
-  # internal/admin: it reads through the feature services and owns no SQL.
+  # The web GUI is served by the bus binary itself (single static binary, no
+  # extra process). It is a transport, like internal/rpc and internal/admin: it
+  # reads through the feature services, writes through the agent tools and owns
+  # no SQL.
   #
   # The operator signs in with an **admin token**. Admins are named agents of
   # kind "admin" (see ../admin-tokens.feature): the web GUI identifies the
@@ -30,6 +31,7 @@ Feature: Web GUI access and sessions
   #   GET    /web/api/*          the JSON reads of the GUI (session required)
   #   GET    /web/               the embedded GUI application (or a fallback page when not built)
   #   GET    /web/assets/*       its hashed bundles
+  # The mutating /web/api routes are in gui-mutations.feature and gui-admins.feature.
   # The session cookie amb_session is HttpOnly, SameSite=Strict, Path=/web and
   # Secure whenever the request arrived over TLS. It holds an opaque session
   # id, never the token. Sessions live in memory for at most 8 hours; more than
@@ -169,17 +171,17 @@ Feature: Web GUI access and sessions
       When the operator requests GET /web/api/state
       Then the response status is 401
 
-  Rule: The web GUI is read-only in the first milestone
+  Rule: Only the listed mutation routes change bus state
 
-    # In the first milestone no web GUI route changes bus state. The second
-    # milestone adds the mutations of gui-mutations.feature (create invite, revoke a
-    # member or leader, post to a thread, send to a topic, delete a space behind a
-    # confirmation naming the space (PO-4)) and the admin management of
-    # gui-admins.feature. Deleting a board or a thread stays in the CLI and the agent tools.
+    # Reads are GET-only. Bus state changes only through the mutations of
+    # gui-mutations.feature (create invite, revoke a member or leader, post to a
+    # thread, send to a topic, delete a space behind a confirmation naming the space
+    # (PO-4)) and the admin management of gui-admins.feature, each behind the
+    # session's CSRF token. Deleting a board or a thread stays in the CLI and the agent tools.
 
-    Scenario: The web GUI exposes no mutating route yet
+    Scenario: A read route refuses mutating methods
       Given the operator signed in with the instance admin token
-      When the operator requests any of the mutating methods on a web GUI route
+      When the operator requests any of the mutating methods on a web GUI read route
       Then the response status is 405
 
     Scenario: The web GUI never opens an inbox stream
