@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { ApiError } from "../../src/api/api-error.ts";
 import type { Action } from "../../src/state/actions.ts";
-import { mutate } from "../../src/state/mutate.ts";
+import { type MutationDeps, mutate } from "../../src/state/mutate.ts";
 
-function recorder() {
+function recorder(): { actions: Action[]; refreshes: () => number; deps: MutationDeps } {
 	const actions: Action[] = [];
 	let refreshed = 0;
-	return { actions, refreshes: () => refreshed, deps: { dispatch: (a: Action) => actions.push(a), refresh: () => refreshed++ } };
+	return { actions, refreshes: () => refreshed, deps: { dispatch: (a: Action) => void actions.push(a), refresh: () => void refreshed++ } };
 }
 
 describe("running a mutation", () => {

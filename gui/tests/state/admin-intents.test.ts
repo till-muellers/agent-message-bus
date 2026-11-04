@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AdminsApi } from "../../src/api/admins.ts";
 import type { Action } from "../../src/state/actions.ts";
-import { createAdminIntents } from "../../src/state/admin-intents.ts";
+import { type AdminIntents, createAdminIntents } from "../../src/state/admin-intents.ts";
 
-function intents(api: AdminsApi) {
+function intents(api: AdminsApi): { actions: Action[]; admin: AdminIntents } {
 	const actions: Action[] = [];
 	return { actions, admin: createAdminIntents(api, { dispatch: (a) => actions.push(a), refresh: () => {} }) };
 }

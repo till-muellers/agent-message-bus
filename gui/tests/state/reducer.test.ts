@@ -118,6 +118,12 @@ describe("the reducer: messages after a mutation", () => {
 		expect(reducer(shown, { type: "session/signed-out" }).shownOnce).toBeUndefined();
 	});
 
+	test("a secret or notice arriving after sign-out is dropped", () => {
+		const out = reducer(ready(), { type: "session/signed-out" });
+		expect(reducer(out, { type: "secret/shown", label: "Token of admin ops", secret: "amb_admin_x" })).toBe(out);
+		expect(reducer(out, { type: "notice/shown", message: "Admin ops revoked.", alert: false })).toBe(out);
+	});
+
 	test("a poll keeps the secret", () => {
 		const shown = reducer(ready(), { type: "secret/shown", label: "Token of admin ops", secret: "amb_admin_x" });
 		const next = reducer(shown, { type: "view/loaded", route: { name: "spaces" }, data: { kind: "spaces", list: { ...spaceList, inboxWaiting: 9 } }, at: 2 });

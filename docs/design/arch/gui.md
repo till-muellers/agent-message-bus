@@ -36,7 +36,7 @@ gui/
       decode-state.ts   decoders of GET /web/api/state (space list, space detail); later reads get their own decode-<read>.ts
       decode-threads.ts decoders of the blackboard reads (thread list, thread with posts)
       decode-inbox.ts   decoder of GET /web/api/inbox (entries; the type stays text so newer kinds still show)
-      types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadInfo, Thread, Post, Entry, Admin)
+      types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadInfo, Thread, Post, Entry, AdminInfo, MintedAdmin)
       session.ts        signIn(token), restore(), signOut()
       reads.ts          admins() (GUI-5); spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox() (GUI-4: limit=500, oldest first; the view says when the list is cut)
       decode-admins.ts  (W2) decoders of the admin list, the minted token and {deleted}

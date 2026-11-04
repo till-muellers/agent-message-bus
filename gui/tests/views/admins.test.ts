@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { VNode } from "../../src/view/h.ts";
 import { adminsView } from "../../src/views/admins.ts";
 import { admins } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
-function view(calls: string[] = []) {
-	return adminsView(admins, { mintAdmin: (name) => calls.push(`mint ${name}`), revokeAdmin: (name) => calls.push(`revoke ${name}`) });
+function view(calls: string[] = []): VNode {
+	return adminsView(admins, { mintAdmin: (name) => void calls.push(`mint ${name}`), revokeAdmin: (name) => void calls.push(`revoke ${name}`) });
 }
 
 describe("the admin area", () => {

@@ -38,6 +38,11 @@ function failed(state: AppState, error: ApiError): AppState {
 	return { ...state, view: { status: "error", error, last: transient ? lastData(state.view) : undefined } };
 }
 
+/** A mutation's answer that arrives after sign-out is dropped, so the next user never sees it. */
+function signedIn(state: AppState): boolean {
+	return state.session.status === "signed-in";
+}
+
 /** Pure: returns state itself when the action changes nothing, so the store notifies nobody. */
 export function reducer(state: AppState, action: Action): AppState {
 	switch (action.type) {
@@ -54,8 +59,8 @@ export function reducer(state: AppState, action: Action): AppState {
 		case "view/failed":
 			return sameRoute(state.route, action.route) ? failed(state, action.error) : state;
 		case "secret/shown":
-			return { ...state, shownOnce: { label: action.label, secret: action.secret }, notice: undefined };
+			return signedIn(state) ? { ...state, shownOnce: { label: action.label, secret: action.secret }, notice: undefined } : state;
 		case "notice/shown":
-			return { ...state, notice: { message: action.message, alert: action.alert }, shownOnce: undefined };
+			return signedIn(state) ? { ...state, notice: { message: action.message, alert: action.alert }, shownOnce: undefined } : state;
 	}
 }

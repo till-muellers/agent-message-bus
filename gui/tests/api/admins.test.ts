@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { createAdminsApi } from "../../src/api/admins.ts";
+import { type AdminsApi, createAdminsApi } from "../../src/api/admins.ts";
 import { createHttp } from "../../src/api/http.ts";
-import { fakeFetch, json } from "../fake-fetch.ts";
+import { type FakeFetch, fakeFetch, json } from "../fake-fetch.ts";
 
-function api(...responses: Response[]) {
+function api(...responses: Response[]): { fake: FakeFetch; admins: AdminsApi } {
 	const fake = fakeFetch(...responses);
 	return { fake, admins: createAdminsApi(createHttp({ fetchFn: fake.fetchFn, csrf: () => "c1" })) };
 }
@@ -25,6 +25,6 @@ describe("the admin mutations", () => {
 
 	test("a refused mint carries the server's message", async () => {
 		const { admins } = api(json(409, { error: { code: "conflict", message: "agent lead is a leader agent" } }));
-		expect(admins.mint("lead")).rejects.toMatchObject({ status: 409, message: "agent lead is a leader agent" });
+		await expect(admins.mint("lead")).rejects.toMatchObject({ status: 409, message: "agent lead is a leader agent" });
 	});
 });
