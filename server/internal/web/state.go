@@ -16,11 +16,12 @@ type Overviews interface {
 	Space(ctx context.Context, p auth.Principal, space string) (overview.Overview, error)
 }
 
-// Invites lists and counts the open invites of a space for its leaders and admins
+// Invites lists, counts and cancels the open invites of a space for its leaders and admins
 // (invites.Service).
 type Invites interface {
 	ListPending(ctx context.Context, p auth.Principal, space string) ([]invites.Pending, error)
 	CountPending(ctx context.Context, p auth.Principal, space string) (int, error)
+	Cancel(ctx context.Context, p auth.Principal, space, id string) (name string, cancelled bool, err error)
 }
 
 // waiting is how many entries wait in the signed-in agent's mailbox scope.

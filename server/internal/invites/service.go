@@ -41,8 +41,9 @@ type Admission struct {
 	Token string `json:"token"`
 }
 
-// Pending is an open invite as the web GUI lists it: never the code.
+// Pending is an open invite as the web GUI lists it: its opaque id, never the code.
 type Pending struct {
+	ID        string `json:"id"`
 	Name      string `json:"name"`
 	InvitedBy string `json:"invitedBy"`
 	ExpiresAt string `json:"expiresAt"` // RFC3339 UTC
@@ -87,13 +88,17 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, space, name stri
 	return inv, nil
 }
 
-// store purges expired invites, authorizes p and stores r under a new code, which it returns.
+// store purges expired invites, authorizes p and stores r under a new code and id; it
+// returns the code.
 func (s *Service) store(ctx context.Context, tx db.DBTX, p auth.Principal, space string, r row, now time.Time) (string, error) {
 	if err := deleteExpired(ctx, tx, now.Unix()); err != nil {
 		return "", err
 	}
 	var err error
 	if r.spaceID, err = s.admit.AuthorizeInvite(ctx, tx, p, space, r.name); err != nil {
+		return "", err
+	}
+	if r.id, err = newID(); err != nil {
 		return "", err
 	}
 	code, err := newCode()
@@ -161,4 +166,25 @@ func (s *Service) CountPending(ctx context.Context, p auth.Principal, space stri
 		return 0, err
 	}
 	return countPending(ctx, s.db, spaceID, s.now().Unix())
+}
+
+// Cancel deletes the open invite id of space and returns its invited name; cancelled is
+// false for an unknown, redeemed, expired or already cancelled id and for an id of another
+// space. Leaders of the space and admins.
+func (s *Service) Cancel(ctx context.Context, p auth.Principal, space, id string) (name string, cancelled bool, err error) {
+	err = db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		spaceID, authErr := s.admit.AuthorizeInvites(ctx, tx, p, space)
+		if authErr != nil {
+			return authErr
+		}
+		if purgeErr := deleteExpired(ctx, tx, s.now().Unix()); purgeErr != nil {
+			return purgeErr
+		}
+		name, cancelled, err = deleteByID(ctx, tx, spaceID, id)
+		return err
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return name, cancelled, nil
 }

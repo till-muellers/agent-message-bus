@@ -10,10 +10,11 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-// row is one stored invite; task is NULL when the invite has no first prompt, and
-// invitedBy names the inviting leader or admin.
+// row is one stored invite; id is its opaque handle for the web GUI, task is NULL when
+// the invite has no first prompt, and invitedBy names the inviting leader or admin.
 type row struct {
 	hash      string
+	id        string
 	spaceID   int64
 	name      string
 	task      sql.NullString
@@ -24,12 +25,25 @@ type row struct {
 // insertInvite stores r under the hash of its code.
 func insertInvite(ctx context.Context, q db.DBTX, r row) error {
 	_, err := q.ExecContext(ctx,
-		`INSERT INTO invites (hash, space_id, name, task, invited_by, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		r.hash, r.spaceID, r.name, r.task, r.invitedBy, r.expiresAt)
+		`INSERT INTO invites (hash, id, space_id, name, task, invited_by, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		r.hash, r.id, r.spaceID, r.name, r.task, r.invitedBy, r.expiresAt)
 	if err != nil {
 		return fmt.Errorf("inserting invite for %s: %w", r.name, err)
 	}
 	return nil
+}
+
+// deleteByID removes the invite id of spaceID and returns its invited name; found is
+// false when spaceID has no such invite.
+func deleteByID(ctx context.Context, q db.DBTX, spaceID int64, id string) (name string, found bool, err error) {
+	err = q.QueryRowContext(ctx, `DELETE FROM invites WHERE space_id = ? AND id = ? RETURNING name`, spaceID, id).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("deleting invite %s: %w", id, err)
+	}
+	return name, true, nil
 }
 
 // takeInvite reads and deletes the invite stored under hash.
@@ -73,7 +87,7 @@ func deleteForName(ctx context.Context, q db.DBTX, spaceID int64, name string) (
 // selectPending returns the invites of spaceID still open at now (unix seconds), soonest
 // expiry first, then by name; never the code.
 func selectPending(ctx context.Context, q db.DBTX, spaceID, now int64) ([]Pending, error) {
-	rows, err := q.QueryContext(ctx, `SELECT name, invited_by, expires_at FROM invites
+	rows, err := q.QueryContext(ctx, `SELECT id, name, invited_by, expires_at FROM invites
 		WHERE space_id = ? AND expires_at > ? ORDER BY expires_at, name`, spaceID, now)
 	if err != nil {
 		return nil, fmt.Errorf("listing open invites of space %d: %w", spaceID, err)
@@ -83,7 +97,7 @@ func selectPending(ctx context.Context, q db.DBTX, spaceID, now int64) ([]Pendin
 	for rows.Next() {
 		var p Pending
 		var expiresAt int64
-		if err := rows.Scan(&p.Name, &p.InvitedBy, &expiresAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.InvitedBy, &expiresAt); err != nil {
 			return nil, fmt.Errorf("scanning open invite: %w", err)
 		}
 		p.ExpiresAt = time.Unix(expiresAt, 0).UTC().Format(time.RFC3339)

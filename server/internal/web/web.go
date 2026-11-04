@@ -77,6 +77,8 @@ func (g *Web) Mount(mux *http.ServeMux) {
 	mux.Handle("GET /web/api/spaces/{space}/threads/{id}", g.api(g.thread))
 	mux.Handle("GET /web/api/inbox", g.api(g.readInbox))
 	mux.Handle("POST /web/api/spaces/{space}/invites", g.mutation(g.invite))
+	mux.Handle("GET /web/api/spaces/{space}/invites", g.api(g.listInvites))
+	mux.Handle("DELETE /web/api/spaces/{space}/invites/{id}", g.mutation(g.cancelInvite))
 	mux.Handle("POST /web/api/spaces/{space}/revoke", g.mutation(g.revoke))
 	mux.Handle("POST /web/api/spaces/{space}/threads/{id}/posts", g.mutation(g.post))
 	mux.Handle("POST /web/api/spaces/{space}/topics/{topic}/messages", g.mutation(g.send))
