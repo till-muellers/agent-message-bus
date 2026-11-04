@@ -522,7 +522,7 @@ Applied in the remote tool's `execute` for subagent sessions only; `agentId` = `
 ```ts
 // lib/tools/presentation.ts — pure table
 export interface Presentation { loadMode: "essential" | "discoverable"; approval: "read" | "write" | "exec"; }
-export const ESSENTIAL_TOOLS = ["bus_send_direct", "bus_send_topic", "bus_wait", "bus_read_thread", "bus_add_post"] as const;
+export const TOOL_PRESENTATION: Readonly<Record<string, Presentation>>; // one row per known tool (E7: no ESSENTIAL_TOOLS list; the essential five are the rows with loadMode "essential")
 export function presentationOf(toolName: string): Presentation;   // unknown tool → {discoverable, write}
 ```
 
