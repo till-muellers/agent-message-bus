@@ -185,7 +185,7 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
   4. `--out <dir>` (default `../server/internal/web/dist`), used by Docker (§pipeline).
 - **Placeholder (contracts.md §10.5).** `server/internal/web/embed.go` uses `//go:embed all:dist`; tracked are only `server/internal/web/dist/.gitkeep` and `server/internal/web/.gitignore` (`dist/*`, `!dist/.gitkeep`). Without a GUI build the server answers `GET /web/` with a built-in fallback page, so `go build`/`go test` work on a fresh checkout without bun, and a local GUI build leaves `git status` clean.
   - The root `.gitignore` line `dist/` (`.gitignore:2`) matches `server/internal/web/dist/` and would keep `.gitkeep` from being added: W1a changes it to `/dist/` (the release output of `scripts/build.py --out dist`).
-- **Dev loop.** `bun run --cwd gui build --watch` + rebuild/restart the Go server (embed is compile-time). A dev-only `AMB_WEB_DIR` (CR-G2) was declined by Arch-server (Q-A7 in `QUESTIONS.md`; `contracts.md` §12); no spec needs it.
+- **Dev loop.** `bun run --cwd gui build` (re-run after each change; `build.ts` has no watch mode) + rebuild/restart the Go server (embed is compile-time). A dev-only `AMB_WEB_DIR` (CR-G2) was declined by Arch-server (Q-A7 in `QUESTIONS.md`; `contracts.md` §12); no spec needs it.
 - **Headers (contracts.md §10.5).** CSP `default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`, `nosniff`, `no-referrer`; `index.html` no-cache, `assets/*` immutable, `/web/session` and `/web/api/*` no-store. The SPA therefore uses no inline script or style, no `<base>`, and submits forms only through `fetch`.
 
 ---
