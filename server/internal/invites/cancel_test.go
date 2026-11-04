@@ -164,6 +164,10 @@ func TestCancelAccess(t *testing.T) {
 	}
 	_, _, err = e.svc.Cancel(ctx, memberP, "demo", id)
 	apperrtest.WantKind(t, err, apperr.Forbidden, "only leaders may list or cancel invites")
+	dbtest.SeedAgent(t, e.db, 7, "stranger", "leader")
+	stranger := auth.Principal{Kind: auth.Leader, AgentID: 7, AgentName: "stranger"}
+	_, _, err = e.svc.Cancel(ctx, stranger, "demo", id)
+	apperrtest.WantKind(t, err, apperr.Forbidden, "not a participant of space demo")
 	_, _, err = e.svc.Cancel(ctx, e.lead, "nope", id)
 	apperrtest.WantKind(t, err, apperr.NotFound, "space nope not found")
 	accepted(t, e, code)

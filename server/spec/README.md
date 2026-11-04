@@ -119,7 +119,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [web/gui-inbox.feature](web/gui-inbox.feature) | `GET /web/api/inbox`: the signed-in agent's own mailbox scope, read-only (never acks, never marks noticed, never takes the stream slot; 405 on mutating methods) |
 | [web/gui-admins.feature](web/gui-admins.feature) | The web GUI's admin area: listing, minting (the token shown once) and revoking admins through the admin tools; admin sessions only (403 otherwise), 401 without a session, the CSRF token on every write |
 | [web/gui-mutations.feature](web/gui-mutations.feature) | Invite, revoke (confirmed), post, send and delete a space (confirmed) from the web GUI through the agent tools; the CSRF token and the session on every mutation; one `web mutation` log line each |
-| [web/gui-invite-cancel.feature](web/gui-invite-cancel.feature) | Listing a space's open invites with their ids and cancelling one by id in the web GUI (no tool, PO-3); `{"cancelled": false}` for any id that is not pending there; leader-rights sessions only; the CSRF token; one `web mutation` log line per cancel |
+| [web/gui-invite-cancel.feature](web/gui-invite-cancel.feature) | Listing a space's open invites with their ids and cancelling one by id in the web GUI (no tool, PO-3); `{"cancelled": false}` for any id that is not pending there; leader-rights sessions only; the CSRF token; one `web mutation` log line per cancelled invite, none when nothing was cancelled |
 
 ## Design decisions
 

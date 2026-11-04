@@ -2,7 +2,7 @@
 // that are re-validated on every request, the JSON reads under /web/api/, the mutations and
 // the admin area, whose writes need the session's CSRF token. It is a transport like
 // internal/rpc: it reads through the feature services, writes through the tool registry
-// and owns no SQL.
+// (and invites.Service.Cancel, which has no tool) and owns no SQL.
 // It is served on its own listener (AMB_WEB_ADDR), never on the API listener.
 package web
 
