@@ -15,6 +15,8 @@ type Card = InstanceType<CardComponents["Container"]>;
 export type CardTheme = Pick<Theme, "fg" | "bold">;
 
 const COLLAPSED_LINES = 3;
+/** A collapsed card cuts each shown line to this many characters, as omp's own peer card does. */
+const COLLAPSED_WIDTH = 100;
 
 /** Text from another agent, safe for the terminal: control characters (escape sequences, bells) are dropped. */
 function printable(text: string): string {
@@ -22,7 +24,7 @@ function printable(text: string): string {
 }
 
 function where(e: Entry): string {
-	const title = printable((e.threadTitle ?? "").replace(/\s+/g, " "));
+	const title = printable((e.threadTitle ?? "").replace(/\s+/g, " ")).replaceAll('"', '\\"');
 	switch (e.type) {
 		case "direct_message":
 			return "direct";
@@ -44,11 +46,11 @@ function title(e: Entry, theme: CardTheme): string {
 	return theme.fg(e.critical ? "warning" : "accent", `${theme.bold(e.from)} → you · ${e.space} · ${where(e)}${label}`);
 }
 
-/** The quoted body lines; collapsed to the first lines plus how many are left out. */
+/** The quoted body lines; collapsed to the first lines, each cut to a width, plus how many are left out. */
 function bodyLines(body: string | undefined, expanded: boolean, theme: CardTheme): string[] {
 	if (body === undefined) return [];
-	const lines = printable(body.replace(/\t/g, "  ")).split("\n");
-	const shown = expanded ? lines : lines.slice(0, COLLAPSED_LINES);
+	const lines = printable(body.trimEnd().replace(/\t/g, "  ")).split("\n");
+	const shown = expanded ? lines : lines.slice(0, COLLAPSED_LINES).map(line => (line.length > COLLAPSED_WIDTH ? `${line.slice(0, COLLAPSED_WIDTH - 1)}…` : line));
 	const quoted = shown.map(line => `${theme.fg("mdQuoteBorder", "│")} ${line}`);
 	const hidden = lines.length - shown.length;
 	return hidden > 0 ? [...quoted, theme.fg("dim", `… ${hidden} more line${hidden === 1 ? "" : "s"}`)] : quoted;

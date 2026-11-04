@@ -46,6 +46,14 @@ describe("the entry card", () => {
 		expect(texts(card(e))).toEqual(['<accent>*lead* → you · demo · plan / 7 "a b"</accent>', "<mdQuoteBorder>│</mdQuoteBorder> x[2Jy"]);
 	});
 
+	test("a collapsed card cuts long lines and drops the trailing newline; quotes in a thread title are escaped", () => {
+		const long = "x".repeat(150);
+		expect(texts(card(entry(1, { body: `${long}\n` })))).toEqual(["<accent>*lead* → you · demo · direct</accent>", `<mdQuoteBorder>│</mdQuoteBorder> ${"x".repeat(99)}…`]);
+		expect(texts(card(entry(1, { body: long }), true))[1]).toBe(`<mdQuoteBorder>│</mdQuoteBorder> ${long}`);
+		const forged = entry(1, { type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: 'x" · critical' });
+		expect(texts(card(forged))[0]).toBe('<accent>*lead* → you · demo · plan / 7 "x\\" · critical"</accent>');
+	});
+
 	test("every entry of a message gets its own card; a message without entries gets none", () => {
 		const details = { entryIds: [1, 2], entries: [entry(1), entry(2)] };
 		expect((entryCard(fakeComponents, details, false, theme) as unknown as FakeComponent).children).toHaveLength(2);
