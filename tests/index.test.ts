@@ -18,6 +18,7 @@ import {
 	errorResponse,
 	fakeBus,
 	type FakeBusOptions,
+	type FakeComponent,
 	frame,
 	listSpaces,
 	liveStream,
@@ -61,6 +62,16 @@ describe("inbox streaming", () => {
 			const { sent } = await runSession(mode);
 			expect({ mode, content: sent.map(s => s.message.content) }).toEqual({ mode, content: [envelope(entry(1)), envelope(entry(2, { class: "interrupt" }))] });
 		}
+	});
+
+	test("agent-bus messages render as entry cards from their details, so a resumed session shows the same card", async () => {
+		const { sent, renderers } = await runSession("tui");
+		const render = renderers.get("agent-bus");
+		if (!render) throw new Error("no agent-bus renderer");
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text } as unknown as Parameters<typeof render>[2];
+		const stored = JSON.parse(JSON.stringify({ role: "custom", ...sent[0].message, timestamp: 1 }));
+		const card = render(stored, { expanded: false }, theme) as unknown as FakeComponent;
+		expect(card.children[0].children.map(text => text.text)).toEqual(["lead → you · demo · direct", "│ body 1"]);
 	});
 
 	test("an entry is acked only after a model request carried it", async () => {

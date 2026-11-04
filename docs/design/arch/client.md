@@ -439,11 +439,12 @@ Reply: bus_send_direct {space: "alpha", to: "peer"}.
 ```ts
 // lib/render/entry-card.ts
 export function registerEntryCard(pi: ExtensionAPI): void;  // pi.registerMessageRenderer("agent-bus", render)
+export function entryCard(pi: CardComponents, details: BusMessageDetails | undefined, expanded: boolean, theme: CardTheme): Container | undefined; // pure; one card per entry
 ```
 
 - API: `registerMessageRenderer<T>(customType, renderer)` (`CA/extensibility/extensions/types.ts:1827-1828`); renderer `(message: CustomMessage<T>, {expanded}, theme) => Component | undefined` (`tui/chat/extension-types.ts:12-19`). omp uses it on live render and on resume (`CA/modes/utils/ui-helpers.ts:370-374`), so "a card survives resuming the session" needs nothing extra.
 - Components from the injected SDK: `pi.pi.Container`, `pi.pi.Text`, `pi.pi.Markdown`, `pi.pi.Spacer` (`CA/index.ts:8`; `pi: typeof PiCodingAgent`, `types.ts:1641`). No deep import of `@oh-my-pi/pi-tui/tools/wait` (R4 in omp-parity analysis).
-- Card: title `"<from> → you · <space> · <where>"` (`where` per the outline table in `omp-rendering.feature:37-48`), body quoted and collapsed to 3 lines unless `expanded`, warning tone + label `critical` from `theme`.
+- Card: title `"<from> → you · <space> · <where>"` (`where` per the outline table in `omp-rendering.feature:37-48`), body quoted (`│ `) and collapsed to 3 lines plus `… N more lines` unless `expanded`, warning tone + label `critical` from `theme`. Only `Container` and `Text` are needed (one `Text` per line). Control characters of the sender's text (terminal escape sequences) are dropped; the title stays on one line. A message without entries renders `undefined`, so omp falls back to its plain custom message.
 - The renderer is a pure function of `details`; tests assert the component tree via a fake `pi.pi` (no TTY).
 
 ---
