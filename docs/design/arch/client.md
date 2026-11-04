@@ -105,7 +105,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts` (E10b), `render/send-receipt.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -128,6 +128,7 @@ flowchart TD
   connection --> delivery
   connection --> version
   connection --> bus
+  connection --> render
   context --> delivery
   context --> bus
   context --> session
@@ -404,7 +405,6 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 export interface BusMessageDetails {
 	entryIds: number[];          // the ack key (§3.3); >1 only for coalesced post notices
 	entries: Entry[];            // id, space, type, from, critical, createdAt, body, topic?, blackboard?, threadId?, threadTitle?
-	notice?: "posts" | "lifecycle";
 }
 export type BusMessage = { customType: "agent-bus"; content: string; display: true; details: BusMessageDetails };
 ```

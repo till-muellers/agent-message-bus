@@ -19,6 +19,7 @@ import { createDispatcher, type Dispatcher } from "../delivery/dispatcher.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
+import { createUnreadPosts } from "../render/status-line.ts";
 import { registerRemoteTools } from "../tools/remote-tools.ts";
 import { WAIT_TOOL, type WaitToolDeps } from "../tools/wait-tool.ts";
 import type { ServerGate } from "./server-gate.ts";
@@ -33,6 +34,8 @@ export interface SessionView {
 	sessionFile?: string;
 	/** Whether the agent is idle right now (bound to the latest omp context). */
 	isIdle(): boolean;
+	/** Sets or (with `undefined`) removes a status line entry (bound to the latest omp context). */
+	setStatus(key: string, text: string | undefined): void;
 }
 
 export interface ConnectionDeps {
@@ -86,10 +89,14 @@ export function createConnection(deps: ConnectionDeps): Connection {
 	let toldNoIdentity = false;
 	const watermark = createAckWatermark();
 	const consume = createConsumer({ watermark, ack: createAcker({ client, getActive, warn }) });
+	const unread = createUnreadPosts((key, text) => view.setStatus(key, text));
 	const dispatcher = createDispatcher({
 		phase: () => phaseOf(view.mode, view.isIdle()),
 		watermark,
-		handOver: (message, mechanism) => pi.sendMessage(message, mechanism),
+		handOver: (message, mechanism) => {
+			pi.sendMessage(message, mechanism);
+			unread.add(message.details.entries);
+		},
 		warn,
 	});
 	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, dispatcher });
@@ -116,7 +123,8 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			warn(verdict.refused);
 			return false;
 		}
-		await registerRemoteTools(pi, { client, getActive, state: tools, warn, kind: view.sub ? "sub" : "main", agentId: view.agentId, wait });
+		const kind = view.sub ? "sub" : "main";
+		await registerRemoteTools(pi, { client, getActive, state: tools, warn, kind, agentId: view.agentId, wait, threadRead: unread.read });
 		return true;
 	}
 
@@ -147,6 +155,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			inbox.stop();
 			active = undefined;
 			publication.clear();
+			unread.clear();
 			await deactivateBusTools(pi);
 		},
 	};

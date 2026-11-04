@@ -24,6 +24,8 @@ export interface SessionContext extends IdentityContext {
 	agent?: { kind?: string; id?: string };
 	/** Whether the agent is idle right now. */
 	isIdle(): boolean;
+	/** omp's UI: the status line. */
+	ui?: { setStatus(key: string, text: string | undefined): void };
 }
 
 /** The session's bus state: its credentials, accepted identity and connection. */
@@ -86,7 +88,7 @@ export function createSession(deps: SessionDeps): Session {
 	const warn = (message: string) => pi.logger.warn(`agent-bus: ${message}`);
 	const credentials = createSessionCredentials(busEnv.credentials);
 	const identity = createSessionIdentity(dir, credentials);
-	const view: SessionView = { sub: false, isIdle: () => true };
+	const view: SessionView = { sub: false, isIdle: () => true, setStatus: () => {} };
 	const connection = createConnection({ pi, client, store, credentials, identity, roots, view, gate, warn, sleep: deps.sleep, localTools });
 	const backlogTimeoutMs = deps.backlogTimeoutMs ?? BACKLOG_TIMEOUT_MS;
 	/**
@@ -124,6 +126,7 @@ export function createSession(deps: SessionDeps): Session {
 			view.agentId = ctx.agent?.id;
 			view.sessionFile = ctx.sessionManager?.getSessionFile();
 			view.isIdle = () => ctx.isIdle();
+			view.setStatus = (key, text) => ctx.ui?.setStatus(key, text);
 			return identity.bind(ctx, change);
 		},
 	};
