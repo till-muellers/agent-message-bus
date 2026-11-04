@@ -230,6 +230,7 @@ export interface BootTool {
 	loadMode?: string;
 	approval?: string;
 	execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }>;
+	renderCall?: (args: unknown, options: { expanded: boolean; isPartial: boolean }, theme: { fg(color: string, text: string): string; bold(text: string): string }) => unknown;
 }
 
 /** Per-session inputs of the fake omp; mutate them to model a session switch. */

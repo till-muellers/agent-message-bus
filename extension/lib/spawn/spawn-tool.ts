@@ -1,10 +1,12 @@
 /**
  * `bus_spawn_worker`: the agent-facing form of `/bus spawn`, a local tool next to the server's `bus_*` tools. It is
- * registered inactive and switched on with them once the session has credentials.
+ * registered inactive and switched on with them once the session has credentials. Its call renders as an outgoing
+ * card: the task reaches the worker as a direct message from the caller.
  */
 import { resolve } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { type JsonSchema, toZod } from "../bus/schema.ts";
+import { argText, fixedSender, outgoingCard } from "../render/outgoing-card.ts";
 import type { SpawnRequest, SpawnResult } from "./spawn.ts";
 import { presentationOf } from "../tools/presentation.ts";
 import { toolResult } from "../tools/tool-result.ts";
@@ -36,7 +38,9 @@ const PARAMETERS: JsonSchema = {
 	additionalProperties: false,
 };
 
-export function spawnToolDefinition(pi: ExtensionAPI, spawn: Spawn): Parameters<ExtensionAPI["registerTool"]>[0] {
+/** `self` names the bus agent the session acts as; undefined while unknown. */
+export function spawnToolDefinition(pi: ExtensionAPI, spawn: Spawn, self: () => string | undefined): Parameters<ExtensionAPI["registerTool"]>[0] {
+	const sender = fixedSender(self);
 	return {
 		name: SPAWN_TOOL,
 		label: SPAWN_TOOL,
@@ -44,6 +48,10 @@ export function spawnToolDefinition(pi: ExtensionAPI, spawn: Spawn): Parameters<
 		parameters: toZod(PARAMETERS, pi.zod),
 		...presentationOf(SPAWN_TOOL),
 		defaultInactive: true,
+		renderCall: (args, { expanded, isPartial }, theme) => {
+			const message = { from: sender(args, isPartial), to: argText(args, "name"), space: argText(args, "space"), where: "spawn", body: argText(args, "task") };
+			return outgoingCard(pi.pi, message, expanded, theme);
+		},
 		execute: (_toolCallId: string, params: SpawnParams, signal: AbortSignal | undefined, _onUpdate: unknown, ctx: { cwd: string }) => {
 			const cwd = params.cwd === undefined ? ctx.cwd : resolve(ctx.cwd, params.cwd);
 			return toolResult(() => spawn({ ...params, cwd }, signal));

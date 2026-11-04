@@ -12,6 +12,7 @@ type FakeTool = {
 	approval?: string;
 	execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }>;
 	renderResult?: (result: unknown, options: { expanded: boolean; isPartial: boolean }, theme: unknown) => unknown;
+	renderCall?: (args: unknown, options: { expanded: boolean; isPartial: boolean }, theme: unknown) => unknown;
 };
 const listTool = (name: string, inputSchema: JsonSchema = { type: "object", properties: {} }): RemoteTool => ({ name, description: name, inputSchema });
 
@@ -169,5 +170,47 @@ describe("registerRemoteTools", () => {
 		const { tools, register } = setup(fetchFn);
 		await register();
 		expect((await tools[0].execute("id", {})).content[0].text).toBe(JSON.stringify({ name: "w" }, null, 2));
+	});
+
+	test("a send result reads as its delivery receipt; a result without receipts stays JSON", async () => {
+		const results: Record<string, unknown> = {
+			bus_send_direct: { ok: true, receipts: [{ to: "peer", delivery: "queued" }] },
+			bus_send_topic: { ok: true },
+		};
+		const fetchFn: FetchLike = async url => {
+			const name = url.split("/").pop() ?? "";
+			return url.endsWith("/v1/tools") ? Response.json(Object.keys(results).map(tool => listTool(tool))) : Response.json({ result: results[name] });
+		};
+		const { tools, register } = setup(fetchFn);
+		await register();
+		const [direct, topic] = tools;
+		expect((await direct.execute("id", { space: "alpha", to: "peer", body: "hi" })).content[0].text).toBe("Queued for peer; it is not connected right now.");
+		expect((await topic.execute("id", { space: "alpha", topic: "dev", body: "hi" })).content[0].text).toBe(JSON.stringify({ ok: true }, null, 2));
+	});
+
+	test("the send tools render their call as an outgoing card from the session's agent; other tools keep omp's", async () => {
+		const list = [listTool("bus_send_direct"), listTool("bus_send_topic"), listTool("bus_whoami")];
+		const { tools, register } = setup(async () => Response.json(list));
+		await register({ self: () => "worker" });
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+		const title = (tool: FakeTool, args: unknown) => (tool.renderCall?.(args, { expanded: false, isPartial: false }, theme) as FakeComponent).children[0].text;
+		expect(title(tools[0], { space: "alpha", to: "lead", body: "done" })).toBe("worker → lead · alpha · direct");
+		expect(title(tools[1], { space: "alpha", topic: "dev", body: "red" })).toBe("worker → #dev · alpha · topic");
+		expect(tools[2].renderCall).toBeUndefined();
+	});
+
+	test("a redraw keeps the sender seen when the arguments were complete; streaming arguments follow the live identity", async () => {
+		const { tools, register } = setup(async () => Response.json([listTool("bus_send_direct")]));
+		let self: string | undefined = "admin";
+		await register({ self: () => self });
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+		const title = (args: unknown, isPartial = false) => (tools[0].renderCall?.(args, { expanded: false, isPartial }, theme) as FakeComponent).children[0].text;
+		const args = { space: "alpha", to: "lead", body: "done" };
+		expect(title(args)).toBe("admin → lead · alpha · direct");
+		self = "lead2";
+		expect(title(args)).toBe("admin → lead · alpha · direct");
+		expect(title({ space: "alpha" }, true)).toBe("lead2 → … · alpha · direct");
+		self = undefined;
+		expect(title(args)).toBe("admin → lead · alpha · direct");
 	});
 });
