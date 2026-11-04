@@ -1,13 +1,15 @@
 // Package web is the backend of the web GUI: the embedded application, cookie sessions
-// that are re-validated on every request, the JSON reads under /web/api/ and the admin
-// area, whose writes need the session's CSRF token. It is a transport like internal/rpc:
-// it reads through the feature services, writes through the tool registry and owns no SQL.
+// that are re-validated on every request, the JSON reads under /web/api/, the mutations and
+// the admin area, whose writes need the session's CSRF token. It is a transport like
+// internal/rpc: it reads through the feature services, writes through the tool registry
+// and owns no SQL.
 // It is served on its own listener (AMB_WEB_ADDR), never on the API listener.
 package web
 
 import (
 	"context"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -51,17 +53,19 @@ type Web struct {
 	assets   assets
 	sessions *sessions
 	limit    *limiter
+	log      *slog.Logger // one "web mutation" line per GUI mutation
 }
 
-// New returns the GUI backend over d.
+// New returns the GUI backend over d; mutation lines go to slog.Default().
 func New(d Deps) *Web {
 	return &Web{auth: d.Auth, spaces: d.Spaces, overview: d.Overview, invites: d.Invites, inbox: d.Inbox,
-		tools: d.Tools, assets: assets{dist: d.Dist}, sessions: newSessions(d.Now), limit: newLimiter(d.Now)}
+		tools: d.Tools, assets: assets{dist: d.Dist}, sessions: newSessions(d.Now), limit: newLimiter(d.Now),
+		log: slog.Default()}
 }
 
 // Mount registers the GUI routes on mux. Reads are GET-only; the mutating routes are the
-// session routes and the admin area, which need X-CSRF-Token. Other methods get the
-// mux's 405. Wrap the mux with Headers.
+// session routes, the space mutations and the admin area; all but the session routes need
+// X-CSRF-Token. Other methods get the mux's 405. Wrap the mux with Headers.
 func (g *Web) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /web/", g.assets.index)
 	mux.HandleFunc("GET /web/assets/", g.assets.file)
@@ -72,6 +76,11 @@ func (g *Web) Mount(mux *http.ServeMux) {
 	mux.Handle("GET /web/api/spaces/{space}/blackboards/{board}/threads", g.api(g.threads))
 	mux.Handle("GET /web/api/spaces/{space}/threads/{id}", g.api(g.thread))
 	mux.Handle("GET /web/api/inbox", g.api(g.readInbox))
+	mux.Handle("POST /web/api/spaces/{space}/invites", g.mutation(g.invite))
+	mux.Handle("POST /web/api/spaces/{space}/revoke", g.mutation(g.revoke))
+	mux.Handle("POST /web/api/spaces/{space}/threads/{id}/posts", g.mutation(g.post))
+	mux.Handle("POST /web/api/spaces/{space}/topics/{topic}/messages", g.mutation(g.send))
+	mux.Handle("DELETE /web/api/spaces/{space}", g.mutation(g.deleteSpace))
 	mux.Handle("GET /web/api/admins", g.api(g.listAdmins))
 	mux.Handle("POST /web/api/admins", g.mutation(g.mintAdmin))
 	mux.Handle("POST /web/api/admins/{name}/revoke", g.mutation(g.revokeAdmin))
