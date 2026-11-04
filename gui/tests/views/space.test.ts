@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { VNode } from "../../src/view/h.ts";
-import { spaceView } from "../../src/views/space.ts";
+import { type SpaceViewIntents, spaceView } from "../../src/views/space.ts";
 import { spaceDetail } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
@@ -13,15 +13,27 @@ function rows(view: VNode, title: string): string[][] {
 	return s ? findAll(s, byTag("tr")).map((tr) => tr.children.map(textOf)) : [];
 }
 
+const calls: string[] = [];
+const intents: SpaceViewIntents = {
+	invite: () => {},
+	send: () => {},
+	ask: (c) => void calls.push(`ask ${JSON.stringify(c)}`),
+	cancelInvite: (space, invite) => void calls.push(`cancel ${space} ${invite.id}`),
+};
+
+function click(view: VNode, key: string): void {
+	findAll(view, (n) => n.key === key)[0]?.on.click?.(new Event("click"));
+}
+
 describe("the space page", () => {
-	const view = spaceView(spaceDetail);
+	const view = spaceView(spaceDetail, intents, true);
 
 	test("is titled with the space name", () => {
 		expect(findAll(view, byTag("h1")).map(textOf)).toEqual(["demo"]);
 	});
 
 	test("lists the participants in the server's order with role and connection", () => {
-		expect(rows(view, "participants")).toEqual([
+		expect(rows(view, "participants").map((r) => r.slice(0, 3))).toEqual([
 			["Name", "Role", "Connected"],
 			["ops", "admin", "no"],
 			["lead", "leader", "yes"],
@@ -57,7 +69,7 @@ describe("the space page", () => {
 	});
 
 	test("lists the open invites with invited name, inviter and expiry, never a code", () => {
-		expect(rows(view, "invites")).toEqual([
+		expect(rows(view, "invites").map((r) => r.slice(0, 3))).toEqual([
 			["Name", "Invited by", "Expires"],
 			["new", "lead", "2026-11-04 20:10"],
 		]);
@@ -66,13 +78,54 @@ describe("the space page", () => {
 	});
 
 	test("a session without leader rights sees no invites section", () => {
-		expect(section(spaceView({ ...spaceDetail, invites: undefined }), "invites")).toBeUndefined();
+		expect(section(spaceView({ ...spaceDetail, invites: undefined }, intents, false), "invites")).toBeUndefined();
 	});
 
 	test("empty lists say so", () => {
-		const empty = spaceView({ ...spaceDetail, overview: { ...spaceDetail.overview, blackboards: [], recentThreads: [] }, invites: [] });
+		const empty = spaceView({ ...spaceDetail, overview: { ...spaceDetail.overview, blackboards: [], recentThreads: [] }, invites: [] }, intents, true);
 		expect(textOf(section(empty, "blackboards") ?? empty)).toContain("No blackboards");
 		expect(textOf(section(empty, "threads") ?? empty)).toContain("No threads");
 		expect(textOf(section(empty, "invites") ?? empty)).toContain("No open invites");
+	});
+
+	test("with leader rights every leader and member has a revoke button that asks first", () => {
+		calls.length = 0;
+		expect(findAll(view, (n) => textOf(n) === "Revoke" && n.tag === "button").map((b) => b.key)).toEqual(["revoke-lead", "revoke-worker"]);
+		click(view, "revoke-worker");
+		expect(calls).toEqual([`ask ${JSON.stringify({ kind: "revoke", space: "demo", name: "worker", role: "member" })}`]);
+	});
+
+	test("each open invite has a cancel button by id", () => {
+		calls.length = 0;
+		click(view, "cancel-3f9a0c1d2e4b5a67");
+		expect(calls).toEqual(["cancel demo 3f9a0c1d2e4b5a67"]);
+	});
+
+	test("with leader rights the page offers the invite form and a delete that asks first", () => {
+		calls.length = 0;
+		expect(findAll(view, (n) => n.key === "invite-form")).toHaveLength(1);
+		click(view, "delete-space");
+		expect(calls).toEqual([`ask ${JSON.stringify({ kind: "delete-space", space: "demo" })}`]);
+	});
+
+	test("without leader rights there is no revoke, invite or delete", () => {
+		const member = spaceView({ ...spaceDetail, invites: undefined }, intents, false);
+		expect(findAll(member, (n) => n.tag === "button").map((b) => b.key).filter((k) => k !== undefined)).toEqual([]);
+		expect(findAll(member, (n) => n.key === "invite-form")).toEqual([]);
+	});
+
+	test("everyone gets the send form for the space's topics", () => {
+		expect(findAll(view, (n) => n.key === "send-form")).toHaveLength(1);
+	});
+
+	test("a leader session revokes members only: leaders cannot be revoked", () => {
+		const leader = spaceView(spaceDetail, intents, false);
+		expect(findAll(leader, (n) => n.tag === "button" && textOf(n) === "Revoke").map((b) => b.key)).toEqual(["revoke-worker"]);
+	});
+
+	test("without leader rights the send form offers neither all nor critical", () => {
+		const member = spaceView({ ...spaceDetail, invites: undefined }, intents, false);
+		expect(findAll(member, byTag("option")).map(textOf)).toEqual(["notes"]);
+		expect(findAll(member, (n) => n.attrs.name === "critical")).toEqual([]);
 	});
 });

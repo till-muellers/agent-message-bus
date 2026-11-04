@@ -7,7 +7,20 @@ import { render } from "../../src/views/layout.ts";
 import { admins, entries, spaceDetail, spaceList, thread, threadInfos } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
-const intents = { signIn: (): void => {}, signOut: (): void => {}, mintAdmin: (): void => {}, revokeAdmin: (): void => {} };
+const noop = (): void => {};
+const intents = {
+	signIn: noop,
+	signOut: noop,
+	mintAdmin: noop,
+	revokeAdmin: noop,
+	invite: noop,
+	cancelInvite: noop,
+	send: noop,
+	post: noop,
+	ask: noop,
+	confirmed: noop,
+	dismiss: noop,
+};
 
 function signedIn(identity: Identity, route: Route = { name: "spaces" }): AppState {
 	return { session: { status: "signed-in", identity, csrf: "c1" }, route, view: { status: "idle" } };
@@ -116,6 +129,11 @@ describe("the layout", () => {
 		const notice: AppState = { ...signedIn(admin), notice: { message: "agent lead is a leader agent", alert: true } };
 		const [alert] = findAll(render(notice, intents), (n) => n.attrs.role === "alert");
 		expect(alert && textOf(alert)).toBe("agent lead is a leader agent");
+	});
+
+	test("an open confirmation is shown above the page", () => {
+		const state: AppState = { ...signedIn(admin), confirm: { kind: "delete-space", space: "demo" } };
+		expect(mainOf(state)).toContain("Delete space demo");
 	});
 
 	test("a success notice is a status, not an alert", () => {

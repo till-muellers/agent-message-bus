@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { decodeAdmins, decodeDeleted, decodeMinted } from "../../src/api/decode-admins.ts";
+import { decodeAdmins, decodeMinted } from "../../src/api/decode-admins.ts";
+import { decodeDeleted } from "../../src/api/decode.ts";
 import { admins } from "../fixtures.ts";
 
 function invalid(): unknown {

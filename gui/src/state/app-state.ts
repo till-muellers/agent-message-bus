@@ -1,5 +1,5 @@
 import type { ApiError } from "../api/api-error.ts";
-import type { Identity } from "../api/types.ts";
+import type { Identity, Role } from "../api/types.ts";
 import type { ViewData } from "./view-data.ts";
 
 export type Route =
@@ -32,7 +32,11 @@ export interface AppState {
 	shownOnce?: ShownOnce;
 	/** The outcome of the last mutation (the server's message when refused); dropped on navigation. */
 	notice?: Notice;
+	/** A revoke or space deletion waiting for the operator's confirmation; dropped on navigation. */
+	confirm?: PendingConfirm;
 }
+
+export type PendingConfirm = { kind: "revoke"; space: string; name: string; role: Role } | { kind: "delete-space"; space: string };
 
 export interface ShownOnce {
 	label: string;

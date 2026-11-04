@@ -62,5 +62,9 @@ export function reducer(state: AppState, action: Action): AppState {
 			return signedIn(state) ? { ...state, shownOnce: { label: action.label, secret: action.secret }, notice: undefined } : state;
 		case "notice/shown":
 			return signedIn(state) ? { ...state, notice: { message: action.message, alert: action.alert }, shownOnce: undefined } : state;
+		case "confirm/open":
+			return signedIn(state) ? { ...state, confirm: action.confirm } : state;
+		case "confirm/close":
+			return state.confirm === undefined ? state : { ...state, confirm: undefined };
 	}
 }

@@ -1,4 +1,5 @@
-import { decodeDeleted, decodeMinted } from "./decode-admins.ts";
+import { decodeDeleted } from "./decode.ts";
+import { decodeMinted } from "./decode-admins.ts";
 import type { Http } from "./http.ts";
 import type { MintedAdmin } from "./types.ts";
 

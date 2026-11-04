@@ -79,3 +79,6 @@ export const decodeOk: Decoder<true> = (json) => {
 	if (fields(json, "result").ok !== true) throw invalid("result.ok is not true");
 	return true;
 };
+
+/** {deleted}: whether a revoke removed anything. */
+export const decodeDeleted: Decoder<boolean> = (json) => flag(fields(json, "result"), "deleted", "result");

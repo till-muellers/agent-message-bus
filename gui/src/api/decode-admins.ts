@@ -19,6 +19,3 @@ export const decodeMinted: Decoder<MintedAdmin> = (json) => {
 	const o = fields(json, "minted");
 	return { name: text(o, "name", "minted"), token: text(o, "token", "minted") };
 };
-
-/** {deleted}: whether a revoke removed anything. */
-export const decodeDeleted: Decoder<boolean> = (json) => flag(fields(json, "result"), "deleted", "result");

@@ -4,7 +4,7 @@ import { thread } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
 describe("the thread page", () => {
-	const view = threadView("demo", thread);
+	const view = threadView("demo", thread, { post: () => {} });
 
 	test("shows the title, its blackboard and its author", () => {
 		expect(findAll(view, byTag("h1")).map(textOf)).toEqual(["plan"]);
@@ -18,5 +18,9 @@ describe("the thread page", () => {
 		expect(posts.map((p) => findAll(p, byTag("strong")).map(textOf))).toEqual([["worker"], ["lead"]]);
 		expect(posts.map((p) => findAll(p, byTag("time")).length)).toEqual([1, 1]);
 		expect(posts.map((p) => findAll(p, byTag("p")).map(textOf))).toEqual([["first"], ["reply"]]);
+	});
+
+	test("ends with the reply form", () => {
+		expect(findAll(view, (n) => n.key === "post-form")).toHaveLength(1);
 	});
 });

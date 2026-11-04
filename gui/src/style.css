@@ -88,3 +88,17 @@ article p {
 section > form {
 	margin-top: 1rem;
 }
+
+[role="alertdialog"] {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem 1rem;
+	padding: 0.75rem 1rem;
+	border: 2px solid #b3261e;
+}
+
+[role="alertdialog"] p {
+	margin: 0;
+	flex-basis: 100%;
+}
