@@ -11,6 +11,7 @@ import { acceptInvite, type Joined } from "../commands/accept.ts";
 import { type Connection, createConnection, type SessionView } from "../connection/connection.ts";
 import type { ServerGate } from "../connection/server-gate.ts";
 import { createBusContext } from "../context/bus-context.ts";
+import { createBusEvents } from "../delivery/bus-events.ts";
 import type { SessionCredentials } from "./session-credentials.ts";
 import { createSessionCredentials } from "./session-credentials.ts";
 import { createSessionIdentity, type IdentityContext, type SessionChange } from "./session-identity.ts";
@@ -97,7 +98,8 @@ export function createSession(deps: SessionDeps): Session {
 		membershipChanged: () => busContext.refreshIdentity(),
 		connected: async (connected: boolean) => (connected ? busContext.refresh() : busContext.clear()),
 	};
-	const connection = createConnection({ pi, client, store, credentials, identity, roots, view, gate, warn, sleep: deps.sleep, localTools, ...hooks });
+	const events = createBusEvents(pi.events, () => busContext.who(), warn);
+	const connection = createConnection({ pi, client, store, credentials, identity, roots, view, gate, warn, sleep: deps.sleep, localTools, events, ...hooks });
 	const busContext = createBusContext({ client, getActive: connection.getActive, warn, isSub: () => view.sub, agentId: () => view.agentId });
 	const backlogTimeoutMs = deps.backlogTimeoutMs ?? BACKLOG_TIMEOUT_MS;
 	/**
