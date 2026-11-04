@@ -9,9 +9,14 @@ export function loadView(reads: Reads, route: Route): Promise<ViewData> | undefi
 			return reads.spaces().then((list) => ({ kind: "spaces", list }));
 		case "space":
 			return reads.space(route.space).then((detail) => ({ kind: "space", detail }));
-		case "board":
+		case "board": {
+			const { space, board } = route;
+			return reads.threads(space, board).then((threads) => ({ kind: "board", space, board, threads }));
+		}
 		case "thread":
+			return reads.thread(route.space, route.threadId).then((thread) => ({ kind: "thread", space: route.space, thread }));
 		case "inbox":
+			return reads.inbox().then((entries) => ({ kind: "inbox", entries }));
 		case "admins":
 		case "not-found":
 			return undefined;

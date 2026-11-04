@@ -20,4 +20,25 @@ describe("the state reads", () => {
 		await reads.space("a b");
 		expect(fake.requests[0]?.path).toBe("/web/api/state?space=a%20b");
 	});
+
+	test("the threads of a blackboard read their route with the names encoded", async () => {
+		const fake = fakeFetch(json(200, []));
+		const reads = createReads(createHttp({ fetchFn: fake.fetchFn, csrf: () => undefined }));
+		expect(await reads.threads("a b", "c")).toEqual([]);
+		expect(fake.requests[0]).toMatchObject({ method: "GET", path: "/web/api/spaces/a%20b/blackboards/c/threads" });
+	});
+
+	test("a thread reads its route by id", async () => {
+		const fake = fakeFetch(json(200, { id: 7, blackboard: "b", title: "t", createdBy: "w", subscribed: false, posts: [] }));
+		const reads = createReads(createHttp({ fetchFn: fake.fetchFn, csrf: () => undefined }));
+		await reads.thread("demo", 7);
+		expect(fake.requests[0]?.path).toBe("/web/api/spaces/demo/threads/7");
+	});
+
+	test("the inbox reads GET /web/api/inbox and never a stream or an ack", async () => {
+		const fake = fakeFetch(json(200, []));
+		const reads = createReads(createHttp({ fetchFn: fake.fetchFn, csrf: () => undefined }));
+		expect(await reads.inbox()).toEqual([]);
+		expect(fake.requests).toEqual([expect.objectContaining({ method: "GET", path: "/web/api/inbox" })]);
+	});
 });

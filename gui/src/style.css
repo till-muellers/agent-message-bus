@@ -68,3 +68,19 @@ h2 {
 	margin: 1.5rem 0 0.5rem;
 	font-size: 1.2rem;
 }
+
+article {
+	padding: 0.5rem 0;
+	border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+}
+
+article header {
+	padding: 0;
+	border: 0;
+	gap: 0.75rem;
+}
+
+article p {
+	margin: 0.25rem 0 0;
+	white-space: pre-wrap;
+}

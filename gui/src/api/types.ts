@@ -86,3 +86,43 @@ export interface SpaceDetail {
 	invites?: PendingInvite[];
 	inboxWaiting: number;
 }
+
+/** One row of bus_list_threads: a thread of a blackboard, most recently active first. */
+export interface ThreadInfo {
+	id: number;
+	title: string;
+	createdBy: string;
+	posts: number;
+	lastPostAt: string;
+}
+
+export interface Post {
+	id: number;
+	author: string;
+	body: string;
+	createdAt: string;
+}
+
+/** The bus_read_thread result: the thread with all its posts in order. */
+export interface Thread {
+	id: number;
+	blackboard: string;
+	title: string;
+	createdBy: string;
+	subscribed: boolean;
+	posts: Post[];
+}
+
+/** One inbox entry (contracts.md §4); type stays text so a newer server's kinds still show. */
+export interface Entry {
+	id: number;
+	space: string;
+	type: string;
+	from: string;
+	critical: boolean;
+	topic?: string;
+	threadId?: number;
+	threadTitle?: string;
+	body?: string;
+	createdAt: string;
+}

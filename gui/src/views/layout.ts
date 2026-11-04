@@ -3,9 +3,12 @@ import { hrefOf } from "../router/routes.ts";
 import type { AppState, Route } from "../state/app-state.ts";
 import type { ViewData } from "../state/view-data.ts";
 import { type ChildArg, h, type VNode } from "../view/h.ts";
+import { boardView } from "./board.ts";
+import { inboxView } from "./inbox.ts";
 import { loginView } from "./login.ts";
 import { spaceView } from "./space.ts";
 import { spacesView } from "./spaces.ts";
+import { threadView } from "./thread.ts";
 
 export interface Intents {
 	signIn(token: string): void;
@@ -59,14 +62,24 @@ function header(identity: Identity, route: Route, intents: Intents): VNode {
 }
 
 /** The view of route for data; null when the data belongs to another kind of page. */
-function viewOf(route: Route, data: ViewData | undefined): VNode | null {
-	if (route.name === "spaces" && data?.kind === "spaces") return spacesView(data.list);
-	if (route.name === "space" && data?.kind === "space") return spaceView(data.detail);
-	return null;
+function viewOf(route: Route, data: ViewData | undefined, identity: Identity): VNode | null {
+	if (route.name !== data?.kind) return null;
+	switch (data.kind) {
+		case "spaces":
+			return spacesView(data.list);
+		case "space":
+			return spaceView(data.detail);
+		case "board":
+			return boardView(data.space, data.board, data.threads);
+		case "thread":
+			return threadView(data.space, data.thread);
+		case "inbox":
+			return inboxView(identity, data.entries);
+	}
 }
 
 /** The main area: the route's data, "Loading…" before the first answer, the server's message on failure. */
-function content({ route, view }: AppState): ChildArg[] {
+function content({ route, view }: AppState, identity: Identity): ChildArg[] {
 	if (route.name === "not-found") {
 		return [h("p", null, "Page not found. ", h("a", { href: hrefOf({ name: "spaces" }) }, "Back to the spaces"))];
 	}
@@ -74,11 +87,11 @@ function content({ route, view }: AppState): ChildArg[] {
 		case "idle":
 			return [];
 		case "loading":
-			return [view.last ? viewOf(route, view.last) : h("p", { key: "loading" }, "Loading…")];
+			return [view.last ? viewOf(route, view.last, identity) : h("p", { key: "loading" }, "Loading…")];
 		case "ready":
-			return [viewOf(route, view.data)];
+			return [viewOf(route, view.data, identity)];
 		case "error":
-			return [h("p", { key: "error", role: "alert" }, view.error.message), viewOf(route, view.last)];
+			return [h("p", { key: "error", role: "alert" }, view.error.message), viewOf(route, view.last, identity)];
 	}
 }
 
@@ -91,7 +104,7 @@ export function render(state: AppState, intents: Intents): VNode {
 		case "signed-out":
 			return loginView(session.error, intents.signIn);
 		case "signed-in": {
-			const main = h("main", null, content(state));
+			const main = h("main", null, content(state, session.identity));
 			return h("div", { key: "shell" }, header(session.identity, state.route, intents), main);
 		}
 	}
