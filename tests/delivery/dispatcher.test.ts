@@ -86,6 +86,16 @@ describe("the dispatcher's waiters (bus_wait)", () => {
 		expect(handed).toEqual([]);
 		expect(await it.handedUpTo(1, 0)).toBe(true);
 	});
+
+	test("claim returns the entries not handed over yet, and the stream skips them afterwards but counts them handed over", async () => {
+		const { it, handed } = dispatcher();
+		it.receive(entry(1));
+		expect(it.claim([entry(1), entry(2)]).map(e => e.id)).toEqual([2]);
+		it.receive(entry(2));
+		expect(await it.handedUpTo(2, 0)).toBe(true);
+		it.receive(entry(3));
+		expect(handed).toEqual([1, 3]);
+	});
 });
 
 /** A dispatcher whose phase can change, recording every message it hands over (with its mechanism) and every warning. */

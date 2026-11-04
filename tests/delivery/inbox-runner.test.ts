@@ -4,7 +4,7 @@ import type { Dispatcher } from "../../extension/lib/delivery/dispatcher.ts";
 import { createInboxRunner } from "../../extension/lib/delivery/inbox-runner.ts";
 import { fakeBus, liveStream, noSleep, URL_ } from "../fakes.ts";
 
-const dispatcher: Dispatcher = { receive: () => {}, handedUpTo: async () => true, takeHeld: () => [], waitNext: async () => [], stop: () => {} };
+const dispatcher: Dispatcher = { receive: () => {}, handedUpTo: async () => true, takeHeld: () => [], waitNext: async () => [], claim: () => [], stop: () => {} };
 
 describe("the inbox runner", () => {
 	test("the stream counts as open while it is read; the end of a stopped loop's stream does not close the next one", async () => {

@@ -26,6 +26,11 @@ export interface Dispatcher {
 	takeHeld(filter: WaitFilter): Entry[];
 	/** `bus_wait`: the next entry matching `filter`, given to the caller instead of omp; [] on timeout or abort. */
 	waitNext(filter: WaitFilter, timeoutMs: number, signal?: AbortSignal): Promise<Entry[]>;
+	/**
+	 * `bus_wait` forwarded to the server returned `entries`: the ones this start has not handed over are the caller's,
+	 * so the stream skips them when it delivers them; returns them.
+	 */
+	claim(entries: readonly Entry[]): Entry[];
 	/** The start's stream stopped: the held entries are dropped unhanded and the waiting `bus_wait` calls return []. */
 	stop(): void;
 }
@@ -101,14 +106,21 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 	return {
 		receive(entry) {
 			deps.watermark.received(entry.id);
-			// A reconnect replays the entries that were not acked; this start already handed them over.
-			if (handedOver.has(entry.id)) return;
-			handedOver.add(entry.id);
-			deliver(entry);
+			// A reconnect replays the entries that were not acked; this start already handed them over or a forwarded
+			// `bus_wait` claimed them. Either way they count as handed over.
+			if (!handedOver.has(entry.id)) {
+				handedOver.add(entry.id);
+				deliver(entry);
+			}
 			progress.advance(entry.id);
 		},
 		takeHeld: notices.take,
 		waitNext: waitCalls.wait,
+		claim(entries) {
+			const unseen = entries.filter(entry => !handedOver.has(entry.id));
+			for (const entry of unseen) handedOver.add(entry.id);
+			return unseen;
+		},
 		handedUpTo: progress.until,
 		stop() {
 			notices.clear();

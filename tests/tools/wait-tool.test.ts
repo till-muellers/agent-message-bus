@@ -24,8 +24,11 @@ const serverWait: RemoteTool = {
 
 const pi = { zod: z } as unknown as ExtensionAPI;
 
-/** A wait tool over a live stream whose dispatcher holds `held` and answers `entries`, recording waits, forwards and consumption. */
-function setup(live: boolean, entries: Entry[] = [], held: Entry[] = []) {
+/**
+ * A wait tool over a live stream whose dispatcher holds `held` and answers `entries`, recording waits, forwards and
+ * consumption; the forwarded call answers `answer`, and the stream already delivered the ids in `delivered`.
+ */
+function setup(live: boolean, entries: Entry[] = [], held: Entry[] = [], answer: unknown = [entry(9)], delivered: number[] = []) {
 	const waits: { filter: WaitFilter; ms: number; signal?: AbortSignal }[] = [];
 	const forwards: { args: unknown; ms: number }[] = [];
 	const consumed: number[][] = [];
@@ -46,8 +49,9 @@ function setup(live: boolean, entries: Entry[] = [], held: Entry[] = []) {
 				: undefined,
 		forward: async (args, ms) => {
 			forwards.push({ args, ms });
-			return [entry(9)];
+			return answer;
 		},
+		claim: claimed => claimed.filter(e => !delivered.includes(e.id)),
 		consumed: ids => void consumed.push([...ids]),
 	};
 	const tool = waitToolDefinition(pi, serverWait, deps);
@@ -103,7 +107,7 @@ describe("the local bus_wait", () => {
 		expect(waits[0].signal).toBe(controller.signal);
 	});
 
-	test("without a live stream it forwards to the server's bus_wait with timeoutSeconds + 10 s and consumes nothing", async () => {
+	test("without a live stream it forwards to the server's bus_wait with timeoutSeconds + 10 s; what it returns is claimed and consumed", async () => {
 		const { run, forwards, consumed } = setup(false);
 		expect(await run({ from: "lead", timeoutSeconds: 10 })).toEqual([entry(9)]);
 		await run({});
@@ -111,7 +115,16 @@ describe("the local bus_wait", () => {
 			{ args: { from: "lead", timeoutSeconds: 10 }, ms: 20_000 },
 			{ args: {}, ms: 40_000 },
 		]);
-		expect(consumed).toEqual([]);
+		expect(consumed).toEqual([[9], [9]]);
+	});
+
+	test("a forwarded entry the session's stream already delivered is left out; a result that is no entry list passes through", async () => {
+		const delivered = setup(false, [], [], [entry(8), entry(9)], [8]);
+		expect(await delivered.run({})).toEqual([entry(9)]);
+		expect(delivered.consumed).toEqual([[9]]);
+		const odd = setup(false, [], [], { unexpected: true });
+		expect(await odd.run({})).toEqual({ unexpected: true });
+		expect(odd.consumed).toEqual([]);
 	});
 
 	test("a timeout outside 1..300 is refused as the server refuses it", async () => {

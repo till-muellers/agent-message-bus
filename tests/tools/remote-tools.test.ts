@@ -129,7 +129,7 @@ describe("registerRemoteTools", () => {
 			urls.push(url);
 			return Response.json(list);
 		});
-		const wait = { dispatcher: () => ({ takeHeld: () => [], waitNext: async () => [entry(1)] }), forward: async () => [], consumed: () => {} };
+		const wait = { dispatcher: () => ({ takeHeld: () => [], waitNext: async () => [entry(1)] }), forward: async () => [], claim: () => [], consumed: () => {} };
 		expect(await register({ wait })).toBe(3);
 		expect(options.state.names).toEqual(["bus_inbox_read", "bus_send", "bus_wait"]);
 		const out = await tools[2].execute("id", {});
@@ -154,7 +154,7 @@ describe("registerRemoteTools", () => {
 	test("every registered tool carries its load mode and approval tier, the local bus_wait included", async () => {
 		const list = [listTool("bus_send_direct"), listTool("bus_delete_space"), listTool("bus_wait"), listTool("bus_something_new")];
 		const { tools, register } = setup(async () => Response.json(list));
-		const wait = { dispatcher: () => undefined, forward: async () => [], consumed: () => {} };
+		const wait = { dispatcher: () => undefined, forward: async () => [], claim: () => [], consumed: () => {} };
 		await register({ wait });
 		expect(tools.map(t => [t.name, t.loadMode, t.approval])).toEqual([
 			["bus_send_direct", "essential", "read"],

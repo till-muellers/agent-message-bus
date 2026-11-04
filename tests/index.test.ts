@@ -456,10 +456,10 @@ describe("bus_wait in omp", () => {
 	};
 	const resultOf = (out: { content: { text: string }[] }): unknown => JSON.parse(out.content[0].text);
 
-	async function bootWorker(options: FakeBusOptions) {
+	async function bootWorker(options: FakeBusOptions, sleep?: BusExtensionOptions["sleep"]) {
 		const bus = fakeBus({ list: [serverWait], ...options });
 		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
-		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+		const app = await boot({ fetchFn: bus.fetchFn, env, ...(sleep ? { sleep } : {}) }, { mode: "tui" });
 		await app.emit("session_start");
 		return { bus, app };
 	}
@@ -496,6 +496,50 @@ describe("bus_wait in omp", () => {
 		expect(callsTo(bus, "/v1/tools/bus_wait").map(call => call.body)).toEqual([{ timeoutSeconds: 10 }]);
 		await app.context([{ role: "toolResult", content: "[]" }]);
 		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
+		await app.emit("session_shutdown");
+	});
+
+	/** Another session holds the stream at first; the loop retries only once `retry` resolves, and then gets `stream`. */
+	function takeover(stream: ReturnType<typeof liveStream>, wait: ToolHandler) {
+		const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
+		const retry = Promise.withResolvers<void>();
+		const options: FakeBusOptions = { streams: [conflict, stream.response], tools: { bus_whoami: () => Response.json({ result: { kind: "member", name: "w", spaces: [] } }), bus_wait: wait } };
+		return { options, sleep: () => retry.promise, retry: () => retry.resolve() };
+	}
+
+	test("an entry a forwarded bus_wait returned is not delivered again when the session's own stream opens; it counts as consumed", async () => {
+		const stream = liveStream();
+		const { options, sleep, retry } = takeover(stream, () => Response.json({ result: [entry(5)] }));
+		const { bus, app } = await bootWorker(options, sleep);
+		await app.warning("another session is already connected as w; inbox not delivered here");
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		retry();
+		await stream.opened;
+		stream.push(entry(5));
+		stream.push(entry(6));
+		stream.close();
+		await app.warning("invalid token");
+		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(6))]);
+		await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message })));
+		expect(callsTo(bus, "/bus_inbox_ack").map(call => call.body)).toEqual([{ upTo: 6 }]);
+		await app.emit("session_shutdown");
+	});
+
+	test("a forwarded bus_wait that returns an entry the session's own stream already delivered returns it no more", async () => {
+		const stream = liveStream();
+		const answer = Promise.withResolvers<Response>();
+		const { options, sleep, retry } = takeover(stream, () => answer.promise);
+		const { app } = await bootWorker(options, sleep);
+		await app.warning("another session is already connected as w; inbox not delivered here");
+		const waiting = app.tool("bus_wait").execute("id", { timeoutSeconds: 10 });
+		retry();
+		await stream.opened;
+		stream.push(entry(5));
+		stream.close();
+		await app.warning("invalid token");
+		answer.resolve(Response.json({ result: [entry(5)] }));
+		expect(resultOf(await waiting)).toEqual([]);
+		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(5))]);
 		await app.emit("session_shutdown");
 	});
 });
