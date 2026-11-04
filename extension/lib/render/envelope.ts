@@ -5,10 +5,10 @@
  * criticality come from the entry's fields, never from its body.
  */
 import type { Entry } from "../bus/entry.ts";
-import { escapeBody } from "./escape.ts";
+import { escapeBody, escapeTitle } from "./escape.ts";
 
 function where(e: Entry): string {
-	const title = escapeBody(e.threadTitle ?? "");
+	const title = escapeTitle(e.threadTitle ?? "");
 	switch (e.type) {
 		case "direct_message":
 			return "direct";
@@ -32,6 +32,8 @@ function replyHint(e: Entry): string | undefined {
 		case "direct_message":
 			return `Reply: ${direct}.`;
 		case "topic_message":
+			// Members cannot send to `all`: a broadcast is answered directly.
+			if (e.topic === "all") return `Reply: ${direct}.`;
 			return `Reply: bus_send_topic {space: "${e.space}", topic: "${e.topic}"}, or ${direct}.`;
 		case "thread_post":
 			return `Full thread: bus_read_thread {space: "${e.space}", threadId: ${e.threadId}}. Answer: bus_add_post {space: "${e.space}", threadId: ${e.threadId}}.`;

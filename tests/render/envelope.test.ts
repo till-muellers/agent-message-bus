@@ -27,6 +27,12 @@ describe("envelope", () => {
 		expect(text).toContain('\nReply: bus_send_topic {space: "alpha", topic: "dev"}, or bus_send_direct {space: "alpha", to: "peer"}.\n');
 	});
 
+	test("a message on topic all is answered directly: members cannot send to all", () => {
+		const text = envelope(entry(2, { type: "topic_message", topic: "all", from: "lead", space: "alpha" }));
+		expect(text).toContain('\nReply: bus_send_direct {space: "alpha", to: "lead"}.\n');
+		expect(text).not.toContain("bus_send_topic");
+	});
+
 	test("a thread post points at the full thread and at bus_add_post", () => {
 		const text = envelope(entry(3, { type: "thread_post", threadId: 7, threadTitle: "design", blackboard: "plan", space: "alpha" }));
 		expect(text).toContain('\n[agent-bus] alpha · thread 7 "design" on plan · from lead\n');
