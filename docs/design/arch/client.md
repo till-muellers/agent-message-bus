@@ -331,12 +331,14 @@ export interface Dispatcher {
 	takeHeld(filter: WaitFilter): Entry[];
 	/** bus_wait (E6): the next matching entry, routed to the waiter instead of omp; [] on timeout/abort. */
 	waitNext(filter: WaitFilter, timeoutMs: number, signal?: AbortSignal): Promise<Entry[]>;
+	/** The inbox stopped (E10a): held entries are dropped unhanded, so a replay delivers them again. */
+	dropHeld(): void;
 	/** First-prompt bounded wait (E9b): resolves when every id <= `id` was handed over, or after `ms`. */
 	handedUpTo(id: number, ms: number): Promise<boolean>;
 }
 // lib/delivery/waiters.ts — the pending bus_wait calls of a dispatcher (E6)
 export interface WaitFilter { from?: string; threadId?: number; after?: number; }
-export function createDispatcher(deps: { handOver(message: BusMessage, mechanism: Mechanism): void; watermark: AckWatermark; phase: () => SessionPhase; }): Dispatcher;
+export function createDispatcher(deps: { handOver(message: BusMessage, mechanism: Mechanism): void; watermark: AckWatermark; phase: () => SessionPhase; warn(message: string): void; }): Dispatcher;
 ```
 
 - **Replay dedupe:** the dispatcher keeps the ids it handed over in this connection; a stream reconnect replays unacked ids (`server/spec/inbox.feature:249-257`) and those are skipped. A connection restart (session switch/branch, login, promote) creates a new dispatcher, so asides dropped by omp on a generation change (`agent-session.ts:9687`) are delivered again.
@@ -366,14 +368,14 @@ export function consumedEntryIds(messages: readonly AgentMessage[]): number[];
 ```ts
 // lib/tools/wait-tool.ts
 export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the server's bus_wait from GET /v1/tools */, deps: {
-	dispatcher(): Pick<Dispatcher, "waitNext"> | undefined;           // undefined while this session holds no open stream
+	dispatcher(): Pick<Dispatcher, "takeHeld" | "waitNext"> | undefined; // undefined while this session holds no open stream
 	forward(args: WaitArgs, timeoutMs: number, signal?: AbortSignal): Promise<unknown>; // server bus_wait, no ack
 	consumed(ids: readonly number[]): void;
 }): ToolDefinition;
 ```
 
 - Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, description and `inputSchema` from `GET /v1/tools`); `tool-selection.ts` excludes the server tool from mirroring. Subagents never register it.
-- Order: `takeHeld(filter)` → non-empty returns at once (E10a, when the dispatcher starts holding); else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`).
+- Order: `takeHeld(filter)` → non-empty returns at once (E10a); else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`).
 - Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`), and no ack. The same value goes into Bun's `fetch` `timeout` (its socket idle timer, 5 min by default): the server sends nothing until the wait ends, so a 300 s wait would otherwise be cut.
 - `timeoutSeconds` outside 1..300 is refused locally with the server's error (`invalid: timeoutSeconds must be 1..300`).
 - Cancellation: the `execute` `signal` (`CA/extensibility/extensions/types.ts:925-933`) aborts the wait; nothing is consumed.
@@ -382,7 +384,7 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 ### 3.5 Blackboard notices (E10a; `omp-blackboards.feature`; PO-5)
 
 - Coalescing is a **rendering** concern, not a delivery decision: while the session is busy, the dispatcher holds entries for which `holdable(class)` is true (`queue` only) and that carry a `threadId`, per `(space, blackboard, threadId)`, for a short window (proposal 1.5 s), then hands them over as **one** message whose `details.entryIds` lists every merged id, with the mechanism `mechanismFor(class, phase)` gives. Held entries are what `bus_wait` can take. No `type` switch: the grouping key is the entry's thread fields.
-- Notice text: whole post if ≤ 20 lines / 2 KiB, else head + "N lines left out; read the full thread with bus_read_thread {space, threadId}" (omp-parity Q6 proposal).
+- Notice text (`postNotice`): one fenced envelope per post, the reply hint only on the last; a post is shown whole if ≤ 20 lines and ≤ 2 KiB (2048 characters), else its head (the first whole lines within both limits, or the first 2048 characters of a longer first line) + "N lines left out; read the full thread with bus_read_thread {space, threadId}." (omp-parity Q6 proposal). The hold lives in `delivery/post-notices.ts` (`isPostNotice`: a `threadId` and `holdable(class)`; the window starts with the first held entry of a thread, so a stream of posts cannot postpone the notice; a post to a thread whose notice is still held joins it in any phase; stopping the inbox (`dispatcher.dropHeld`) drops the held entries from the replay dedupe, so a replay delivers them again).
 - `interrupt` entries are never held (the mapping says so), so a critical post steers in full; `deferred` entries are `nextTurn` by the mapping (the lifecycle-notice rule of `omp-blackboards.feature:52-70` holds without special code).
 - Status line (E10b): `ctx.ui.setStatus("agent-bus", "bus: 2 new posts in plan/7")` (`types.ts:346`); counts kept per thread from handed-over notices; cleared per thread by a successful `bus_read_thread`, all on logout.
 - `[INFERENCE: omp has no "step boundary is near" event for extensions; the window is a debounce, not a boundary sync. Smoke step E10a-2 measures that 3 rapid posts to a busy agent arrive as one notice.]`

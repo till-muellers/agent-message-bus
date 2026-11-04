@@ -23,7 +23,8 @@ interface Waiter {
 	done(entries: Entry[]): void;
 }
 
-function matches(filter: WaitFilter, entry: Entry): boolean {
+/** Whether `entry` is one a `bus_wait` with `filter` wants. */
+export function matches(filter: WaitFilter, entry: Entry): boolean {
 	if (filter.from !== undefined && entry.from !== filter.from) return false;
 	if (filter.threadId !== undefined && entry.threadId !== filter.threadId) return false;
 	return filter.after === undefined || entry.id > filter.after;

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, jest, test } from "bun:test";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { type BusExtensionOptions, createBusExtension } from "../extension/index.ts";
@@ -163,6 +163,27 @@ describe("inbox streaming", () => {
 		await app.emit("session_shutdown");
 		expect(callsTo(bus, "/v1/inbox/stream").map(c => c.auth)).toEqual(["Bearer adm", "Bearer lead-tok", "Bearer adm"]);
 		expect(await store.load()).toEqual({ url: URL_, adminToken: "adm" });
+	});
+
+	test("a post held while the session is busy is dropped when the stream stops: nothing reaches omp after logout or shutdown", async () => {
+		// "running" is the control: without a stop the held post reaches omp once the window ran out.
+		for (const ending of ["running", "logout", "session_shutdown"]) {
+			jest.useFakeTimers();
+			try {
+				const post = entry(1, { type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "design" });
+				const bus = fakeBus({ streams: [() => new Response(streamOf([frame(post)]))] });
+				const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+				const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui", idle: false });
+				await app.emit("session_start");
+				await app.warning("invalid token");
+				if (ending === "logout") await app.run("logout");
+				if (ending === "session_shutdown") await app.emit(ending);
+				jest.advanceTimersByTime(1500);
+				expect({ ending, sent: app.sent.length }).toEqual({ ending, sent: ending === "running" ? 1 : 0 });
+			} finally {
+				jest.useRealTimers();
+			}
+		}
 	});
 });
 

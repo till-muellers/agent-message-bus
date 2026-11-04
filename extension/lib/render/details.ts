@@ -1,10 +1,10 @@
 /**
  * The agent-bus session message (`docs/design/arch/client.md` §4.1): the envelope is the
- * model-facing content; the details keep the entry itself, for the ack (`entryIds`) and for
- * the renderers.
+ * model-facing content; the details keep the entries themselves, for the ack (`entryIds`) and for
+ * the renderers. A post notice carries every post of one thread the dispatcher held (§3.5).
  */
 import type { Entry } from "../bus/entry.ts";
-import { envelope } from "./envelope.ts";
+import { envelope, postNotice } from "./envelope.ts";
 
 /** The custom type of the messages the extension sends into the session. */
 export const BUS_MESSAGE_TYPE = "agent-bus";
@@ -30,12 +30,16 @@ function entryFields(e: Entry): Entry {
 	return { id, space, type, from, critical, class: cls, createdAt, body, topic, blackboard, threadId, threadTitle };
 }
 
+function message(content: string, entries: readonly Entry[]): BusMessage {
+	return { customType: BUS_MESSAGE_TYPE, content, display: true, details: { entryIds: entries.map(e => e.id), entries: entries.map(entryFields) } };
+}
+
 /** The session message of one entry. */
 export function busMessage(entry: Entry): BusMessage {
-	return {
-		customType: BUS_MESSAGE_TYPE,
-		content: envelope(entry),
-		display: true,
-		details: { entryIds: [entry.id], entries: [entryFields(entry)] },
-	};
+	return message(envelope(entry), [entry]);
+}
+
+/** The session message of a post notice: the posts of one thread. */
+export function noticeMessage(entries: readonly Entry[]): BusMessage {
+	return message(postNotice(entries), entries);
 }

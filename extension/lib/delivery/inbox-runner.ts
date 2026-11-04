@@ -1,4 +1,7 @@
-/** Starts and stops the session's inbox loop (`inbox-loop.ts`), warning on errors and on another session holding the stream. */
+/**
+ * Starts and stops the session's inbox loop (`inbox-loop.ts`), warning on errors and on another session holding the stream.
+ * Stopping drops the entries the dispatcher still holds.
+ */
 import type { BusClient } from "../bus/client.ts";
 import { conflictWarning } from "../connection/conflict.ts";
 import type { ActiveCredentials } from "../session/stored-credentials.ts";
@@ -44,6 +47,8 @@ export function createInboxRunner({ client, getActive, dispatcher, warn, sleep }
 			loop?.abort();
 			loop = undefined;
 			open = false;
+			// Held entries were never handed over: dropping them lets the next stream's replay deliver them.
+			dispatcher.dropHeld();
 		},
 		isOpen: () => open,
 	};

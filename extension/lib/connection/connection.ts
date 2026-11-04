@@ -90,6 +90,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 		phase: () => phaseOf(view.mode, view.isIdle()),
 		watermark,
 		handOver: (message, mechanism) => pi.sendMessage(message, mechanism),
+		warn,
 	});
 	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, dispatcher });
 	const wait: WaitToolDeps = {

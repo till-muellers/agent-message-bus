@@ -1,7 +1,7 @@
 /**
  * `bus_wait` in omp: a local tool with the server tool's name, description and schema (`docs/design/arch/client.md` §3.4).
- * With the session's own inbox stream it waits in the dispatcher, so the entry it returns never reaches omp a second
- * time and counts as consumed; without one it forwards the call to the server's `bus_wait`, which acks nothing.
+ * With the session's own inbox stream it returns the entries the dispatcher still holds at once, else it waits in the
+ * dispatcher, so the entries it returns never reach omp a second time and count as consumed; without one it forwards the call to the server's `bus_wait`, which acks nothing.
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { BusError, type RemoteTool } from "../bus/client.ts";
@@ -21,7 +21,7 @@ export interface WaitArgs extends WaitFilter {
 
 export interface WaitToolDeps {
 	/** The dispatcher of the session's open inbox stream; undefined while the session holds none. */
-	dispatcher(): Pick<Dispatcher, "waitNext"> | undefined;
+	dispatcher(): Pick<Dispatcher, "takeHeld" | "waitNext"> | undefined;
 	/** Calls the server's `bus_wait` with a transport timeout. */
 	forward(args: WaitArgs, timeoutMs: number, signal?: AbortSignal): Promise<unknown>;
 	/** The ids the tool returned from the stream: consumed. */
@@ -42,8 +42,9 @@ async function wait(args: WaitArgs, deps: WaitToolDeps, signal?: AbortSignal): P
 	const seconds = waitSeconds(args);
 	const dispatcher = deps.dispatcher();
 	if (!dispatcher) return deps.forward(args, seconds * 1000 + TRANSPORT_MARGIN_MS, signal);
-	const { from, threadId, after } = args;
-	const entries: Entry[] = await dispatcher.waitNext({ from, threadId, after }, seconds * 1000, signal);
+	const filter = { from: args.from, threadId: args.threadId, after: args.after };
+	const held = dispatcher.takeHeld(filter);
+	const entries: Entry[] = held.length > 0 ? held : await dispatcher.waitNext(filter, seconds * 1000, signal);
 	if (entries.length > 0) deps.consumed(entries.map(entry => entry.id));
 	return entries;
 }

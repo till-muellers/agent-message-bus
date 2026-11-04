@@ -24,15 +24,20 @@ const serverWait: RemoteTool = {
 
 const pi = { zod: z } as unknown as ExtensionAPI;
 
-/** A wait tool over a live stream whose dispatcher answers `entries`, recording waits, forwards and consumption. */
-function setup(live: boolean, entries: Entry[] = []) {
+/** A wait tool over a live stream whose dispatcher holds `held` and answers `entries`, recording waits, forwards and consumption. */
+function setup(live: boolean, entries: Entry[] = [], held: Entry[] = []) {
 	const waits: { filter: WaitFilter; ms: number; signal?: AbortSignal }[] = [];
 	const forwards: { args: unknown; ms: number }[] = [];
 	const consumed: number[][] = [];
+	const takes: WaitFilter[] = [];
 	const deps: WaitToolDeps = {
 		dispatcher: () =>
 			live
 				? {
+						takeHeld: filter => {
+							takes.push(filter);
+							return held.splice(0);
+						},
 						waitNext: async (filter, ms, signal) => {
 							waits.push({ filter, ms, signal });
 							return entries;
@@ -51,7 +56,7 @@ function setup(live: boolean, entries: Entry[] = []) {
 		if (first?.type !== "text") throw new Error("bus_wait returned no text");
 		return JSON.parse(first.text) as unknown;
 	};
-	return { tool, run, waits, forwards, consumed };
+	return { tool, run, waits, forwards, consumed, takes };
 }
 
 describe("the local bus_wait", () => {
@@ -73,6 +78,15 @@ describe("the local bus_wait", () => {
 		expect(waits.map(w => [w.filter, w.ms])).toEqual([[{ from: "lead", threadId: 7, after: 3 }, 5000]]);
 		expect(forwards).toEqual([]);
 		expect(consumed).toEqual([[4]]);
+	});
+
+	test("entries the dispatcher still holds are returned at once, consumed, without waiting", async () => {
+		const held = [entry(1, { type: "thread_post", threadId: 7 }), entry(2, { type: "thread_post", threadId: 7 })];
+		const { run, waits, takes, consumed } = setup(true, [], held);
+		expect(await run({ threadId: 7, timeoutSeconds: 5 })).toEqual([entry(1, { type: "thread_post", threadId: 7 }), entry(2, { type: "thread_post", threadId: 7 })]);
+		expect(takes).toEqual([{ from: undefined, threadId: 7, after: undefined }]);
+		expect(waits).toEqual([]);
+		expect(consumed).toEqual([[1, 2]]);
 	});
 
 	test("it waits 30 seconds by default and returns [] when nothing came", async () => {
