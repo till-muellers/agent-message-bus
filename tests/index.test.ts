@@ -166,7 +166,8 @@ describe("inbox streaming", () => {
 	});
 
 	test("a post held while the session is busy is dropped when the stream stops: nothing reaches omp after logout or shutdown", async () => {
-		for (const ending of ["logout", "session_shutdown"]) {
+		// "running" is the control: without a stop the held post reaches omp once the window ran out.
+		for (const ending of ["running", "logout", "session_shutdown"]) {
 			jest.useFakeTimers();
 			try {
 				const post = entry(1, { type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "design" });
@@ -175,9 +176,10 @@ describe("inbox streaming", () => {
 				const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui", idle: false });
 				await app.emit("session_start");
 				await app.warning("invalid token");
-				await (ending === "logout" ? app.run("logout") : app.emit(ending));
+				if (ending === "logout") await app.run("logout");
+				if (ending === "session_shutdown") await app.emit(ending);
 				jest.advanceTimersByTime(1500);
-				expect({ ending, sent: app.sent }).toEqual({ ending, sent: [] });
+				expect({ ending, sent: app.sent.length }).toEqual({ ending, sent: ending === "running" ? 1 : 0 });
 			} finally {
 				jest.useRealTimers();
 			}
