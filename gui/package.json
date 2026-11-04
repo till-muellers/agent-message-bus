@@ -1,0 +1,15 @@
+{
+	"name": "agent-message-bus-gui",
+	"private": true,
+	"type": "module",
+	"packageManager": "bun@1.4.2",
+	"scripts": {
+		"build": "bun scripts/build.ts",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.4.4",
+		"typescript": "^7.0.2"
+	}
+}
