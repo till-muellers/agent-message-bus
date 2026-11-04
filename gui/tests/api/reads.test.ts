@@ -41,4 +41,11 @@ describe("the state reads", () => {
 		expect(await reads.inbox()).toEqual([]);
 		expect(fake.requests).toEqual([expect.objectContaining({ method: "GET", path: "/web/api/inbox?limit=500" })]);
 	});
+
+	test("the admin list reads GET /web/api/admins", async () => {
+		const fake = fakeFetch(json(200, []));
+		const reads = createReads(createHttp({ fetchFn: fake.fetchFn, csrf: () => undefined }));
+		expect(await reads.admins()).toEqual([]);
+		expect(fake.requests[0]).toMatchObject({ method: "GET", path: "/web/api/admins" });
+	});
 });

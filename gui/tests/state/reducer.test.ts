@@ -90,3 +90,37 @@ describe("the reducer: view data", () => {
 		expect(reducer(ready(), { type: "view/failed", route: { name: "spaces" }, error }).view).toEqual({ status: "error", error });
 	});
 });
+
+describe("the reducer: messages after a mutation", () => {
+	test("a secret is shown and replaces a notice", () => {
+		const noticed = reducer(ready(), { type: "notice/shown", message: "Admin ops revoked.", alert: false });
+		const next = reducer(noticed, { type: "secret/shown", label: "Token of admin ops", secret: "amb_admin_x" });
+		expect(next.shownOnce).toEqual({ label: "Token of admin ops", secret: "amb_admin_x" });
+		expect(next.notice).toBeUndefined();
+	});
+
+	test("a notice replaces a shown secret", () => {
+		const shown = reducer(ready(), { type: "secret/shown", label: "Token of admin ops", secret: "amb_admin_x" });
+		const next = reducer(shown, { type: "notice/shown", message: "agent lead is a leader agent", alert: true });
+		expect(next.notice).toEqual({ message: "agent lead is a leader agent", alert: true });
+		expect(next.shownOnce).toBeUndefined();
+	});
+
+	test("navigating drops the secret and the notice", () => {
+		const shown = reducer(ready(), { type: "secret/shown", label: "Token of admin ops", secret: "amb_admin_x" });
+		const next = reducer(shown, { type: "navigate", route: { name: "inbox" } });
+		expect(next.shownOnce).toBeUndefined();
+		expect(next.notice).toBeUndefined();
+	});
+
+	test("signing out drops the secret", () => {
+		const shown = reducer(ready(), { type: "secret/shown", label: "Token of admin ops", secret: "amb_admin_x" });
+		expect(reducer(shown, { type: "session/signed-out" }).shownOnce).toBeUndefined();
+	});
+
+	test("a poll keeps the secret", () => {
+		const shown = reducer(ready(), { type: "secret/shown", label: "Token of admin ops", secret: "amb_admin_x" });
+		const next = reducer(shown, { type: "view/loaded", route: { name: "spaces" }, data: { kind: "spaces", list: { ...spaceList, inboxWaiting: 9 } }, at: 2 });
+		expect(next.shownOnce?.secret).toBe("amb_admin_x");
+	});
+});

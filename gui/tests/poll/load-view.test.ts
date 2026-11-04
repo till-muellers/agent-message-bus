@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Reads } from "../../src/api/reads.ts";
 import { loadView } from "../../src/poll/load-view.ts";
-import { entries, spaceDetail, spaceList, thread, threadInfos } from "../fixtures.ts";
+import { admins, entries, spaceDetail, spaceList, thread, threadInfos } from "../fixtures.ts";
 
 const reads: Reads = {
 	spaces: async () => spaceList,
@@ -9,6 +9,7 @@ const reads: Reads = {
 	threads: async () => threadInfos,
 	thread: async () => thread,
 	inbox: async () => entries,
+	admins: async () => admins,
 };
 
 describe("loading the data of a route", () => {
@@ -32,6 +33,10 @@ describe("loading the data of a route", () => {
 
 	test("the inbox loads the entries", async () => {
 		expect(await loadView(reads, { name: "inbox" })).toEqual({ kind: "inbox", entries });
+	});
+
+	test("the admin area loads the admin list", async () => {
+		expect(await loadView(reads, { name: "admins" })).toEqual({ kind: "admins", admins });
 	});
 
 	test("a page without data loads nothing", () => {

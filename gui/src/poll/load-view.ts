@@ -18,6 +18,7 @@ export function loadView(reads: Reads, route: Route): Promise<ViewData> | undefi
 		case "inbox":
 			return reads.inbox().then((entries) => ({ kind: "inbox", entries }));
 		case "admins":
+			return reads.admins().then((admins) => ({ kind: "admins", admins }));
 		case "not-found":
 			return undefined;
 	}

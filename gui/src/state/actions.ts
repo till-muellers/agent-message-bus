@@ -9,4 +9,6 @@ export type Action =
 	| { type: "navigate"; route: Route }
 	| { type: "view/loading" }
 	| { type: "view/loaded"; route: Route; data: ViewData; at: number }
-	| { type: "view/failed"; route: Route; error: ApiError };
+	| { type: "view/failed"; route: Route; error: ApiError }
+	| { type: "secret/shown"; label: string; secret: string }
+	| { type: "notice/shown"; message: string; alert: boolean };

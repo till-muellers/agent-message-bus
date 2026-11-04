@@ -28,4 +28,18 @@ export interface AppState {
 	route: Route;
 	/** The current route's data; dropped on navigation and sign-out. */
 	view: Resource<ViewData>;
+	/** An invite code or admin token, shown once; dropped on navigation and sign-out. */
+	shownOnce?: ShownOnce;
+	/** The outcome of the last mutation (the server's message when refused); dropped on navigation. */
+	notice?: Notice;
+}
+
+export interface ShownOnce {
+	label: string;
+	secret: string;
+}
+
+export interface Notice {
+	message: string;
+	alert: boolean;
 }

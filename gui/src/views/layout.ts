@@ -3,14 +3,16 @@ import { hrefOf } from "../router/routes.ts";
 import type { AppState, Route } from "../state/app-state.ts";
 import type { ViewData } from "../state/view-data.ts";
 import { type ChildArg, h, type VNode } from "../view/h.ts";
+import { type AdminAreaIntents, adminsView } from "./admins.ts";
 import { boardView } from "./board.ts";
 import { inboxView } from "./inbox.ts";
 import { loginView } from "./login.ts";
+import { shownOnceView } from "./shown-once.ts";
 import { spaceView } from "./space.ts";
 import { spacesView } from "./spaces.ts";
 import { threadView } from "./thread.ts";
 
-export interface Intents {
+export interface Intents extends AdminAreaIntents {
 	signIn(token: string): void;
 	signOut(): void;
 }
@@ -62,7 +64,7 @@ function header(identity: Identity, route: Route, intents: Intents): VNode {
 }
 
 /** The view of route for data; null when the data belongs to another kind of page. */
-function viewOf(route: Route, data: ViewData | undefined, identity: Identity): VNode | null {
+function viewOf(route: Route, data: ViewData | undefined, identity: Identity, intents: Intents): VNode | null {
 	if (route.name !== data?.kind) return null;
 	switch (data.kind) {
 		case "spaces":
@@ -75,24 +77,34 @@ function viewOf(route: Route, data: ViewData | undefined, identity: Identity): V
 			return threadView(data.space, data.thread);
 		case "inbox":
 			return inboxView(identity, data.entries);
+		case "admins":
+			return adminsView(data.admins, intents);
 	}
 }
 
 /** The main area: the route's data, "Loading…" before the first answer, the server's message on failure. */
-function content({ route, view }: AppState, identity: Identity): ChildArg[] {
+function content({ route, view }: AppState, identity: Identity, intents: Intents): ChildArg[] {
 	if (route.name === "not-found") {
 		return [h("p", null, "Page not found. ", h("a", { href: hrefOf({ name: "spaces" }) }, "Back to the spaces"))];
 	}
+	const page = (data: ViewData | undefined): VNode | null => viewOf(route, data, identity, intents);
 	switch (view.status) {
 		case "idle":
 			return [];
 		case "loading":
-			return [view.last ? viewOf(route, view.last, identity) : h("p", { key: "loading" }, "Loading…")];
+			return [view.last ? page(view.last) : h("p", { key: "loading" }, "Loading…")];
 		case "ready":
-			return [viewOf(route, view.data, identity)];
+			return [page(view.data)];
 		case "error":
-			return [h("p", { key: "error", role: "alert" }, view.error.message), viewOf(route, view.last, identity)];
+			return [h("p", { key: "error", role: "alert" }, view.error.message), page(view.last)];
 	}
+}
+
+/** The outcome of the last mutation: a secret shown once, or the notice (an alert when refused). */
+function outcome({ shownOnce, notice }: AppState): ChildArg {
+	if (shownOnce) return shownOnceView(shownOnce);
+	if (!notice) return null;
+	return h("p", { key: "notice", role: notice.alert ? "alert" : "status" }, notice.message);
 }
 
 /** The whole page for state: the login, or the signed-in shell with the current route's view. */
@@ -104,7 +116,7 @@ export function render(state: AppState, intents: Intents): VNode {
 		case "signed-out":
 			return loginView(session.error, intents.signIn);
 		case "signed-in": {
-			const main = h("main", null, content(state, session.identity));
+			const main = h("main", null, outcome(state), content(state, session.identity, intents));
 			return h("div", { key: "shell" }, header(session.identity, state.route, intents), main);
 		}
 	}
