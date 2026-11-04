@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { createClient, type FetchLike, type RemoteTool } from "../../extension/lib/bus/client.ts";
 import type { JsonSchema } from "../../extension/lib/bus/schema.ts";
 import { registerRemoteTools, type RemoteToolsOptions } from "../../extension/lib/tools/remote-tools.ts";
-import { entry, errorResponse, URL_, z } from "../fakes.ts";
+import { entry, errorResponse, fakeComponents, type FakeComponent, URL_, z } from "../fakes.ts";
 
 type FakeTool = {
 	name: string;
@@ -11,13 +11,14 @@ type FakeTool = {
 	loadMode?: string;
 	approval?: string;
 	execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }>;
+	renderResult?: (result: unknown, options: { expanded: boolean; isPartial: boolean }, theme: unknown) => unknown;
 };
 const listTool = (name: string, inputSchema: JsonSchema = { type: "object", properties: {} }): RemoteTool => ({ name, description: name, inputSchema });
 
 function setup(fetchFn: FetchLike, getActive: RemoteToolsOptions["getActive"] = () => ({ url: URL_, token: "t" })) {
 	const tools: FakeTool[] = [];
 	const warnings: string[] = [];
-	const pi = { zod: z, registerTool: (t: FakeTool) => void tools.push(t) } as unknown as ExtensionAPI;
+	const pi = { zod: z, pi: fakeComponents, registerTool: (t: FakeTool) => void tools.push(t) } as unknown as ExtensionAPI;
 	const options: RemoteToolsOptions = {
 		client: createClient(fetchFn),
 		getActive,
@@ -29,6 +30,28 @@ function setup(fetchFn: FetchLike, getActive: RemoteToolsOptions["getActive"] = 
 }
 
 describe("registerRemoteTools", () => {
+	test("bus_read_thread renders its result as a thread, and a successful read reports the thread as read", async () => {
+		const thread = { id: 7, blackboard: "plan", title: "design", createdBy: "peer", subscribed: true, posts: [] };
+		let fail = false;
+		const fetchFn: FetchLike = async url => {
+			if (url.endsWith("/v1/tools")) return Response.json([listTool("bus_read_thread"), listTool("bus_a")]);
+			return fail ? errorResponse(404, "not_found", "no thread") : Response.json({ result: thread });
+		};
+		const reads: [string, number][] = [];
+		const { tools, register } = setup(fetchFn);
+		await register({ threadRead: (space, threadId) => void reads.push([space, threadId]) });
+		const [read, other] = tools;
+		expect(other.renderResult).toBeUndefined();
+		const out = await read.execute("id", { space: "demo", threadId: 7 });
+		expect(reads).toEqual([["demo", 7]]);
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+		const view = read.renderResult?.(out, { expanded: false, isPartial: false }, theme) as FakeComponent;
+		expect(view.children[0].text).toBe("design plan / 7 · 0 posts");
+		fail = true;
+		await expect(read.execute("id", { space: "demo", threadId: 7 })).rejects.toThrow("not_found: no thread");
+		expect(reads).toEqual([["demo", 7]]);
+	});
+
 	test("registers once and executes with the current credentials", async () => {
 		const seen: (string | undefined)[] = [];
 		const fetchFn: FetchLike = async (url, init) => {

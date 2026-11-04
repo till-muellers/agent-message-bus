@@ -251,14 +251,14 @@ interface Ctx {
 	mode: string;
 	cwd: string;
 	agent: { kind: string; id?: string };
-	ui: { notify(message: string): void };
+	ui: { notify(message: string): void; setStatus(key: string, text: string | undefined): void };
 	sessionManager: { getSessionFile(): string | undefined };
 	isIdle(): boolean;
 }
 
 type Handler = (event: unknown, ctx: Ctx) => unknown;
 
-function sessionContext(session: BootSession, notes: string[]): Ctx {
+function sessionContext(session: BootSession, notes: string[], statuses: Map<string, string>): Ctx {
 	return {
 		get mode() {
 			return session.mode ?? "print";
@@ -269,7 +269,10 @@ function sessionContext(session: BootSession, notes: string[]): Ctx {
 		get agent() {
 			return { kind: session.kind ?? "main", id: session.agentId };
 		},
-		ui: { notify: message => void notes.push(message) },
+		ui: {
+			notify: message => void notes.push(message),
+			setStatus: (key, text) => void (text === undefined ? statuses.delete(key) : statuses.set(key, text)),
+		},
 		sessionManager: { getSessionFile: () => session.sessionFile },
 		isIdle: () => session.idle ?? true,
 	};
@@ -313,6 +316,8 @@ export interface Booted {
 	active(): string[];
 	/** The message renderers by custom type. */
 	renderers: Map<string, MessageRenderer>;
+	/** The footer status entries by key (`ctx.ui.setStatus`). */
+	statuses: Map<string, string>;
 }
 
 /**
@@ -353,7 +358,8 @@ export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<voi
 		logger,
 	} as unknown as ExtensionAPI;
 	await extension(pi);
-	const ctx = sessionContext(session, notes);
+	const statuses = new Map<string, string>();
+	const ctx = sessionContext(session, notes, statuses);
 	const emit = async (event: string, payload: unknown = { type: event }) => {
 		for (const handler of handlers[event] ?? []) await handler(payload, ctx);
 	};
@@ -366,5 +372,5 @@ export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<voi
 	const context = async (messages: readonly unknown[]) => {
 		for (const handler of handlers["context"] ?? []) await handler({ type: "context", messages }, ctx);
 	};
-	return { tools, tool, notes, warnings, warning, userMessages, sent, emit, run, context, commands, active: () => active, renderers };
+	return { tools, tool, notes, warnings, warning, userMessages, sent, emit, run, context, commands, active: () => active, renderers, statuses };
 }

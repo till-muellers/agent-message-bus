@@ -187,6 +187,40 @@ describe("inbox streaming", () => {
 	});
 });
 
+describe("blackboard status line", () => {
+	const tempDir = useTempDirs();
+	const readThread: RemoteTool = { name: "bus_read_thread", description: "Read", inputSchema: { type: "object", properties: { space: { type: "string" }, threadId: { type: "integer" } } } };
+	const post = (id: number) => entry(id, { type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "design" });
+
+	async function withPosts() {
+		const thread = { id: 7, blackboard: "plan", title: "design", createdBy: "lead", subscribed: true, posts: [] };
+		const bus = fakeBus({ streams: [() => new Response(streamOf([frame(post(1)), frame(post(2))]))], list: [readThread], tools: { bus_read_thread: () => Response.json({ result: thread }) } });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+		await app.emit("session_start");
+		await app.warning("invalid token");
+		return app;
+	}
+
+	test("handed-over posts are counted in the status line, and bus_read_thread clears their thread", async () => {
+		const app = await withPosts();
+		expect(app.statuses.get("agent-bus")).toBe("bus: 2 new posts in plan/7");
+		await app.tool("bus_read_thread").execute("id", { space: "demo", threadId: 7 });
+		expect(app.statuses.has("agent-bus")).toBe(false);
+		await app.emit("session_shutdown");
+	});
+
+	test("/bus logout and a session switch remove the bus entry from the status line", async () => {
+		for (const leave of ["logout", "session_switch"]) {
+			const app = await withPosts();
+			expect(app.statuses.get("agent-bus")).toBe("bus: 2 new posts in plan/7");
+			await (leave === "logout" ? app.run("logout") : app.emit(leave, { type: leave, reason: "new" }));
+			expect({ leave, status: app.statuses.get("agent-bus") }).toEqual({ leave, status: undefined });
+			await app.emit("session_shutdown");
+		}
+	});
+});
+
 describe("bus_wait in omp", () => {
 	const tempDir = useTempDirs();
 	const serverWait: RemoteTool = {

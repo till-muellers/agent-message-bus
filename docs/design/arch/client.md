@@ -105,7 +105,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts` (E10b), `render/send-receipt.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -128,6 +128,7 @@ flowchart TD
   connection --> delivery
   connection --> version
   connection --> bus
+  connection --> render
   context --> delivery
   context --> bus
   context --> session
@@ -386,7 +387,7 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 - Coalescing is a **rendering** concern, not a delivery decision: while the session is busy, the dispatcher holds entries for which `holdable(class)` is true (`queue` only) and that carry a `threadId`, per `(space, blackboard, threadId)`, for a short window (proposal 1.5 s), then hands them over as **one** message whose `details.entryIds` lists every merged id, with the mechanism `mechanismFor(class, phase)` gives. Held entries are what `bus_wait` can take. No `type` switch: the grouping key is the entry's thread fields.
 - Notice text (`postNotice`): one fenced envelope per post, the reply hint only on the last; a post is shown whole if ≤ 20 lines and ≤ 2 KiB (2048 characters), else its head (the first whole lines within both limits, or the first 2048 characters of a longer first line) + "N lines left out; read the full thread with bus_read_thread {space, threadId}." (omp-parity Q6 proposal). The hold lives in `delivery/post-notices.ts` (`isPostNotice`: a `threadId` and `holdable(class)`; the window starts with the first held entry of a thread, so a stream of posts cannot postpone the notice; a post to a thread whose notice is still held joins it in any phase; stopping the inbox (`dispatcher.dropHeld`) drops the held entries from the replay dedupe, so a replay delivers them again).
 - `interrupt` entries are never held (the mapping says so), so a critical post steers in full; `deferred` entries are `nextTurn` by the mapping (the lifecycle-notice rule of `omp-blackboards.feature:52-70` holds without special code).
-- Status line (E10b): `ctx.ui.setStatus("agent-bus", "bus: 2 new posts in plan/7")` (`types.ts:346`); counts kept per thread from handed-over notices; cleared per thread by a successful `bus_read_thread`, all on logout.
+- Status line (E10b): `ctx.ui.setStatus("agent-bus", "bus: 2 new posts in plan/7")` (`types.ts:346`); counts kept per thread from handed-over notices; cleared per thread by a successful `bus_read_thread` or a `thread_removed` entry (per board by `blackboard_removed`), all on logout and on every connection restart (`render/status-line.ts`; the thread view of `bus_read_thread` is `render/thread-view.ts`).
 - `[INFERENCE: omp has no "step boundary is near" event for extensions; the window is a debounce, not a boundary sync. Smoke step E10a-2 measures that 3 rapid posts to a busy agent arrive as one notice.]`
 
 ### 3.6 `pi.events` (E10c; `omp-events.feature`)
@@ -404,7 +405,6 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 export interface BusMessageDetails {
 	entryIds: number[];          // the ack key (§3.3); >1 only for coalesced post notices
 	entries: Entry[];            // id, space, type, from, critical, createdAt, body, topic?, blackboard?, threadId?, threadTitle?
-	notice?: "posts" | "lifecycle";
 }
 export type BusMessage = { customType: "agent-bus"; content: string; display: true; details: BusMessageDetails };
 ```

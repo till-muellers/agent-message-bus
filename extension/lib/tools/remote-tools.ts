@@ -4,6 +4,7 @@ import type { BusClient, RemoteTool } from "../bus/client.ts";
 import type { ActiveCredentials } from "../session/stored-credentials.ts";
 import { errorMessage, NOT_LOGGED_IN } from "../bus/errors.ts";
 import { toZod } from "../bus/schema.ts";
+import { THREAD_TOOL, threadView } from "../render/thread-view.ts";
 import { toolResult } from "./tool-result.ts";
 import { attribute, ATTRIBUTED_TOOLS } from "./attribution.ts";
 import { presentationOf } from "./presentation.ts";
@@ -30,6 +31,8 @@ export interface RemoteToolsOptions {
 	agentId?: string;
 	/** What the local `bus_wait` of a main session waits with; a subagent has none. */
 	wait?: WaitToolDeps;
+	/** Told after every successful `bus_read_thread`: the thread was read. */
+	threadRead?: (space: string, threadId: number) => void;
 }
 
 /** A tool this session registers: its name and how to build its definition. */
@@ -47,23 +50,32 @@ function registrations(pi: ExtensionAPI, tools: readonly RemoteTool[], options: 
 	return [...remote, { name: WAIT_TOOL, define: () => waitToolDefinition(pi, shadow, wait) }];
 }
 
-function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, options: RemoteToolsOptions): Parameters<ExtensionAPI["registerTool"]>[0] {
+/** Calls the server tool with the current credentials; a subagent says which subagent wrote a post. */
+async function callRemote(tool: RemoteTool, params: Record<string, unknown>, options: RemoteToolsOptions): Promise<unknown> {
 	const { client, getActive, kind, agentId } = options;
+	const current = getActive();
+	if (!current) throw new Error(NOT_LOGGED_IN);
+	const attributed = kind === "sub" && agentId && ATTRIBUTED_TOOLS.includes(tool.name) ? attribute(params, agentId) : params;
+	const result = await client.callTool(current.url, current.token, tool.name, attributed);
+	if (tool.name === THREAD_TOOL && typeof params.space === "string" && typeof params.threadId === "number") options.threadRead?.(params.space, params.threadId);
+	return result;
+}
+
+/** `bus_read_thread` renders its result as a thread. */
+function rendering(pi: ExtensionAPI, tool: RemoteTool): Pick<Parameters<ExtensionAPI["registerTool"]>[0], "renderResult"> {
+	if (tool.name !== THREAD_TOOL) return {};
+	return { renderResult: (result, { expanded }, theme) => threadView(pi.pi, result, expanded, theme) };
+}
+
+function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, options: RemoteToolsOptions): Parameters<ExtensionAPI["registerTool"]>[0] {
 	return {
 		name: tool.name,
 		label: tool.name,
 		description: tool.description,
 		parameters: toZod(tool.inputSchema, pi.zod),
 		...presentationOf(tool.name),
-		execute: (_toolCallId: string, params: Record<string, unknown>) =>
-			toolResult(async () => {
-				const current = getActive();
-				if (!current) throw new Error(NOT_LOGGED_IN);
-				// A subagent says which subagent wrote the post.
-				const attributed =
-					kind === "sub" && agentId && ATTRIBUTED_TOOLS.includes(tool.name) ? attribute(params, agentId) : params;
-				return client.callTool(current.url, current.token, tool.name, attributed);
-			}),
+		...rendering(pi, tool),
+		execute: (_toolCallId: string, params: Record<string, unknown>) => toolResult(() => callRemote(tool, params, options)),
 	};
 }
 
