@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -117,7 +118,7 @@ func runMutation(t *testing.T, tc mutationCase) {
 	if tc.setup != nil {
 		tc.setup(t, w)
 	}
-	tokens := map[string]string{"admin": adminToken, "ops": w.ops, "lead": w.lead, "worker": w.worker}
+	tokens := map[string]string{"ops": w.ops, "worker": w.worker}
 	s := w.open(t, tokens[tc.as])
 	status, body, h := w.send(t, tc.method, tc.path, tc.body, s, s.csrf)
 	if status != tc.status || !strings.Contains(body, tc.want) {
@@ -444,9 +445,9 @@ func TestWebMutationsCSRF(t *testing.T) {
 // services capture slog.Default() when the world is built.
 func TestMutationLogLine(t *testing.T) {
 	var buf bytes.Buffer
-	prev := slog.Default()
+	prev, prevOut, prevFlags := slog.Default(), log.Writer(), log.Flags()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Cleanup(func() { slog.SetDefault(prev); log.SetOutput(prevOut); log.SetFlags(prevFlags) })
 	w := mutationWorld(t)
 	callTool(t, w.api, w.lead, "bus_create_space", `{"space":"other"}`, nil)
 	s := w.open(t, w.ops)

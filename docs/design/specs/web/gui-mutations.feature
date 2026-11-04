@@ -209,6 +209,7 @@ Feature: Web GUI mutations
       And member "worker" receives a "topic_message" inbox entry from "ops" with topic "all" and body "hi"
 
     Scenario: The operator sends a critical message
+      Given member "worker" subscribed to topic "notes" in space "demo"
       When the operator posts the critical message "now" to topic "notes" in space "demo"
       Then the response status is 200
       And member "worker" receives a critical inbox entry from "ops"

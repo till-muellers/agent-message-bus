@@ -14,8 +14,7 @@ Feature: Spaces and participants in the web GUI
   #   - roles are "admin", "leader" and "member"
   #   - an admin appears in a participant list only if it joined the space,
   #     and admins are listed first, then leaders, then members, each by name
-  # These views are read-only; the milestone-2 mutations are in
-  # docs/design/specs/web/gui-mutations.feature (slice W3).
+  # These views are read-only; the mutations are in gui-mutations.feature.
 
   Background:
     Given the bus is running with admin token "admin-token-0123456789-0123456789-abcdef"

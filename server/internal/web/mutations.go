@@ -81,7 +81,7 @@ func (g *Web) post(r *http.Request, p auth.Principal) (any, error) {
 	}
 	space := r.PathValue("space")
 	args := map[string]any{"space": space, "threadId": id, "body": in.Body}
-	return g.mutate(r, p, "bus_add_post", args, mutationLog{"post", space, r.PathValue("id")})
+	return g.mutate(r, p, "bus_add_post", args, mutationLog{"post", space, strconv.FormatInt(id, 10)})
 }
 
 // send answers POST /web/api/spaces/{space}/topics/{topic}/messages as bus_send_topic.
