@@ -83,3 +83,32 @@ def test_resolve_out(out: str, absolute: bool) -> None:
     resolved = build.resolve_out(out)
     expected = Path(out) if absolute else build.REPO_ROOT / out
     assert resolved == expected
+
+
+def test_gui_build_commands_install_then_build_into_the_out_dir(tmp_path: Path) -> None:
+    commands, cwd = build.gui_build_commands("bun", tmp_path)
+    assert commands == [
+        ["bun", "install", "--frozen-lockfile"],
+        ["bun", "run", "build", "--out", str(tmp_path)],
+    ]
+    assert cwd == build.REPO_ROOT / "gui"
+
+
+def test_gui_dist_is_the_embed_dir_of_the_server() -> None:
+    assert build.GUI_DIST == build.APP_DIR / "internal" / "web" / "dist"
+
+
+@pytest.mark.parametrize(("argv", "skip"), [([], False), (["--skip-gui"], True)])
+def test_skip_gui_flag(argv: list[str], skip: bool) -> None:
+    assert build.parse_args(argv).skip_gui is skip
+
+
+def test_find_bun_returns_the_bun_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(build.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert build.find_bun() == "/usr/bin/bun"
+
+
+def test_find_bun_exits_when_bun_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(build.shutil, "which", lambda name: None)
+    with pytest.raises(SystemExit, match="--skip-gui"):
+        build.find_bun()
