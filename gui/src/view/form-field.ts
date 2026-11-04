@@ -8,3 +8,13 @@ export function takeField(event: Event, name: string): string {
 	field.value = "";
 	return value;
 }
+
+/** Reads every field of the form that fired event as text (a checked box is "on") and resets the form. */
+export function takeForm(event: Event): ReadonlyMap<string, string> {
+	const form = event.currentTarget;
+	if (!(form instanceof HTMLFormElement)) return new Map();
+	const values = new Map<string, string>();
+	for (const [name, value] of new FormData(form)) if (typeof value === "string") values.set(name, value);
+	form.reset();
+	return values;
+}

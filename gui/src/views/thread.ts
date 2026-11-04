@@ -1,6 +1,7 @@
 import type { Post, Thread } from "../api/types.ts";
 import { hrefOf } from "../router/routes.ts";
 import { h, type VNode } from "../view/h.ts";
+import { type FormIntents, postForm } from "./forms.ts";
 import { time } from "./time.ts";
 
 function post(p: Post): VNode {
@@ -12,7 +13,8 @@ function origin(space: string, t: Thread): VNode {
 	return h("p", null, "on blackboard ", board, ` created by ${t.createdBy}`);
 }
 
-/** A thread: title, its blackboard and author, then every post in order with author and time. */
-export function threadView(space: string, t: Thread): VNode {
-	return h("section", { key: `thread-${space}-${t.id}` }, h("h1", null, t.title), origin(space, t), t.posts.map(post));
+/** A thread: title, its blackboard and author, every post in order with author and time, then the reply form. */
+export function threadView(space: string, t: Thread, intents: Pick<FormIntents, "post">): VNode {
+	const key = `thread-${space}-${t.id}`;
+	return h("section", { key }, h("h1", null, t.title), origin(space, t), t.posts.map(post), postForm(space, t.id, intents));
 }

@@ -5,14 +5,16 @@ import type { ViewData } from "../state/view-data.ts";
 import { type ChildArg, h, type VNode } from "../view/h.ts";
 import { type AdminAreaIntents, adminsView } from "./admins.ts";
 import { boardView } from "./board.ts";
+import { type ConfirmIntents, confirmView } from "./confirm.ts";
+import type { FormIntents } from "./forms.ts";
 import { inboxView } from "./inbox.ts";
 import { loginView } from "./login.ts";
 import { shownOnceView } from "./shown-once.ts";
-import { spaceView } from "./space.ts";
+import { type SpaceViewIntents, spaceView } from "./space.ts";
 import { spacesView } from "./spaces.ts";
 import { threadView } from "./thread.ts";
 
-export interface Intents extends AdminAreaIntents {
+export interface Intents extends AdminAreaIntents, SpaceViewIntents, FormIntents, ConfirmIntents {
 	signIn(token: string): void;
 	signOut(): void;
 }
@@ -70,11 +72,11 @@ function viewOf(route: Route, data: ViewData | undefined, identity: Identity, in
 		case "spaces":
 			return spacesView(data.list);
 		case "space":
-			return spaceView(data.detail);
+			return spaceView(data.detail, intents);
 		case "board":
 			return boardView(data.space, data.board, data.threads);
 		case "thread":
-			return threadView(data.space, data.thread);
+			return threadView(data.space, data.thread, intents);
 		case "inbox":
 			return inboxView(identity, data.entries);
 		case "admins":
@@ -100,8 +102,9 @@ function content({ route, view }: AppState, identity: Identity, intents: Intents
 	}
 }
 
-/** The outcome of the last mutation: a secret shown once, or the notice (an alert when refused). */
-function outcome({ shownOnce, notice }: AppState): ChildArg {
+/** An open confirmation, else the outcome of the last mutation: a secret shown once, or the notice (an alert when refused). */
+function outcome({ confirm, shownOnce, notice }: AppState, intents: Intents): ChildArg {
+	if (confirm) return confirmView(confirm, intents);
 	if (shownOnce) return shownOnceView(shownOnce);
 	if (!notice) return null;
 	return h("p", { key: "notice", role: notice.alert ? "alert" : "status" }, notice.message);
@@ -116,7 +119,7 @@ export function render(state: AppState, intents: Intents): VNode {
 		case "signed-out":
 			return loginView(session.error, intents.signIn);
 		case "signed-in": {
-			const main = h("main", null, outcome(state), content(state, session.identity, intents));
+			const main = h("main", null, outcome(state, intents), content(state, session.identity, intents));
 			return h("div", { key: "shell" }, header(session.identity, state.route, intents), main);
 		}
 	}

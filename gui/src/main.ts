@@ -1,5 +1,6 @@
 import { createAdminsApi } from "./api/admins.ts";
 import { createHttp, type Http } from "./api/http.ts";
+import { createMutations } from "./api/mutations.ts";
 import { createReads } from "./api/reads.ts";
 import { createSessionApi } from "./api/session.ts";
 import { loadView } from "./poll/load-view.ts";
@@ -10,6 +11,7 @@ import { createAdminIntents } from "./state/admin-intents.ts";
 import type { AppState } from "./state/app-state.ts";
 import { initialState, reducer } from "./state/reducer.ts";
 import { createSessionIntents } from "./state/session-intents.ts";
+import { createSpaceIntents } from "./state/space-intents.ts";
 import { createStore, type Store } from "./state/store.ts";
 import { mount } from "./view/mount.ts";
 import { type Intents, render } from "./views/layout.ts";
@@ -31,13 +33,22 @@ function startPolling(store: Store, http: Http): Poller {
 }
 
 function intentsOf(store: Store, http: Http, poller: Poller): { intents: Intents; restore(): Promise<void> } {
+	const deps = { dispatch: store.dispatch, refresh: () => poller.refreshNow() };
 	const session = createSessionIntents(createSessionApi(http), store.dispatch);
-	const admins = createAdminIntents(createAdminsApi(http), { dispatch: store.dispatch, refresh: () => poller.refreshNow() });
+	const admins = createAdminIntents(createAdminsApi(http), deps);
+	const space = createSpaceIntents(createMutations(http), deps);
 	const intents: Intents = {
 		signIn: (token) => void session.signIn(token),
 		signOut: () => void session.signOut(),
 		mintAdmin: (name) => void admins.mint(name),
 		revokeAdmin: (name) => void admins.revoke(name),
+		invite: (s, name, task) => void space.invite(s, name, task),
+		cancelInvite: (s, invite) => void space.cancelInvite(s, invite),
+		post: (s, threadId, body) => void space.post(s, threadId, body),
+		send: (s, topic, body, critical) => void space.send(s, topic, body, critical),
+		ask: (confirm) => space.ask(confirm),
+		confirmed: (confirm) => void space.confirmed(confirm),
+		dismiss: () => space.dismiss(),
 	};
 	return { intents, restore: () => session.restore() };
 }

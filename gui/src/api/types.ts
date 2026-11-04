@@ -141,3 +141,11 @@ export interface MintedAdmin {
 	name: string;
 	token: string;
 }
+
+/** The bus_invite_member result: the code is shown once and never again. */
+export interface InviteCode {
+	name: string;
+	space: string;
+	code: string;
+	expiresAt: string;
+}

@@ -41,7 +41,8 @@ gui/
       reads.ts          admins() (GUI-5); spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox() (GUI-4: limit=500, oldest first; the view says when the list is cut)
       decode-admins.ts  (W2) decoders of the admin list, the minted token and {deleted}
       admins.ts         (W2) mint(name), revoke(name); the list is the polled read reads.admins()
-      mutations.ts      (W3) invite, cancelInvite(space, id) (DELETE), revoke, post, sendTopic, deleteSpace
+      decode-mutations.ts (W3) decoders of the invite code, {cancelled} and {postId}
+      mutations.ts      (W3) invite, cancelInvite(space, id) (DELETE), revoke (confirm "<space>/<name>"), post, sendTopic, deleteSpace (confirm "<space>")
     state/
       app-state.ts      AppState, Route, Resource<T> types
       view-data.ts      ViewData: the current route's data, tagged by view kind
@@ -52,6 +53,7 @@ gui/
       session-intents.ts signIn / restore / signOut: run the session calls, dispatch the outcome (never rejects)
       mutate.ts         mutate(deps, call, done): awaits a mutation, dispatches done(result) and refreshes; 401 → signed-out, else the server's message as an alert notice (never rejects)
       admin-intents.ts  (W2) mint → secret/shown, revoke → notice/shown
+      space-intents.ts  (W3) invite → secret/shown; cancel, post, send → notice; ask/dismiss open and close the confirmation, confirmed closes it and runs the revoke or delete
     router/
       routes.ts         parseRoute(hash) → Route; hrefOf(route) → "#/…" (pure)
       hash-source.ts    hashchange → dispatch(navigate)
@@ -61,21 +63,21 @@ gui/
     view/
       h.ts              h(tag, props, ...children) → VNode (plain objects)
       mount.ts          VNode → DOM with a keyed patch (reuses nodes; keeps focus and input values)
-      form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state)
+      form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state); takeForm(event): all fields, then resets the form
     views/
       layout.ts         header (signed-in name/kind, nav, sign out), error banner
       login.ts          token form
       table.ts          table(head, rows): a header row and keyed rows
       time.ts           time(iso): a <time> element with the local formatted text
       spaces.ts         space list: leader and member counts, admin names, open invites with leader rights
-      space.ts          participants, topics, blackboards, recent threads, open invites (leader rights)
+      space.ts          participants, topics + send form, blackboards, recent threads; with leader rights revoke per leader/member, open invites with a cancel button by id, the invite form and delete space
       board.ts          threads of a blackboard (most recently active first)
       thread.ts         a thread: title, posts with author and time
       inbox.ts          the signed-in agent's own inbox, read-only ("Inbox of <kind> <name>", no acknowledge)
       admins.ts         (W2) admin list, mint form, revoke button per minted admin (none for the bootstrap admin)
-      confirm.ts        (W3) confirm dialog naming space / target / role
+      confirm.ts        (W3) confirm section (role alertdialog) naming space / target / role, above the page
       shown-once.ts     (W2/W3) invite code or admin token shown once
-      forms.ts          (W3) invite, post, send-to-topic forms
+      forms.ts          (W3) invite (space view, leader rights), post (thread view), send-to-topic (space view) forms; read through takeForm
     format/
       time.ts           server time → local "YYYY-MM-DD HH:MM" (absolute: a deep-equal poll does not re-render, so a relative time would go stale)
   tests/                bun test, one file per src module
@@ -117,7 +119,7 @@ export interface AppState {
 	view: Resource<ViewData>;         // the current route's data; replaced on navigation
 	shownOnce?: { label: string; secret: string };  // invite code / admin token; cleared on next navigation and sign-out (W2/W3)
 	notice?: { message: string; alert: boolean };   // last mutation's outcome (alert: the server's refusal); cleared on next navigation
-	confirm?: PendingConfirm;         // W3
+	confirm?: PendingConfirm;         // W3: {kind: "revoke", space, name, role} | {kind: "delete-space", space}; cleared on navigation
 }
 // state/actions.ts
 export type Action =

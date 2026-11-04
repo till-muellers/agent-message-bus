@@ -130,3 +130,18 @@ describe("the reducer: messages after a mutation", () => {
 		expect(next.shownOnce?.secret).toBe("amb_admin_x");
 	});
 });
+
+describe("the reducer: confirmations", () => {
+	const pending = { kind: "revoke", space: "demo", name: "worker", role: "member" } as const;
+
+	test("a confirmation opens and closes", () => {
+		const open = reducer(ready(), { type: "confirm/open", confirm: pending });
+		expect(open.confirm).toEqual(pending);
+		expect(reducer(open, { type: "confirm/close" }).confirm).toBeUndefined();
+	});
+
+	test("navigating drops an open confirmation", () => {
+		const open = reducer(ready(), { type: "confirm/open", confirm: pending });
+		expect(reducer(open, { type: "navigate", route: { name: "inbox" } }).confirm).toBeUndefined();
+	});
+});
