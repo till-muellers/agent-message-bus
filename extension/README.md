@@ -2,7 +2,7 @@
 
 Connects an omp session to an [agent-message-bus](../server/README.md) server. The extension:
 
-- registers the server's 34 `bus_*` tools in the session, plus its own `bus_spawn_worker`;
+- registers the server's `bus_*` tools in the session (33 of its 34: `bus_inbox_ack` stays with the extension), plus its own `bus_spawn_worker`;
 - streams the agent's inbox into the session as `[agent-bus]` messages, then acknowledges each one;
 - puts a context block in front of every model request: who the agent is on the bus, and the server's agent guide;
 - adds the `/bus` command to manage credentials and a local server.
