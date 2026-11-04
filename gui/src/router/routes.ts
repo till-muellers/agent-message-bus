@@ -59,5 +59,5 @@ export function hrefOf(route: Route): string {
 }
 
 export function sameRoute(a: Route, b: Route): boolean {
-	return a.name === b.name && hrefOf(a) === hrefOf(b);
+	return hrefOf(a) === hrefOf(b);
 }

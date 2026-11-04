@@ -9,7 +9,7 @@ const ASSET_URL = "/web/assets/";
 /** The bundle files index.html refers to, by their template placeholder. */
 type Bundle = Readonly<Record<"%MAIN_SCRIPT%" | "%STYLE%", string>>;
 
-async function bundleMain(assetsDir: string): Promise<Bundle> {
+async function bundleAssets(assetsDir: string): Promise<Bundle> {
 	const result = await Bun.build({
 		entrypoints: [join(GUI_DIR, "src", "main.ts"), join(GUI_DIR, "src", "style.css")],
 		outdir: assetsDir,
@@ -40,7 +40,7 @@ export async function buildGui(outDir: string): Promise<void> {
 	const assetsDir = join(outDir, "assets");
 	rmSync(assetsDir, { recursive: true, force: true });
 	mkdirSync(assetsDir, { recursive: true });
-	await writeIndex(outDir, await bundleMain(assetsDir));
+	await writeIndex(outDir, await bundleAssets(assetsDir));
 }
 
 if (import.meta.main) {

@@ -15,15 +15,18 @@ export function mount(root: Element, tree: VChild): void {
 	patchChildren(root, [tree]);
 }
 
+/** Matches first and removes the leftovers before placing, so removals move no kept node (a moved node loses focus). */
 function patchChildren(parent: Node, next: readonly VChild[]): void {
 	const pool = Array.from(parent.childNodes);
-	next.forEach((child, index) => {
+	const nodes = next.map((child) => {
 		const reuse = takeMatch(pool, child);
-		const node = reuse ? patch(reuse, child) : create(child);
+		return reuse ? patch(reuse, child) : create(child);
+	});
+	for (const stale of pool) parent.removeChild(stale);
+	nodes.forEach((node, index) => {
 		const at = parent.childNodes[index] ?? null;
 		if (at !== node) parent.insertBefore(node, at);
 	});
-	for (const stale of pool) parent.removeChild(stale);
 }
 
 function takeMatch(pool: Node[], child: VChild): Node | undefined {

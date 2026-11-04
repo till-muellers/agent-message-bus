@@ -189,9 +189,9 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 
 - **Owner of the Go side: Arch-server** (`server/internal/web/`: `embed.go`, the handlers, `dist/`). Confirmed by message: `GET /web/` → `index.html`, `GET /web/assets/*` → hashed bundles, no SPA fallback, the server never runs bun.
 - `gui/scripts/build.ts`:
-  1. `Bun.build({ entrypoints: ["src/main.ts"], outdir: "<out>/assets", target: "browser", minify: true, naming: "[name]-[hash].[ext]", sourcemap: "none" })`;
+  1. `Bun.build({ entrypoints: ["src/main.ts", "src/style.css"], outdir: "<out>/assets", target: "browser", minify: true, naming: "[name]-[hash].[ext]", sourcemap: "none" })`;
   2. removes stale `<out>/assets/*` first;
-  3. writes `<out>/index.html` from `gui/index.html`, replacing the script placeholder with `/web/assets/main-<hash>.js`;
+  3. writes `<out>/index.html` from `gui/index.html`, replacing `%MAIN_SCRIPT%` with `/web/assets/main-<hash>.js` and `%STYLE%` with `/web/assets/style-<hash>.css`;
   4. `--out <dir>` (default `../server/internal/web/dist`), used by Docker (§pipeline).
 - **Placeholder (contracts.md §10.5).** `server/internal/web/embed.go` uses `//go:embed all:dist`; tracked are only `server/internal/web/dist/.gitkeep` and `server/internal/web/.gitignore` (`dist/*`, `!dist/.gitkeep`). Without a GUI build the server answers `GET /web/` with a built-in fallback page, so `go build`/`go test` work on a fresh checkout without bun, and a local GUI build leaves `git status` clean.
   - The root `.gitignore` line `dist/` (`.gitignore:2`) matches `server/internal/web/dist/` and would keep `.gitkeep` from being added: W1a changes it to `/dist/` (the release output of `scripts/build.py --out dist`).
@@ -212,8 +212,8 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 | `api/decode.ts` | valid shapes pass, every missing/wrong field throws `invalid_response` |
 | `poll/poller.ts` | fake `Clock`: interval, pause when hidden, backoff, refresh after mutation |
 | `views/*.ts` | assert the VNode tree (`h()` output): texts, order, keys, links (`hrefOf`), buttons per kind (no admin nav for a member) |
-| `view/mount.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure. Its patch decision function (`samePlace(a, b)`) is pure and tested. |
-| `scripts/build.ts` | builds into a temp `--out`; asserts `index.html` references an existing `assets/main-*.js` |
+| `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage). The patch decision function (`samePlace(a, b)`) is pure and tested. |
+| `scripts/build.ts` | builds into a temp `--out` (in-process and through the command line); asserts `index.html` references an existing `assets/main-*.js` and `assets/style-*.css` |
 | fitness | `tests/no-raw-html.test.ts`: no `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` in `gui/src` |
 
 Server behaviour (cookie flags, 401/403/405, CSRF binding, loopback rule) is tested in Go by Arch-server's W slices; the GUI tests only the client's side of each contract.

@@ -1,9 +1,7 @@
 import type { Action } from "../state/actions.ts";
 import { parseRoute } from "./routes.ts";
 
-/** Dispatches navigate for the current hash and for every hash change. */
+/** Dispatches navigate on every hash change; main.ts starts from the hash of the first load. */
 export function listenToHash(win: Window, dispatch: (action: Action) => void): void {
-	const navigate = (): void => dispatch({ type: "navigate", route: parseRoute(win.location.hash) });
-	win.addEventListener("hashchange", navigate);
-	navigate();
+	win.addEventListener("hashchange", () => dispatch({ type: "navigate", route: parseRoute(win.location.hash) }));
 }
