@@ -7,6 +7,7 @@ import { toZod } from "../bus/schema.ts";
 import { THREAD_TOOL, threadView } from "../render/thread-view.ts";
 import { toolResult } from "./tool-result.ts";
 import { attribute, ATTRIBUTED_TOOLS } from "./attribution.ts";
+import { changesMembership } from "./membership-refresh.ts";
 import { presentationOf } from "./presentation.ts";
 import { selectTools } from "./tool-selection.ts";
 import { WAIT_TOOL, type WaitToolDeps, waitToolDefinition } from "./wait-tool.ts";
@@ -33,6 +34,8 @@ export interface RemoteToolsOptions {
 	wait?: WaitToolDeps;
 	/** Told after every successful `bus_read_thread`: the thread was read. */
 	threadRead?: (space: string, threadId: number) => void;
+	/** Awaited after every successful membership tool: the session's spaces changed. */
+	membershipChanged?: () => Promise<void>;
 }
 
 /** A tool this session registers: its name and how to build its definition. */
@@ -58,6 +61,7 @@ async function callRemote(tool: RemoteTool, params: Record<string, unknown>, opt
 	const attributed = kind === "sub" && agentId && ATTRIBUTED_TOOLS.includes(tool.name) ? attribute(params, agentId) : params;
 	const result = await client.callTool(current.url, current.token, tool.name, attributed);
 	if (tool.name === THREAD_TOOL && typeof params.space === "string" && typeof params.threadId === "number") options.threadRead?.(params.space, params.threadId);
+	if (changesMembership(tool.name)) await options.membershipChanged?.();
 	return result;
 }
 

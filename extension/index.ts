@@ -200,7 +200,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 			roots,
 		});
 		// Every model request acks the entries it carried.
-		pi.on("context", createContextHandler(session.consume));
+		pi.on("context", createContextHandler({ consume: session.consume, block: session.contextBlock }));
 		registerEntryCard(pi);
 		const which = options.which ?? ((name: string) => findOnPath(name, env.PATH));
 		// This plugin's version is the protocol the workers must understand; it is read once at load.

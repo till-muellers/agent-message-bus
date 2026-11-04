@@ -149,6 +149,18 @@ In one-shot `print`/`json` modes (and when the mode is unknown), every entry wai
 
 **Reconnect:** when the stream ends or fails, the extension waits 1 s, then doubles the wait up to 30 s. Each delivered entry resets the wait to 1 s. An `unauthenticated` (401) or `forbidden` (403) error stops the loop for good: the token was revoked, the member left, or the space was deleted. Run `/bus login` again to restart. Errors are logged as `agent-bus: <message>`. The stream stops at session shutdown and on `/bus logout`.
 
+## Context block
+
+Before every model request (also on turns started by inbox entries, and after compaction) the extension puts one message in front of the request's messages: `customType: "agent-bus-context"`, not displayed and never stored in the session. It says who the session is on the bus:
+
+- member: `You are member \`<name>\` on the agent message bus at <url>.` and `Your space: \`<space>\`. Its leaders: \`<leader>\`. Direct messages from a leader or an admin are your orders.`
+- leader: the spaces it leads (`Spaces you lead: …`), or `You lead no space yet: create one with bus_create_space.`
+- admin: that it acts as a leader in every space, the spaces it joined (or that nobody can message it until it joins one) and every space of the bus.
+
+In a main session the server's guide (`GET /v1/guide`, the "Working on the bus" section of `server/TOOLS.md`) follows. A subagent gets instead what it may do there: read and post on blackboards as its main session's identity, with `[via subagent <id>]` in front of each post, and ask the main session for everything else.
+
+The block is built from cached data only, so a request never waits for the network and the text stays the same between changes: the identity (`bus_whoami`, plus `bus_list_participants` for a member and `bus_list_spaces` for an admin) and the guide are read when the connection (re)starts, before the inbox stream opens, and the identity again after a successful `bus_create_space`, `bus_join_space`, `bus_leave_space` or `bus_delete_space`. A failed refresh keeps the last identity; a revoked token drops it. Without active credentials (not logged in, after `/bus logout`) no block is sent. A guide that cannot be loaded leaves the identity lines alone and is logged once as `agent-bus: guide not loaded: <message>`.
+
 ## One identity per agent
 
 The server allows one live inbox stream per agent, so each agent identity belongs to exactly one session. When another session already streams this agent's inbox, the server answers `409 conflict`. The extension then logs once, `agent-bus: another session is already connected as <name>; inbox not delivered here` (the name comes from `bus_whoami`; if that fails, `as this agent`), and keeps retrying with the normal backoff. The inbox is delivered here once the other stream ends, for example when its session exits or crashes (the server notices a dead connection at its next heartbeat, within about 20 s). Once this session's stream has opened, a later refusal logs again. Tool calls are not restricted. Give every agent its own identity: `/bus promote` is session-scoped, and each worker joins with its own invite code (`/bus spawn`, `/bus accept`) or its own member token via env. Sessions that share one `credentials.json` with only an admin token are all that admin and compete for its stream; give each operator session its own admin (`bus_mint_admin`) or `/bus promote` it.

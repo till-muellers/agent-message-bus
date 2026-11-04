@@ -47,6 +47,7 @@ const GRAPH_EDGES: Record<string, true> = {
 	"connection>bus": true,
 	"connection>render": true,
 	"context>delivery": true,
+	"context>render": true,
 	"context>bus": true,
 	"context>session": true,
 	"tools>delivery": true,
