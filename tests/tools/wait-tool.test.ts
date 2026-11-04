@@ -62,6 +62,11 @@ describe("the local bus_wait", () => {
 		expect(toJson(tool.parameters as unknown as FakeNode)).toEqual(serverWait.inputSchema);
 	});
 
+	test("it is a top-level tool that needs read approval", () => {
+		const { tool } = setup(true);
+		expect([tool.loadMode, tool.approval]).toEqual(["essential", "read"]);
+	});
+
 	test("with a live stream it waits in the dispatcher and the entries it returns are consumed", async () => {
 		const { run, waits, forwards, consumed } = setup(true, [entry(4, { from: "lead" })]);
 		expect(await run({ from: "lead", threadId: 7, after: 3, timeoutSeconds: 5 })).toEqual([entry(4, { from: "lead" })]);

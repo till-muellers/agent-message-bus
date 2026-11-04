@@ -9,6 +9,7 @@ import type { Entry } from "../bus/entry.ts";
 import { toZod } from "../bus/schema.ts";
 import type { Dispatcher } from "../delivery/dispatcher.ts";
 import type { WaitFilter } from "../delivery/waiters.ts";
+import { presentationOf } from "./presentation.ts";
 import { type ToolResult, toolResult } from "./tool-result.ts";
 
 export const WAIT_TOOL = "bus_wait";
@@ -54,6 +55,7 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool, deps: Wai
 		label: WAIT_TOOL,
 		description: tool.description,
 		parameters: toZod(tool.inputSchema, pi.zod),
+		...presentationOf(WAIT_TOOL),
 		execute: (_toolCallId: string, params: WaitArgs, signal: AbortSignal | undefined): Promise<ToolResult> =>
 			toolResult(() => wait(params, deps, signal)),
 	};

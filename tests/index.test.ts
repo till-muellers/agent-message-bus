@@ -438,6 +438,21 @@ describe("accepted identity", () => {
 describe("tool activation and credentials", () => {
 	const tempDir = useTempDirs();
 
+	test("every bus tool a main session registers has an explicit tier, and bus_inbox_ack is not among them", async () => {
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const list = ["bus_send_direct", "bus_inbox_ack", "bus_wait", "bus_delete_space", "bus_something_new"].map(name => ({ ...listSpaces, name }));
+		const app = await boot({ fetchFn: fakeBus({ list }).fetchFn, env }, { kind: "main" });
+		await app.emit("session_start");
+		expect(app.tools.map(t => [t.name, t.approval]).sort()).toEqual([
+			["bus_delete_space", "write"],
+			["bus_send_direct", "read"],
+			["bus_something_new", "write"],
+			["bus_spawn_worker", "exec"],
+			["bus_wait", "read"],
+		]);
+		await app.emit("session_shutdown");
+	});
+
 	test("bus_spawn_worker is registered inactive and switched on only once credentials resolve", async () => {
 		const env = { OMP_AGENT_BUS_DIR: await tempDir() };
 		const app = await boot({ fetchFn: memberBus().fetchFn, env });
