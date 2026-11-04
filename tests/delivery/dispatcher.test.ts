@@ -13,6 +13,7 @@ function dispatcher() {
 		phase: () => "interactive-idle",
 		watermark: createAckWatermark(),
 		handOver: message => void handed.push(...message.details.entryIds),
+		warn: () => {},
 	});
 	return { it, handed };
 }
@@ -87,13 +88,23 @@ describe("the dispatcher's waiters (bus_wait)", () => {
 	});
 });
 
-/** A dispatcher in `phase` that records every message it hands over, with its mechanism. */
-function recording(phase: SessionPhase) {
+/** A dispatcher whose phase can change, recording every message it hands over (with its mechanism) and every warning. */
+function recording(initial: SessionPhase) {
 	const watermark = createAckWatermark();
 	const messages: { message: BusMessage; mechanism: Mechanism }[] = [];
-	const it = createDispatcher({ phase: () => phase, watermark, handOver: (message, mechanism) => void messages.push({ message, mechanism }) });
+	const warnings: string[] = [];
+	const state = { phase: initial, fail: false };
+	const it = createDispatcher({
+		phase: () => state.phase,
+		watermark,
+		handOver: (message, mechanism) => {
+			if (state.fail) throw new Error("omp refused the message");
+			messages.push({ message, mechanism });
+		},
+		warn: message => void warnings.push(message),
+	});
 	const handed = () => messages.map(m => [m.message.details.entryIds, m.mechanism.deliverAs]);
-	return { it, messages, handed, watermark };
+	return { it, messages, handed, watermark, state, warnings };
 }
 
 function post(id: number, threadId = 7, extra: Partial<Entry> = {}): Entry {
@@ -153,5 +164,47 @@ describe("blackboard notices in the dispatcher", () => {
 		expect(it.takeHeld({}).map(e => e.id)).toEqual([1, 2]);
 		jest.advanceTimersByTime(1500);
 		expect(handed()).toEqual([]);
+	});
+
+	test("a post to a thread whose notice is still held joins it, even when the session went idle meanwhile", () => {
+		const { it, handed, state } = recording("interactive-busy");
+		it.receive(post(1));
+		state.phase = "interactive-idle";
+		it.receive(post(2));
+		it.receive(post(3, 8));
+		expect(handed()).toEqual([[[3], "aside"]]);
+		jest.advanceTimersByTime(1500);
+		expect(handed()).toEqual([
+			[[3], "aside"],
+			[[1, 2], "aside"],
+		]);
+	});
+
+	test("a waiting bus_wait takes a matching post before the hold, also while the session is busy", async () => {
+		const { it, handed } = recording("interactive-busy");
+		const wait = it.waitNext({ threadId: 7 }, 1000);
+		it.receive(post(1));
+		expect((await wait).map(e => e.id)).toEqual([1]);
+		jest.advanceTimersByTime(1500);
+		expect(handed()).toEqual([]);
+	});
+
+	test("dropHeld cancels the held notices, and a replay after it delivers them again", () => {
+		const { it, handed } = recording("interactive-busy");
+		it.receive(post(1));
+		it.dropHeld();
+		jest.advanceTimersByTime(1500);
+		expect(handed()).toEqual([]);
+		it.receive(post(1));
+		jest.advanceTimersByTime(1500);
+		expect(handed()).toEqual([[[1], "aside"]]);
+	});
+
+	test("a notice omp refuses is warned, not thrown from the timer", () => {
+		const { it, state, warnings } = recording("interactive-busy");
+		it.receive(post(1));
+		state.fail = true;
+		jest.advanceTimersByTime(1500);
+		expect(warnings).toEqual(["omp refused the message"]);
 	});
 });

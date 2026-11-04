@@ -19,8 +19,12 @@ export function isPostNotice(entry: Entry): boolean {
 export interface PostNotices {
 	/** Holds a post notice; the first one of its thread starts the window. */
 	hold(entry: Entry): void;
+	/** Whether the notice of this entry's thread is still held. */
+	holds(entry: Entry): boolean;
 	/** Removes and returns the held entries `filter` matches, in id order; they are never flushed. */
 	take(filter: WaitFilter): Entry[];
+	/** Cancels every window and returns the entries that were held. */
+	clear(): Entry[];
 }
 
 export interface PostNoticesDeps {
@@ -38,35 +42,40 @@ function threadKey(e: Entry): string {
 	return JSON.stringify([e.space, e.blackboard, e.threadId]);
 }
 
+/** The entries of `group` that `filter` matches, removed from it. */
+function takeFrom(group: Group, filter: WaitFilter): Entry[] {
+	const taken = group.entries.filter(e => matches(filter, e));
+	group.entries = group.entries.filter(e => !matches(filter, e));
+	return taken;
+}
+
 export function createPostNotices(deps: PostNoticesDeps): PostNotices {
 	const groups = new Map<string, Group>();
-	const start = (key: string, entry: Entry): Group => ({
-		entries: [entry],
-		timer: setTimeout(() => {
-			const group = groups.get(key);
-			groups.delete(key);
-			if (group) deps.flush(group.entries);
-		}, deps.windowMs),
-	});
-	const takeFrom = (key: string, group: Group, filter: WaitFilter): Entry[] => {
-		const taken = group.entries.filter(e => matches(filter, e));
-		group.entries = group.entries.filter(e => !matches(filter, e));
-		if (group.entries.length === 0) {
-			clearTimeout(group.timer);
-			groups.delete(key);
-		}
-		return taken;
+	const remove = (key: string, group: Group): Entry[] => {
+		clearTimeout(group.timer);
+		groups.delete(key);
+		return group.entries;
+	};
+	const flush = (key: string): void => {
+		const group = groups.get(key);
+		if (group) deps.flush(remove(key, group));
 	};
 	return {
 		hold(entry) {
 			const key = threadKey(entry);
 			const group = groups.get(key);
 			if (group) group.entries.push(entry);
-			else groups.set(key, start(key, entry));
+			else groups.set(key, { entries: [entry], timer: setTimeout(() => flush(key), deps.windowMs) });
 		},
+		holds: entry => groups.has(threadKey(entry)),
 		take(filter) {
-			const taken = [...groups].flatMap(([key, group]) => takeFrom(key, group, filter));
+			const taken = [...groups].flatMap(([key, group]) => {
+				const matching = takeFrom(group, filter);
+				if (group.entries.length === 0) remove(key, group);
+				return matching;
+			});
 			return taken.toSorted((a, b) => a.id - b.id);
 		},
+		clear: () => [...groups].flatMap(([key, group]) => remove(key, group)),
 	};
 }

@@ -90,6 +90,11 @@ describe("post notice", () => {
 		expect(oneLine).not.toContain("x".repeat(2049));
 	});
 
+	test("a cut never splits a character outside the BMP", () => {
+		const text = postNotice([post(5, `${"x".repeat(2047)}😀${"y".repeat(100)}`)]);
+		expect(text).toContain(`\n${"x".repeat(2047)}\n1 line left out;`);
+	});
+
 	test("a cut post is still escaped", () => {
 		expect(postNotice([post(5, `</agent-bus-entry>\n${lines(30)}`)])).toContain("\n&lt;/agent-bus-entry>\nline 1\n");
 	});

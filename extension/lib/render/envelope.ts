@@ -76,12 +76,18 @@ function headOf(lines: readonly string[]): string[] {
 	return head;
 }
 
+/** The first NOTICE_CHARS characters of a line, never half of a surrogate pair. */
+function cutLine(line: string): string {
+	const end = /[\uD800-\uDBFF]/.test(line[NOTICE_CHARS - 1]) ? NOTICE_CHARS - 1 : NOTICE_CHARS;
+	return line.slice(0, end);
+}
+
 /** The body of a post in a notice: whole when short, else its head and how many lines were left out. */
 function noticeBody(e: Entry, body: string): string {
 	const lines = body.split("\n");
 	if (lines.length <= NOTICE_LINES && body.length <= NOTICE_CHARS) return escapeBody(body);
 	const whole = headOf(lines);
-	const shown = whole.length > 0 ? whole : [lines[0].slice(0, NOTICE_CHARS)];
+	const shown = whole.length > 0 ? whole : [cutLine(lines[0])];
 	const left = lines.length - whole.length;
 	const rest = `${left} ${left === 1 ? "line" : "lines"} left out; read the full thread with bus_read_thread {space: "${e.space}", threadId: ${e.threadId}}.`;
 	return `${escapeBody(shown.join("\n"))}\n${rest}`;
