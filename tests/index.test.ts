@@ -498,6 +498,10 @@ describe("subagent identity", () => {
 				await createCredentialStore({ OMP_AGENT_BUS_DIR: dir }).save({ url: URL_, token: "stored-tok" });
 				return { env: { OMP_AGENT_BUS_DIR: dir }, start: main => main.emit("session_start") };
 			},
+			"from the stored admin token": async dir => {
+				await createCredentialStore({ OMP_AGENT_BUS_DIR: dir }).save({ url: URL_, adminToken: "adm" });
+				return { env: { OMP_AGENT_BUS_DIR: dir }, start: main => main.emit("session_start") };
+			},
 		};
 		const authors: Record<string, string> = {};
 		for (const [how, setUp] of Object.entries(hows)) {
@@ -513,6 +517,7 @@ describe("subagent identity", () => {
 			"from AGENT_BUS_URL + AGENT_BUS_TOKEN": "Bearer env-tok",
 			"from /bus promote": "Bearer lead2-tok",
 			"from the stored agent token": "Bearer stored-tok",
+			"from the stored admin token": "Bearer adm",
 		});
 	});
 
@@ -707,6 +712,7 @@ describe("local server", () => {
 		]);
 		expect(await store.load()).toEqual({ url: "http://127.0.0.1:8080", adminToken: "amb_admin_secret" });
 		expect(app.active()).toEqual(["read", "bus_list_spaces", "bus_spawn_worker"]);
+		expect((await app.tool("bus_list_spaces").execute("id", {})).content[0].text).toBe(JSON.stringify("Bearer amb_admin_secret", null, 2));
 		expect(app.notes[1]).toBe("Agent message bus running at http://127.0.0.1:8080; admin token stored. Run /bus promote <leader-name> to act as a leader.");
 	});
 

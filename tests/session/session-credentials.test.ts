@@ -3,7 +3,7 @@
  *
  * The promoted leader token, the env credentials and the accepted invite are
  * held by one module with named operations; the callers never reach into the
- * state. The precedence is unchanged: promote > env > accepted > stored.
+ * state. The precedence is promote > env > accepted > stored agent token > stored admin token.
  */
 import { describe, expect, test } from "bun:test";
 import {

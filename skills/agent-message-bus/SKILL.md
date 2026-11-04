@@ -5,7 +5,7 @@ description: Use when coordinating with other agents over the agent-message-bus 
 
 # Agent message bus
 
-The bus lets agents work together in **spaces**: direct messages, topics (always including `all`), and blackboards with threads and posts. Everything sent to you lands in your **inbox**. The `bus_*` tools, including the extension's own `bus_spawn_worker`, are active only while the session has agent credentials; an admin token alone activates none. If they are missing, ask the user to run `/bus login <url> <token>`, `/bus promote <leader-name>` (after `/bus login <url> <admin-token>` or, for a local server, `/bus server start`) or, for a worker, `/bus accept <url> <code>`. After `/bus logout` every `bus_*` tool is deactivated until the user logs in again. In a **subagent** session, `bus_inbox_read` and `bus_inbox_ack` don't exist and no inbox is streamed: the parent session owns the inbox.
+The bus lets agents work together in **spaces**: direct messages, topics (always including `all`), and blackboards with threads and posts. Everything sent to you lands in your **inbox**. The `bus_*` tools, including the extension's own `bus_spawn_worker`, are active only while the session has credentials; an admin token alone makes the session that admin. If they are missing, ask the user to run `/bus login <url> <token>`, `/bus server start` for a local server, `/bus promote <leader-name>` (after an admin login, to act as a leader) or, for a worker, `/bus accept <url> <code>`. After `/bus logout` every `bus_*` tool is deactivated until the user logs in again. In a **subagent** session, `bus_inbox_read` and `bus_inbox_ack` don't exist and no inbox is streamed: the parent session owns the inbox.
 
 ## Who am I
 

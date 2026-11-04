@@ -14,7 +14,7 @@
  * environment so child processes do not inherit them), else the member token
  * this session accepted (`lib/session/session-credentials.ts` owns the three;
  * `lib/session/session-identity.ts` keeps the accepted one), else the stored agent
- * token. With them the server's `bus_*` tools are registered and, with
+ * token, else the stored admin token (the session then acts as that admin). With them the server's `bus_*` tools are registered and, with
  * `bus_spawn_worker`, switched on, and the inbox is streamed into the session;
  * without them those tools are switched off (`lib/connection/connection.ts`; delivery
  * policy: `lib/delivery/delivery-class.ts`). Session start, switch and branch re-key the
