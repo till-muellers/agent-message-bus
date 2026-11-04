@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { createClient, type FetchLike, type RemoteTool } from "../../extension/lib/bus/client.ts";
 import type { JsonSchema } from "../../extension/lib/bus/schema.ts";
 import { registerRemoteTools, type RemoteToolsOptions } from "../../extension/lib/tools/remote-tools.ts";
-import { errorResponse, URL_, z } from "../fakes.ts";
+import { entry, errorResponse, URL_, z } from "../fakes.ts";
 
 type FakeTool = { name: string; label: string; execute: (...args: unknown[]) => Promise<{ content: { text: string }[] }> };
 const listTool = (name: string, inputSchema: JsonSchema = { type: "object", properties: {} }): RemoteTool => ({ name, description: name, inputSchema });
@@ -71,15 +71,30 @@ describe("registerRemoteTools", () => {
 		expect(tools.map(t => t.name)).toEqual(["bus_a"]);
 	});
 
-	test("the shadowed and withheld tools are not registered in a main session; the names are recorded", async () => {
+	test("a main session registers its own bus_wait instead of the remote one and withholds bus_inbox_ack; the names are recorded", async () => {
 		const list = [listTool("bus_inbox_read"), listTool("bus_send"), listTool("bus_wait"), listTool("bus_inbox_ack")];
-		const { options, register } = setup(async () => Response.json(list));
-		expect(await register()).toBe(2);
-		expect(options.state.names).toEqual(["bus_inbox_read", "bus_send"]);
+		const urls: string[] = [];
+		const { tools, options, register } = setup(async url => {
+			urls.push(url);
+			return Response.json(list);
+		});
+		const wait = { dispatcher: () => ({ waitNext: async () => [entry(1)] }), forward: async () => [], consumed: () => {} };
+		expect(await register({ wait })).toBe(3);
+		expect(options.state.names).toEqual(["bus_inbox_read", "bus_send", "bus_wait"]);
+		const out = await tools[2].execute("id", {});
+		expect(JSON.parse(out.content[0].text)).toEqual([entry(1)]);
+		expect(urls).toEqual([`${URL_}/v1/tools`]);
 	});
 
 	test("a subagent gets exactly the allow-list", async () => {
-		const list = [listTool("bus_list_blackboards"), listTool("bus_read_thread"), listTool("bus_add_post"), listTool("bus_send_direct"), listTool("bus_something_new")];
+		const list = [
+			listTool("bus_list_blackboards"),
+			listTool("bus_read_thread"),
+			listTool("bus_add_post"),
+			listTool("bus_send_direct"),
+			listTool("bus_wait"),
+			listTool("bus_something_new"),
+		];
 		const { options, register } = setup(async () => Response.json(list));
 		expect(await register({ kind: "sub" })).toBe(3);
 		expect(options.state.names).toEqual(["bus_list_blackboards", "bus_read_thread", "bus_add_post"]);

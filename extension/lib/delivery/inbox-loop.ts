@@ -14,6 +14,8 @@ export interface InboxLoopOptions {
 	onError: (error: Error) => void;
 	/** Another session holds this agent's stream (409): called once per streak of refusals; the loop keeps retrying. */
 	onConflict: (error: BusError) => void | Promise<void>;
+	/** The stream opened (true) or ended (false); a refused open reports nothing. */
+	onStream: (open: boolean) => void;
 	/** Backoff wait; injectable for tests. */
 	sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
@@ -53,6 +55,16 @@ async function consume(options: InboxLoopOptions, state: LoopState, body: Readab
 	}
 }
 
+/** Consumes an open stream and reports it open until it ends, however it ends. */
+async function consumeOpen(options: InboxLoopOptions, state: LoopState, body: ReadableStream<Uint8Array>): Promise<void> {
+	options.onStream(true);
+	try {
+		await consume(options, state, body);
+	} finally {
+		options.onStream(false);
+	}
+}
+
 /** Reports a stream failure (a conflict only once per streak). Returns true when the token was rejected and the loop must stop. */
 async function report(error: unknown, options: InboxLoopOptions, state: LoopState): Promise<boolean> {
 	if (error instanceof BusError && error.code === "conflict") {
@@ -75,7 +87,7 @@ export async function runInboxLoop(options: InboxLoopOptions): Promise<void> {
 			const response = await client.openStream(active.url, active.token, signal);
 			if (!response.body) throw new Error("inbox stream has no body");
 			state.conflicted = false;
-			await consume(options, state, response.body);
+			await consumeOpen(options, state, response.body);
 		} catch (error) {
 			if (signal.aborted || (await report(error, options, state))) return;
 		}

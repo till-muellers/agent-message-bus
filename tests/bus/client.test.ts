@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { BusError, createClient } from "../../extension/lib/bus/client.ts";
+import { BusError, createClient, type FetchLike } from "../../extension/lib/bus/client.ts";
 import { CODE, errorResponse, fakeBus, URL_ } from "../fakes.ts";
 
 describe("client", () => {
@@ -16,6 +16,24 @@ describe("client", () => {
 		const error = await client.callTool(URL_, "t", "bus_fail", {}).catch(e => e);
 		expect(error).toBeInstanceOf(BusError);
 		expect(error).toMatchObject({ code: "conflict", message: "exists" });
+	});
+
+	test("callTool with a transport timeout aborts the request when the time runs out, and passes the caller's signal on", async () => {
+		const signals: (AbortSignal | undefined)[] = [];
+		const hanging: FetchLike = (_url, init) => {
+			signals.push(init.signal);
+			const { promise, reject } = Promise.withResolvers<Response>();
+			init.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+			return promise;
+		};
+		const client = createClient(hanging);
+		const error = await client.callTool(URL_, "t", "bus_wait", {}, { timeoutMs: 5 }).catch(e => e);
+		expect(error).toMatchObject({ name: "TimeoutError" });
+		const controller = new AbortController();
+		const cancelled = client.callTool(URL_, "t", "bus_wait", {}, { timeoutMs: 60_000, signal: controller.signal }).catch(e => e);
+		controller.abort();
+		expect(await cancelled).toMatchObject({ name: "AbortError" });
+		expect(signals.every(signal => signal !== undefined)).toBe(true);
 	});
 
 	test("acceptInvite posts the code as bearer with no body and returns name, space and token", async () => {

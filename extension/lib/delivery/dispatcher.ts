@@ -1,6 +1,7 @@
 /**
  * The dispatcher: it receives an inbox entry and hands it over to omp with the mechanism its
- * delivery class and the session's phase ask for (`docs/design/arch/client.md` §3.2).
+ * delivery class and the session's phase ask for (`docs/design/arch/client.md` §3.2). An entry a
+ * waiting `bus_wait` wants goes to that waiter instead (§3.4).
  *
  * The message (`render/details.ts`) carries the entry, so the request that consumes it acks it. A
  * reconnect replays the entries that were not acked; the ones this connection already handed over are skipped.
@@ -10,12 +11,15 @@ import { parseDeliveryClass } from "../bus/entry.ts";
 import { type BusMessage, busMessage } from "../render/details.ts";
 import type { AckWatermark } from "./ack-watermark.ts";
 import { mechanismFor, type Mechanism, type SessionPhase } from "./delivery-class.ts";
+import { createWaiters, type WaitFilter } from "./waiters.ts";
 
 export interface Dispatcher {
 	/** Receives an entry of the stream and hands it over to the session. */
 	receive(entry: Entry): void;
 	/** Resolves true when every entry up to `id` was handed over, false when `ms` ran out first. */
 	handedUpTo(id: number, ms: number): Promise<boolean>;
+	/** `bus_wait`: the next entry matching `filter`, given to the caller instead of omp; [] on timeout or abort. */
+	waitNext(filter: WaitFilter, timeoutMs: number, signal?: AbortSignal): Promise<Entry[]>;
 }
 
 export interface DispatcherDeps {
@@ -30,6 +34,7 @@ export interface DispatcherDeps {
 /** The dispatcher of one connection: it maps every entry to the mechanism its class asks for. */
 export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 	const handedOver = new Set<number>();
+	const waitCalls = createWaiters();
 	let highest = 0;
 	const waiters: { id: number; done: (delivered: boolean) => void; timer: ReturnType<typeof setTimeout> }[] = [];
 	const settle = (): void => {
@@ -47,9 +52,10 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 			if (handedOver.has(entry.id)) return;
 			handedOver.add(entry.id);
 			highest = Math.max(highest, entry.id);
-			deps.handOver(busMessage(entry), mechanismFor(parseDeliveryClass(entry.class), deps.phase()));
+			if (!waitCalls.take(entry)) deps.handOver(busMessage(entry), mechanismFor(parseDeliveryClass(entry.class), deps.phase()));
 			settle();
 		},
+		waitNext: waitCalls.wait,
 		handedUpTo(id, ms) {
 			if (highest >= id) return Promise.resolve(true);
 			const { promise, resolve } = Promise.withResolvers<boolean>();

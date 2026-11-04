@@ -20,6 +20,7 @@ import {
 	type FakeBusOptions,
 	frame,
 	listSpaces,
+	liveStream,
 	memberBus,
 	noSleep,
 	streamOf,
@@ -151,6 +152,59 @@ describe("inbox streaming", () => {
 		await app.emit("session_shutdown");
 		expect(callsTo(bus, "/v1/inbox/stream").map(c => c.auth)).toEqual(["Bearer adm", "Bearer lead-tok", "Bearer adm"]);
 		expect(await store.load()).toEqual({ url: URL_, adminToken: "adm" });
+	});
+});
+
+describe("bus_wait in omp", () => {
+	const tempDir = useTempDirs();
+	const serverWait: RemoteTool = {
+		name: "bus_wait",
+		description: "Wait",
+		inputSchema: { type: "object", properties: { timeoutSeconds: { type: "integer" }, from: { type: "string" } } },
+	};
+	const resultOf = (out: { content: { text: string }[] }): unknown => JSON.parse(out.content[0].text);
+
+	async function bootWorker(options: FakeBusOptions) {
+		const bus = fakeBus({ list: [serverWait], ...options });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+		await app.emit("session_start");
+		return { bus, app };
+	}
+
+	test("a waiting bus_wait takes the matching entry off the stream: omp never gets it, and it counts as consumed", async () => {
+		const stream = liveStream();
+		const { bus, app } = await bootWorker({ streams: [stream.response] });
+		await stream.opened;
+		const result = app.tool("bus_wait").execute("id", { from: "lead", timeoutSeconds: 5 });
+		stream.push(entry(1, { from: "peer" }));
+		stream.push(entry(2, { from: "lead" }));
+		expect(resultOf(await result)).toEqual([entry(2, { from: "lead" })]);
+		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(1, { from: "peer" }))]);
+		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
+		await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message })));
+		expect(callsTo(bus, "/bus_inbox_ack").map(call => call.body)).toEqual([{ upTo: 2 }]);
+		expect(callsTo(bus, "/v1/tools/bus_wait")).toEqual([]);
+		stream.close();
+		await app.warning("invalid token");
+		await app.emit("session_shutdown");
+	});
+
+	test("without its own stream the session forwards bus_wait to the server and acks nothing", async () => {
+		const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
+		const { bus, app } = await bootWorker({
+			streams: [conflict],
+			tools: {
+				bus_whoami: () => Response.json({ result: { kind: "member", name: "w", spaces: [] } }),
+				bus_wait: () => Response.json({ result: [entry(5)] }),
+			},
+		});
+		await app.warning("invalid token");
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		expect(callsTo(bus, "/v1/tools/bus_wait").map(call => call.body)).toEqual([{ timeoutSeconds: 10 }]);
+		await app.context([{ role: "toolResult", content: "[]" }]);
+		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
+		await app.emit("session_shutdown");
 	});
 });
 

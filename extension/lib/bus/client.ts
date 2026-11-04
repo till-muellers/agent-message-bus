@@ -34,9 +34,15 @@ export interface AcceptedInvite {
 	token: string;
 }
 
+/** How long a tool call may take: `signal` cancels it, `timeoutMs` bounds the transport. */
+export interface CallOptions {
+	signal?: AbortSignal;
+	timeoutMs?: number;
+}
+
 export interface BusClient {
 	listTools(url: string, token: string): Promise<RemoteTool[]>;
-	callTool(url: string, token: string, name: string, args: Record<string, unknown>): Promise<unknown>;
+	callTool(url: string, token: string, name: string, args: Record<string, unknown>, options?: CallOptions): Promise<unknown>;
 	openStream(url: string, token: string, signal: AbortSignal): Promise<Response>;
 	/** Redeems a single-use invite code (sent as the bearer) for a member token. */
 	acceptInvite(url: string, code: string): Promise<AcceptedInvite>;
@@ -61,6 +67,13 @@ function toAcceptedInvite(body: unknown): AcceptedInvite {
 	return { name, space, token };
 }
 
+/** The signal a call runs under: the caller's, the transport timeout's, both or none. */
+function callSignal({ signal, timeoutMs }: CallOptions): AbortSignal | undefined {
+	const timeout = timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs);
+	if (signal && timeout) return AbortSignal.any([signal, timeout]);
+	return signal ?? timeout;
+}
+
 export function createClient(fetchFn: FetchLike = fetch): BusClient {
 	async function request(url: string, init: FetchInit): Promise<Response> {
 		const response = await fetchFn(url, init);
@@ -73,11 +86,12 @@ export function createClient(fetchFn: FetchLike = fetch): BusClient {
 			const response = await request(`${url}/v1/tools`, { method: "GET", headers: auth(token) });
 			return (await response.json()) as RemoteTool[];
 		},
-		async callTool(url, token, name, args) {
+		async callTool(url, token, name, args, options = {}) {
 			const response = await request(`${url}/v1/tools/${encodeURIComponent(name)}`, {
 				method: "POST",
 				headers: { ...auth(token), "Content-Type": "application/json" },
 				body: JSON.stringify(args),
+				signal: callSignal(options),
 			});
 			const body: unknown = await response.json();
 			if (!body || typeof body !== "object" || !("result" in body)) throw new BusError("invalid_response", `${name}: response has no result`);

@@ -10,13 +10,17 @@ import type { BusClient } from "../bus/client.ts";
 import { createRootPublication, type RootIdentities, rootKeyOf } from "../session/root-identities.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
 import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
-import type { AckWatermark } from "../delivery/ack-watermark.ts";
+import { createAckWatermark } from "../delivery/ack-watermark.ts";
+import { createAcker } from "../delivery/acker.ts";
+import { type Consume, createConsumer } from "../delivery/consumer.ts";
+import { NOT_LOGGED_IN } from "../bus/errors.ts";
 import { phaseOf } from "../delivery/delivery-class.ts";
 import { createDispatcher, type Dispatcher } from "../delivery/dispatcher.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
 import { registerRemoteTools } from "../tools/remote-tools.ts";
+import { WAIT_TOOL, type WaitToolDeps } from "../tools/wait-tool.ts";
 import type { ServerGate } from "./server-gate.ts";
 
 /** What the omp context says about the current session; updated on every event and command. */
@@ -42,8 +46,6 @@ export interface ConnectionDeps {
 	view: SessionView;
 	/** Keeps the extension off a server that is too old; checked before the tools are activated. */
 	gate: ServerGate;
-	/** The watermark of the acked entries; the dispatcher tells it what arrived. */
-	watermark: AckWatermark;
 	warn(message: string): void;
 	sleep?: InboxLoopOptions["sleep"];
 	/** Tools this extension registers itself (`bus_spawn_worker`); they are switched on and off with the server tools. */
@@ -54,12 +56,23 @@ export interface Connection {
 	getActive(): ActiveCredentials | undefined;
 	/** The dispatcher of this connection; it knows what it handed over. */
 	dispatcher: Dispatcher;
+	/** Marks entries consumed; the ack follows the watermark. */
+	consume: Consume;
 	/** Re-resolves the credentials, registers the server tools once, restarts the inbox loop and switches the tools on or off to match. */
 	restart(): Promise<void>;
 	/** Stops the loop, drops the credentials and deactivates every bus tool; registered tools stay and fail until the next login. */
 	logout(): Promise<void>;
 	/** Session end: stops the loop and withdraws the identity published for the subagents. */
 	stop(): void;
+}
+
+/** The server's `bus_wait` for a session without its own stream; it acks nothing. */
+function serverWait(client: BusClient, getActive: () => ActiveCredentials | undefined): WaitToolDeps["forward"] {
+	return async (args, timeoutMs, signal) => {
+		const current = getActive();
+		if (!current) throw new Error(NOT_LOGGED_IN);
+		return client.callTool(current.url, current.token, WAIT_TOOL, { ...args }, { timeoutMs, signal });
+	};
 }
 
 export function createConnection(deps: ConnectionDeps): Connection {
@@ -71,12 +84,19 @@ export function createConnection(deps: ConnectionDeps): Connection {
 	// promote or logout of the main session reaches its next call.
 	const getActive = () => (view.sub ? deps.roots.lookup(view.sessionFile) : active);
 	let toldNoIdentity = false;
+	const watermark = createAckWatermark();
+	const consume = createConsumer({ watermark, ack: createAcker({ client, getActive, warn }) });
 	const dispatcher = createDispatcher({
 		phase: () => phaseOf(view.mode, view.isIdle()),
-		watermark: deps.watermark,
+		watermark,
 		handOver: (message, mechanism) => pi.sendMessage(message, mechanism),
 	});
 	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, dispatcher });
+	const wait: WaitToolDeps = {
+		dispatcher: () => (inbox.isOpen() ? dispatcher : undefined),
+		forward: serverWait(client, getActive),
+		consumed: consume,
+	};
 	const ours = () => [...tools.names, ...localTools];
 
 	/** A main session resolves its own credentials and publishes them; a subagent takes its root session's. */
@@ -95,7 +115,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			warn(verdict.refused);
 			return false;
 		}
-		await registerRemoteTools(pi, { client, getActive, state: tools, warn, kind: view.sub ? "sub" : "main", agentId: view.agentId });
+		await registerRemoteTools(pi, { client, getActive, state: tools, warn, kind: view.sub ? "sub" : "main", agentId: view.agentId, wait });
 		return true;
 	}
 
@@ -109,6 +129,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 	return {
 		getActive,
 		dispatcher,
+		consume,
 		stop() {
 			inbox.stop();
 			publication.clear();
