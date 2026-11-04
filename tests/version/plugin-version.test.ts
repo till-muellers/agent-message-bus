@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PLUGIN_NAME, isOlderVersion, pluginVersion } from "../../extension/lib/version/plugin-version.ts";
+import { useTempDirs } from "../fakes.ts";
 
 describe("pluginVersion", () => {
+	const tempDir = useTempDirs();
+
 	test("reads the version of the package.json it is given", async () => {
-		const dir = await mkdtemp(join(tmpdir(), "amb-plugin-version-"));
+		const dir = await tempDir();
 		const file = join(dir, "package.json");
 		await writeFile(file, JSON.stringify({ name: "other", version: "0.2.0" }));
 		expect(await pluginVersion(file)).toBe("0.2.0");
@@ -17,7 +19,7 @@ describe("pluginVersion", () => {
 	});
 
 	test("a package.json without a version is an error", async () => {
-		const dir = await mkdtemp(join(tmpdir(), "amb-plugin-version-"));
+		const dir = await tempDir();
 		const file = join(dir, "package.json");
 		await writeFile(file, JSON.stringify({ name: "other" }));
 		await expect(pluginVersion(file)).rejects.toThrow(`no version in ${file}`);
@@ -25,8 +27,10 @@ describe("pluginVersion", () => {
 });
 
 describe("the plugin name", () => {
+	const tempDir = useTempDirs();
+
 	test("is the name of the shipped package.json", async () => {
-		const dir = await mkdtemp(join(tmpdir(), "amb-plugin-version-"));
+		const dir = await tempDir();
 		const file = join(dir, "package.json");
 		await writeFile(file, JSON.stringify({ name: PLUGIN_NAME, version: "0.2.0" }));
 		expect(await pluginVersion(file)).toBe("0.2.0");

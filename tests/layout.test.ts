@@ -5,6 +5,7 @@
  * acyclic, `bus/` and `process/` must stay leaves, `render/` must not reach into `delivery/` and only the wiring
  * root may see the whole graph. The allowed edges are the ones `client.md` §1.3 lists plus the edges the
  * not-yet-refactored code still has; each of those disappears with the slice that moves the module holding it.
+ * Test files mirror those folders, and only `fakes.ts` (`useTempDirs`, which removes them) makes temp dirs.
  */
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
@@ -268,6 +269,13 @@ describe("test layout", () => {
 					return target.startsWith(join(LIB, folder) + sep) && target.endsWith(".ts");
 				});
 			});
+		expect(offenders).toEqual([]);
+	});
+
+	test("test files make temp dirs only through useTempDirs, which removes them after each test", () => {
+		const offenders = tsFiles(TESTS)
+			.filter(file => relative(TESTS, file) !== "fakes.ts" && /\bmkdtemp(Sync)?\s*\(|\btmpdir\s*\(/.test(readFileSync(file, "utf8")))
+			.map(file => relative(TESTS, file).split(sep).join("/"));
 		expect(offenders).toEqual([]);
 	});
 });
