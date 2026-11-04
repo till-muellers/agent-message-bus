@@ -221,6 +221,74 @@ describe("blackboard status line", () => {
 	});
 });
 
+describe("context block", () => {
+	const tempDir = useTempDirs();
+	const tool = (name: string): RemoteTool => ({ name, description: name, inputSchema: { type: "object", properties: { space: { type: "string" } } } });
+	const memberWho = { kind: "member", name: "worker", space: "demo", spaces: [{ name: "demo", role: "member" }] };
+	const participants = () => Response.json({ result: [{ name: "lead", role: "leader" }, { name: "worker", role: "member" }] });
+	const blockOf = (result: unknown) => (result as { messages: { customType?: string; content?: string }[] } | undefined)?.messages[0];
+
+	async function member(options: FakeBusOptions = {}) {
+		const bus = fakeBus({ list: [tool("bus_send_direct"), tool("bus_join_space")], tools: { bus_whoami: () => Response.json({ result: memberWho }), bus_list_participants: participants }, ...options });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+		await app.emit("session_start");
+		return { app, bus };
+	}
+
+	test("a connected member gets the block before the request's own messages, with its identity, its leaders and the guide", async () => {
+		const { app } = await member();
+		const own = { role: "user", content: "hi" };
+		const result = (await app.context([own])) as { messages: unknown[] };
+		expect(blockOf(result)).toMatchObject({ role: "custom", customType: "agent-bus-context", display: false });
+		expect(blockOf(result)?.content).toContain(`You are member \`worker\` on the agent message bus at ${URL_}.\nYour space: \`demo\`. Its leaders: \`lead\`.`);
+		expect(blockOf(result)?.content).toContain("\nGUIDE\n");
+		expect(result.messages[1]).toBe(own);
+		await app.emit("session_shutdown");
+	});
+
+	test("other tool calls do not refetch the identity; a membership tool does, and the handler never waits for it", async () => {
+		const { promise: slow, resolve: answer } = Promise.withResolvers<Response>();
+		const { promise: asked, resolve: ask } = Promise.withResolvers<void>();
+		let calls = 0;
+		const whoami = () => {
+			if (++calls === 1) return Response.json({ result: memberWho });
+			ask();
+			return slow;
+		};
+		const { app, bus } = await member({ tools: { bus_whoami: whoami, bus_list_participants: participants } });
+		await app.tool("bus_send_direct").execute("id", { space: "demo" });
+		expect(callsTo(bus, "/bus_whoami")).toHaveLength(1);
+		const joining = app.tool("bus_join_space").execute("id", { space: "demo" });
+		await asked;
+		expect(blockOf(await app.context([]))?.content).toContain("You are member `worker`");
+		answer(Response.json({ result: { ...memberWho, name: "worker2" } }));
+		await joining;
+		expect(blockOf(await app.context([]))?.content).toContain("You are member `worker2`");
+		await app.emit("session_shutdown");
+	});
+
+	test("no block without credentials or after logout", async () => {
+		const bare = await boot({ fetchFn: fakeBus().fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir() } }, { mode: "tui" });
+		await bare.emit("session_start");
+		expect(await bare.context([])).toBeUndefined();
+		const { app } = await member();
+		await app.run("logout");
+		expect(await app.context([])).toBeUndefined();
+		await app.emit("session_shutdown");
+	});
+
+	test("a guide that cannot be fetched leaves the identity lines and is logged once", async () => {
+		const { app } = await member({ guide: () => errorResponse(404, "not_found", "no route") });
+		await app.context([]);
+		const block = blockOf(await app.context([]))?.content;
+		expect(block).toContain("You are member `worker`");
+		expect(block).not.toContain("GUIDE");
+		expect(app.warnings.filter(w => w.includes("guide"))).toEqual(["agent-bus: guide not loaded: not_found: no route"]);
+		await app.emit("session_shutdown");
+	});
+});
+
 describe("bus_wait in omp", () => {
 	const tempDir = useTempDirs();
 	const serverWait: RemoteTool = {
@@ -672,6 +740,17 @@ describe("subagent identity", () => {
 		expect(sub.tools.map(t => t.name)).toEqual(["bus_read_thread", "bus_add_post"]);
 		expect(callsTo(bus, "/v1/inbox/stream").length).toBe(streams);
 		expect(main.tools.map(t => t.name)).toEqual(["bus_spawn_worker", "bus_inbox_read", "bus_send", "bus_read_thread", "bus_add_post"]);
+	});
+
+	test("the subagent's block says as whom it acts on the bus and holds no guide", async () => {
+		const { main, startSub } = await family({ OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env-tok" });
+		await main.emit("session_start");
+		const sub = await startSub();
+		const block = ((await sub.context([])) as { messages: { content: string }[] }).messages[0].content;
+		expect(block).toContain("\nYou are a subagent of the main session that acts as leader `lead2` on the agent message bus.\n");
+		expect(block).toContain("`[via subagent Explore]`");
+		expect(block).not.toContain("GUIDE");
+		await main.emit("session_shutdown");
 	});
 
 	test("a subagent that ends leaves its main session's identity to the next subagent", async () => {

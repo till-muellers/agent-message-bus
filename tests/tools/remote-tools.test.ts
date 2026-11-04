@@ -30,6 +30,27 @@ function setup(fetchFn: FetchLike, getActive: RemoteToolsOptions["getActive"] = 
 }
 
 describe("registerRemoteTools", () => {
+	test("a successful membership tool refreshes the identity before it returns; other or failed calls do not", async () => {
+		const membership = ["bus_create_space", "bus_join_space", "bus_leave_space", "bus_delete_space"];
+		let fail = false;
+		const fetchFn: FetchLike = async url => {
+			if (url.endsWith("/v1/tools")) return Response.json([...membership, "bus_send_direct"].map(name => listTool(name)));
+			return fail ? errorResponse(403, "forbidden", "no") : Response.json({ result: { ok: true } });
+		};
+		const refreshed: string[] = [];
+		const { tools, register } = setup(fetchFn);
+		let current = "";
+		await register({ membershipChanged: async () => void refreshed.push(current) });
+		for (const tool of tools) {
+			current = tool.name;
+			await tool.execute("id", { space: "demo" });
+		}
+		expect(refreshed).toEqual(membership);
+		fail = true;
+		await expect(tools[0].execute("id", { space: "demo" })).rejects.toThrow("forbidden: no");
+		expect(refreshed).toEqual(membership);
+	});
+
 	test("bus_read_thread renders its result as a thread, and a successful read reports the thread as read", async () => {
 		const thread = { id: 7, blackboard: "plan", title: "design", createdBy: "peer", subscribed: true, posts: [] };
 		let fail = false;

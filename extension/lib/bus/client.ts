@@ -1,4 +1,4 @@
-/** HTTP client for the agent-message-bus web API (`/v1/tools`, `/v1/inbox/stream`, `/v1/invites/accept`). */
+/** HTTP client for the agent-message-bus web API (`/v1/tools`, `/v1/inbox/stream`, `/v1/invites/accept`, `/v1/guide`). */
 import type { JsonSchema } from "./schema.ts";
 
 export interface FetchInit {
@@ -48,6 +48,8 @@ export interface BusClient {
 	openStream(url: string, token: string, signal: AbortSignal): Promise<Response>;
 	/** Redeems a single-use invite code (sent as the bearer) for a member token. */
 	acceptInvite(url: string, code: string): Promise<AcceptedInvite>;
+	/** The server's agent guide (markdown, `contracts.md` §7.1). */
+	fetchGuide(url: string, token: string): Promise<string>;
 }
 
 async function toBusError(response: Response): Promise<BusError> {
@@ -106,6 +108,10 @@ export function createClient(fetchFn: FetchLike = fetch): BusClient {
 		async acceptInvite(url, code) {
 			const response = await request(`${url}/v1/invites/accept`, { method: "POST", headers: auth(code) });
 			return toAcceptedInvite(await response.json());
+		},
+		async fetchGuide(url, token) {
+			const response = await request(`${url}/v1/guide`, { method: "GET", headers: auth(token) });
+			return response.text();
 		},
 	};
 }

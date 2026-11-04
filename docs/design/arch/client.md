@@ -105,7 +105,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -130,6 +130,7 @@ flowchart TD
   connection --> bus
   connection --> render
   context --> delivery
+  context --> render
   context --> bus
   context --> session
   tools --> delivery
@@ -456,28 +457,31 @@ export function entryCard(pi: CardComponents, details: BusMessageDetails | undef
 ```ts
 // lib/context/identity-cache.ts
 export interface BusIdentity { kind: "admin" | "leader" | "member"; name: string; url: string;
-	spaces: { name: string; role: "admin" | "leader" | "member" }[]; leadersOfSpace?: string[]; allSpaces?: string[]; }
+	spaces: { name: string; role: "admin" | "leader" | "member" }[]; space?: string; leadersOfSpace?: string[]; allSpaces?: string[]; }
 export interface IdentityCache {
-	current(): BusIdentity | undefined;  // synchronous; never blocks a model call
+	current(): BusIdentity | undefined;  // synchronous; never blocks a model call; undefined unless read with the active token
 	refresh(): Promise<void>;            // bus_whoami (+ bus_list_participants for a member, + bus_list_spaces for an admin)
 	clear(): void;
 }
-// lib/context/guide.ts — GET /v1/guide once per connection; 404/failure → undefined + one log line
+// lib/context/guide.ts — GET /v1/guide (client.fetchGuide) once per connection; 404/failure → undefined, failing loads in a row logged once
 export function createGuide(fetchGuide: () => Promise<string>, warn: (m: string) => void): { text(): string | undefined; load(): Promise<void> };
 // lib/context/context-block.ts — pure text
 export function mainBlock(id: BusIdentity, guide: string | undefined): string;
 export function subagentBlock(id: BusIdentity, agentId: string): string;
+// lib/context/bus-context.ts — identity cache + guide → block text; built by session/session.ts (restart refreshes, logout clears)
+export function createBusContext(deps: { client: BusClient; getActive(): ActiveCredentials | undefined; warn(m: string): void; isSub(): boolean; agentId(): string | undefined }):
+	{ refresh(): Promise<void>; refreshIdentity(): Promise<void>; clear(): void; block(): string | undefined };
 // lib/context/context-handler.ts
-export function registerContextHandler(pi: ExtensionAPI, deps: {
-	block(): string | undefined;                    // undefined when not connected → no block
-	onConsumed(ids: readonly number[]): void;       // §3.3
-}): void;
+export function createContextHandler(deps: {
+	consume: Consume;                    // §3.3
+	block(): string | undefined;         // undefined when not connected → no block
+}): (event: { messages }) => { messages: [ContextMessage, ...originals] } | undefined;
 ```
 
 - omp API: `pi.on("context", handler)` returning `{messages}` (`CA/extensibility/extensions/types.ts:1515-1517, 1673`); fired before each LLM call, session messages unchanged (`CA/extensibility/shared-events.ts:184-196`; runner `CA/extensibility/extensions/runner.ts:2101-2166`). Precedent: `CA/../examples/extensions/plan-mode.ts:330`.
 - **One handler** does two things in order: report consumed entry ids (§3.3), then return `[blockMessage, ...event.messages]`. It must return the **original message objects** after the block: the runner maps history indexes by object identity/position and marks changed messages as per-call (`runner.ts:2129-2160`); cloning them would defeat its bookkeeping and the provider prompt cache.
 - Block message: `{role: "custom", customType: "agent-bus-context", content, display: false, timestamp}`; `display` does not affect model conversion (`core/compaction/messages.ts:214-227`), so it reaches the model as a developer message and is never stored or compacted.
-- The handler is synchronous in effect (cache lookups only); runner handlers run under a timeout (`CA/extensibility/extensions/runner.ts:134-167`, `extensionHandlerTimeoutMs`), so no network call happens inside it. Refreshes run on connection restart and after a successful `bus_create_space`, `bus_join_space`, `bus_leave_space`, `bus_delete_space` (wrapper in `tools/membership-refresh.ts`, not a `tool_result` subscription, so it is testable without omp events). A failed refresh keeps the last identity (`session-context.feature:227-232`).
+- The handler is synchronous in effect (cache lookups only); runner handlers run under a timeout (`CA/extensibility/extensions/runner.ts:134-167`, `extensionHandlerTimeoutMs`), so no network call happens inside it. Refreshes run on connection restart and after a successful `bus_create_space`, `bus_join_space`, `bus_leave_space`, `bus_delete_space` (`tools/membership-refresh.ts` names them; `remote-tools.ts` awaits the refresh before the tool returns, not a `tool_result` subscription, so it is testable without omp events). A failed refresh keeps the last identity (`session-context.feature:227-232`); `unauthenticated` (a revoked token) drops it. The identity is kept with the token it was read with, so other or no credentials show no block until the next refresh. The same block text keeps the same message object (stable prefix for the prompt cache). The guide is escaped like an entry body, so it cannot close the block.
 - Why not `before_agent_start`: it is emitted only while preparing a user prompt (`CA/session/agent-session.ts:8283`; guidance spec cites `:8177-8206` for the surrounding preparation); bus-started turns skip it (guidance analysis T6).
 - Subagents: `subagentBlock` (no guide) when the subagent has tools (§6); none otherwise.
 - Server dependencies: whoami/participants/list_spaces shapes after slice 4 and `GET /v1/guide` after slice 11 (contracts.md §guide: bearer, `text/markdown`, 404 on old servers).

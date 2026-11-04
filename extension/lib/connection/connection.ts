@@ -53,6 +53,8 @@ export interface ConnectionDeps {
 	sleep?: InboxLoopOptions["sleep"];
 	/** Tools this extension registers itself (`bus_spawn_worker`); they are switched on and off with the server tools. */
 	localTools: readonly string[];
+	/** Awaited after a successful membership tool (`tools/membership-refresh.ts`). */
+	membershipChanged?: () => Promise<void>;
 }
 
 export interface Connection {
@@ -124,7 +126,8 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			return false;
 		}
 		const kind = view.sub ? "sub" : "main";
-		await registerRemoteTools(pi, { client, getActive, state: tools, warn, kind, agentId: view.agentId, wait, threadRead: unread.read });
+		const hooks = { threadRead: unread.read, membershipChanged: deps.membershipChanged };
+		await registerRemoteTools(pi, { client, getActive, state: tools, warn, kind, agentId: view.agentId, wait, ...hooks });
 		return true;
 	}
 

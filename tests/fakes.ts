@@ -134,13 +134,15 @@ export interface Call {
 	body: unknown;
 }
 
-export type ToolHandler = (args: Record<string, unknown>, auth: string | undefined) => Response;
+export type ToolHandler = (args: Record<string, unknown>, auth: string | undefined) => Response | Promise<Response>;
 
 export interface FakeBusOptions {
 	/** Each inbox stream open shifts the next response; none left answers 401 `invalid token`. */
 	streams?: (() => Response)[];
 	/** `POST /v1/tools/<name>` handlers; unknown tools answer `{result: {acked: 1}}`. */
 	tools?: Record<string, ToolHandler>;
+	/** `GET /v1/guide`; "GUIDE" by default. */
+	guide?: () => Response;
 	/** What `GET /v1/tools` lists. */
 	list?: RemoteTool[];
 	/** The protocol `GET /healthz` reports; "none" answers without the header. */
@@ -155,7 +157,7 @@ function acceptInviteResponse(auth: string | undefined): Response {
 }
 
 /** Fake bus server following the HTTP contract; records every call. */
-export function fakeBus({ streams = [], tools = {}, list = [], protocol = 2 }: FakeBusOptions = {}) {
+export function fakeBus({ streams = [], tools = {}, list = [], protocol = 2, guide = () => new Response("GUIDE") }: FakeBusOptions = {}) {
 	const calls: Call[] = [];
 	const fetchFn: FetchLike = async (url, init) => {
 		const body = init.body ? JSON.parse(init.body) : undefined;
@@ -166,6 +168,7 @@ export function fakeBus({ streams = [], tools = {}, list = [], protocol = 2 }: F
 		}
 		if (url.endsWith("/v1/inbox/stream")) return streams.shift()?.() ?? errorResponse(401, "unauthenticated", "invalid token");
 		if (url.endsWith("/v1/tools")) return Response.json(list);
+		if (url.endsWith("/v1/guide")) return guide();
 		if (url.endsWith("/v1/invites/accept")) return acceptInviteResponse(init.headers.Authorization);
 		const handler = tools[url.slice(url.lastIndexOf("/") + 1)];
 		return handler ? handler(body ?? {}, init.headers.Authorization) : Response.json({ result: { acked: 1 } });
@@ -310,8 +313,8 @@ export interface Booted {
 	sent: Sent[];
 	emit(event: string, payload?: unknown): Promise<void>;
 	run(args: string): Promise<void>;
-	/** Fires the `context` event with the messages of a model request. */
-	context(messages: readonly unknown[]): Promise<void>;
+	/** Fires the `context` event with the messages of a model request; resolves to what the last handler returned. */
+	context(messages: readonly unknown[]): Promise<unknown>;
 	commands: Command[];
 	active(): string[];
 	/** The message renderers by custom type. */
@@ -370,7 +373,9 @@ export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<voi
 	};
 	const run = (args: string) => commands[0].handler(args, ctx);
 	const context = async (messages: readonly unknown[]) => {
-		for (const handler of handlers["context"] ?? []) await handler({ type: "context", messages }, ctx);
+		let result: unknown;
+		for (const handler of handlers["context"] ?? []) result = await handler({ type: "context", messages }, ctx);
+		return result;
 	};
 	return { tools, tool, notes, warnings, warning, userMessages, sent, emit, run, context, commands, active: () => active, renderers, statuses };
 }

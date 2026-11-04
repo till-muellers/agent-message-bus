@@ -129,6 +129,7 @@ function recordingClient(calls: unknown[][]): BusClient {
 		listTools: async () => [],
 		openStream: async () => new Response(),
 		acceptInvite: async () => ({ name: "", space: "", token: "" }),
+		fetchGuide: async () => "",
 		async callTool(url, token, name, args) {
 			calls.push([url, token, name, args]);
 			return { name: args.name, space: args.space, code: "k7m2-x9pq", expires_at: "2026-10-25T00:10:00Z" };

@@ -63,4 +63,12 @@ describe("client", () => {
 			expect(error).toMatchObject({ code: "invalid_response", message });
 		}
 	});
+
+	test("fetchGuide gets the guide with bearer auth as text; a server without it fails with its error", async () => {
+		const bus = fakeBus({ guide: () => new Response("# Guide", { headers: { "Content-Type": "text/markdown; charset=utf-8" } }) });
+		expect(await createClient(bus.fetchFn).fetchGuide(URL_, "t")).toBe("# Guide");
+		expect(bus.calls).toEqual([{ url: `${URL_}/v1/guide`, method: "GET", auth: "Bearer t", body: undefined }]);
+		const old = fakeBus({ guide: () => new Response("404 page not found", { status: 404 }) });
+		await expect(createClient(old.fetchFn).fetchGuide(URL_, "t")).rejects.toMatchObject({ code: "http_404" });
+	});
 });
