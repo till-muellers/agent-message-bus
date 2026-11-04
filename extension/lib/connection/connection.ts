@@ -74,7 +74,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 	const dispatcher = createDispatcher({
 		phase: () => phaseOf(view.mode, view.isIdle()),
 		watermark: deps.watermark,
-		handOver: (content, mechanism, details) => pi.sendMessage({ customType: "agent-bus", content, display: true, details }, mechanism),
+		handOver: (message, mechanism) => pi.sendMessage(message, mechanism),
 	});
 	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, dispatcher });
 	const ours = () => [...tools.names, ...localTools];

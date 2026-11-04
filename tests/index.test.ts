@@ -4,7 +4,8 @@ import { join, resolve } from "node:path";
 import { type BusExtensionOptions, createBusExtension } from "../extension/index.ts";
 import type { RemoteTool } from "../extension/lib/bus/client.ts";
 import { createCredentialStore } from "../extension/lib/session/stored-credentials.ts";
-import { formatEntry } from "../extension/lib/render/envelope.ts";
+import { envelope } from "../extension/lib/render/envelope.ts";
+import { busMessage } from "../extension/lib/render/details.ts";
 import type { RunOptions, Runner } from "../extension/lib/process/runner.ts";
 import {
 	boot,
@@ -44,19 +45,21 @@ describe("inbox streaming", () => {
 		return app;
 	}
 
-	test("session_start streams the inbox: the class decides the mechanism and the message carries the entry id", async () => {
+	test("session_start streams the inbox: the class decides the mechanism and the message carries the entry", async () => {
 		const { sent, warnings } = await runSession("tui");
 		expect(sent).toEqual([
-			{
-				message: { customType: "agent-bus", content: formatEntry(entry(1)), display: true, details: { entryIds: [1] } },
-				options: { deliverAs: "aside", triggerTurn: false },
-			},
-			{
-				message: { customType: "agent-bus", content: formatEntry(entry(2, { class: "interrupt" })), display: true, details: { entryIds: [2] } },
-				options: { deliverAs: "steer", triggerTurn: true },
-			},
+			{ message: busMessage(entry(1)), options: { deliverAs: "aside", triggerTurn: false } },
+			{ message: busMessage(entry(2, { class: "interrupt" })), options: { deliverAs: "steer", triggerTurn: true } },
 		]);
+		expect(sent[0].message).toMatchObject({ customType: "agent-bus", content: envelope(entry(1)), display: true, details: { entryIds: [1] } });
 		expect(warnings).toEqual(["agent-bus: invalid token"]);
+	});
+
+	test("non-TUI modes get the same plain envelope text", async () => {
+		for (const mode of ["rpc", "print"]) {
+			const { sent } = await runSession(mode);
+			expect({ mode, content: sent.map(s => s.message.content) }).toEqual({ mode, content: [envelope(entry(1)), envelope(entry(2, { class: "interrupt" }))] });
+		}
 	});
 
 	test("an entry is acked only after a model request carried it", async () => {
@@ -119,7 +122,7 @@ describe("inbox streaming", () => {
 			tools: { bus_whoami: () => Response.json({ result: { kind: "member", name: "w", spaces: [] } }) },
 		});
 		expect(warnings).toEqual(["agent-bus: another session is already connected as w; inbox not delivered here", "agent-bus: invalid token"]);
-		expect(sent.map(s => s.message.content)).toEqual([formatEntry(entry(1))]);
+		expect(sent.map(s => s.message.content)).toEqual([envelope(entry(1))]);
 	});
 
 	test("the class and the phase decide the mechanism: an interactive session steers and wakes, a one-shot session waits", async () => {
