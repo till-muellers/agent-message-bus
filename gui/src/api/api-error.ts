@@ -14,3 +14,8 @@ export class ApiError extends Error {
 export function errorMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
+
+/** Any thrown value as an ApiError; anything else is a client-side failure (status 0). */
+export function toApiError(err: unknown): ApiError {
+	return err instanceof ApiError ? err : new ApiError(0, "client_error", errorMessage(err));
+}

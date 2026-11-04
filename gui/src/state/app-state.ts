@@ -1,4 +1,6 @@
+import type { ApiError } from "../api/api-error.ts";
 import type { Identity } from "../api/types.ts";
+import type { ViewData } from "./view-data.ts";
 
 export type Route =
 	| { name: "spaces" }
@@ -14,7 +16,16 @@ export type SessionState =
 	| { status: "signed-out"; error?: string }
 	| { status: "signed-in"; identity: Identity; csrf: string };
 
+/** A loaded resource; loading and error keep the last data to show meanwhile. */
+export type Resource<T> =
+	| { status: "idle" }
+	| { status: "loading"; last?: T }
+	| { status: "ready"; data: T; at: number }
+	| { status: "error"; error: ApiError; last?: T };
+
 export interface AppState {
 	session: SessionState;
 	route: Route;
+	/** The current route's data; dropped on navigation and sign-out. */
+	view: Resource<ViewData>;
 }

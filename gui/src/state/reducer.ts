@@ -1,9 +1,37 @@
+import type { ApiError } from "../api/api-error.ts";
 import { sameRoute } from "../router/routes.ts";
 import type { Action } from "./actions.ts";
-import type { AppState, Route } from "./app-state.ts";
+import type { AppState, Resource, Route } from "./app-state.ts";
+import { sameData } from "./same-data.ts";
+import type { ViewData } from "./view-data.ts";
 
 export function initialState(route: Route): AppState {
-	return { session: { status: "unknown" }, route };
+	return { session: { status: "unknown" }, route, view: { status: "idle" } };
+}
+
+function lastData(view: Resource<ViewData>): ViewData | undefined {
+	switch (view.status) {
+		case "ready":
+			return view.data;
+		case "loading":
+		case "error":
+			return view.last;
+		case "idle":
+			return undefined;
+	}
+}
+
+function loaded(state: AppState, data: ViewData, at: number): AppState {
+	if (state.view.status === "ready" && sameData(state.view.data, data)) return state;
+	return { ...state, view: { status: "ready", data, at } };
+}
+
+/** Any 401 means the session is gone (expired, revoked, rotated token): back to the login with the reason. */
+function failed(state: AppState, error: ApiError): AppState {
+	if (error.status === 401) {
+		return { ...state, session: { status: "signed-out", error: error.message }, view: { status: "idle" } };
+	}
+	return { ...state, view: { status: "error", error, last: lastData(state.view) } };
 }
 
 /** Pure: returns state itself when the action changes nothing, so the store notifies nobody. */
@@ -12,8 +40,14 @@ export function reducer(state: AppState, action: Action): AppState {
 		case "session/restored":
 			return { ...state, session: { status: "signed-in", identity: action.identity, csrf: action.csrf } };
 		case "session/signed-out":
-			return { ...state, session: { status: "signed-out", error: action.error } };
+			return { ...state, session: { status: "signed-out", error: action.error }, view: { status: "idle" } };
 		case "navigate":
-			return sameRoute(state.route, action.route) ? state : { ...state, route: action.route };
+			return sameRoute(state.route, action.route) ? state : { ...state, route: action.route, view: { status: "idle" } };
+		case "view/loading":
+			return { ...state, view: { status: "loading", last: lastData(state.view) } };
+		case "view/loaded":
+			return sameRoute(state.route, action.route) ? loaded(state, action.data, action.at) : state;
+		case "view/failed":
+			return sameRoute(state.route, action.route) ? failed(state, action.error) : state;
 	}
 }

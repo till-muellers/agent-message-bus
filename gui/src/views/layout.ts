@@ -1,8 +1,11 @@
 import type { Identity } from "../api/types.ts";
 import { hrefOf } from "../router/routes.ts";
 import type { AppState, Route } from "../state/app-state.ts";
-import { h, type VNode } from "../view/h.ts";
+import type { ViewData } from "../state/view-data.ts";
+import { type ChildArg, h, type VNode } from "../view/h.ts";
 import { loginView } from "./login.ts";
+import { spaceView } from "./space.ts";
+import { spacesView } from "./spaces.ts";
 
 export interface Intents {
 	signIn(token: string): void;
@@ -55,9 +58,28 @@ function header(identity: Identity, route: Route, intents: Intents): VNode {
 	);
 }
 
-function content(route: Route): VNode | null {
-	if (route.name !== "not-found") return null;
-	return h("p", null, "Page not found. ", h("a", { href: hrefOf({ name: "spaces" }) }, "Back to the spaces"));
+/** The view of route for data; null when the data belongs to another kind of page. */
+function viewOf(route: Route, data: ViewData | undefined): VNode | null {
+	if (route.name === "spaces" && data?.kind === "spaces") return spacesView(data.list);
+	if (route.name === "space" && data?.kind === "space") return spaceView(data.detail);
+	return null;
+}
+
+/** The main area: the route's data, "Loading…" before the first answer, the server's message on failure. */
+function content({ route, view }: AppState): ChildArg[] {
+	if (route.name === "not-found") {
+		return [h("p", null, "Page not found. ", h("a", { href: hrefOf({ name: "spaces" }) }, "Back to the spaces"))];
+	}
+	switch (view.status) {
+		case "idle":
+			return [];
+		case "loading":
+			return [view.last ? viewOf(route, view.last) : h("p", { key: "loading" }, "Loading…")];
+		case "ready":
+			return [viewOf(route, view.data)];
+		case "error":
+			return [h("p", { key: "error", role: "alert" }, view.error.message), viewOf(route, view.last)];
+	}
 }
 
 /** The whole page for state: the login, or the signed-in shell with the current route's view. */
@@ -69,7 +91,7 @@ export function render(state: AppState, intents: Intents): VNode {
 		case "signed-out":
 			return loginView(session.error, intents.signIn);
 		case "signed-in": {
-			const main = h("main", null, content(state.route));
+			const main = h("main", null, content(state));
 			return h("div", { key: "shell" }, header(session.identity, state.route, intents), main);
 		}
 	}
