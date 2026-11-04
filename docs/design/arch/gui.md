@@ -11,7 +11,7 @@ Owner: Arch-client. Specs: `docs/design/specs/web/*.feature`, `docs/design/specs
 - **No runtime dependency.** Browser APIs only (`fetch`, `URL`, `history`/`hashchange`, DOM). Toolchain = the repo's existing one: bun (build, test), TypeScript (`tsc --noEmit`).
 - **The browser never holds a token.** The admin/agent token is typed once into a password field, sent in `Authorization: Bearer` to `POST /web/session`, and the field is cleared. The session is an HttpOnly cookie; the CSRF token lives in memory only (web analysis §3.7, §4.3).
 - **No HTML from data.** Every text node is created with `textContent`/`createTextNode`; `innerHTML`, `outerHTML`, `insertAdjacentHTML` and `document.write` are banned (fitness test, §7). Message bodies and post bodies are user-controlled.
-- **Pure core, thin DOM edge.** Routing, state, API decoding, polling schedule and views are pure TypeScript and unit-tested with `bun test` without a DOM. Only `view/mount.ts`, `router/hash-source.ts` and `main.ts` touch browser globals.
+- **Pure core, thin DOM edge.** Routing, state, API decoding, polling schedule and views are pure TypeScript and unit-tested with `bun test` without a DOM. Only `view/mount.ts`, `view/form-field.ts`, `router/hash-source.ts` and `main.ts` touch browser globals.
 - **One responsibility per file, small functions** (`.omp/RULES.md`).
 
 ---
@@ -23,12 +23,14 @@ gui/
   package.json          private; scripts build/test/typecheck; devDependencies typescript + @types/bun (same versions as root); no dependencies
   bun.lock              its own lockfile
   tsconfig.json         strict; lib ESNext + DOM; types bun; include src, tests, scripts
-  index.html            shell template: <div id="app">, one <script type="module"> placeholder replaced by the build
+  index.html            shell template: <div id="app">, the placeholders %MAIN_SCRIPT% (<script type="module">) and %STYLE% (<link rel="stylesheet">) replaced by the build
   scripts/
-    build.ts            Bun.build → <out>/assets/main-<hash>.js; writes <out>/index.html; --out (default ../server/internal/web/dist)
+    build.ts            Bun.build → <out>/assets/main-<hash>.js + style-<hash>.css; writes <out>/index.html; --out (default ../server/internal/web/dist)
   src/
     main.ts             boot: store + api + router + poller + mount
+    style.css           the one stylesheet (a file, never inline: CSP)
     api/
+      api-error.ts      ApiError(status, code, message); errorMessage(unknown)
       http.ts           fetch wrapper: same-origin credentials, JSON, X-CSRF-Token on non-GET, error envelope → ApiError
       decode.ts         narrowing decoders for every response (unknown → typed); no `as` casts on wire data
       types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, Invite, ThreadList, Thread, Entry, Admin)
@@ -41,6 +43,7 @@ gui/
       actions.ts        Action union
       reducer.ts        pure (state, action) → state
       store.ts          getState / dispatch / subscribe (~30 lines)
+      session-intents.ts signIn / restore / signOut: run the session calls, dispatch the outcome (never rejects)
     router/
       routes.ts         parseRoute(hash) → Route; hrefOf(route) → "#/…" (pure)
       hash-source.ts    hashchange → dispatch(navigate)
@@ -49,6 +52,7 @@ gui/
     view/
       h.ts              h(tag, props, ...children) → VNode (plain objects)
       mount.ts          VNode → DOM with a keyed patch (reuses nodes; keeps focus and input values)
+      form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state)
     views/
       layout.ts         header (signed-in name/kind, nav, sign out), error banner
       login.ts          token form
@@ -150,10 +154,16 @@ As in `contracts.md` §10 (checked, every call present). Sign-in errors the logi
 | Mutations (W3) | `POST …/invites {name, task?}`, `DELETE …/invites/<id>` + `X-CSRF-Token` (→ `{cancelled}`; slice 10, PO-3, `web/gui-invite-cancel.feature:17-19`), `POST …/revoke {name, confirm: "<space>/<name>"}`, `POST …/threads/<id>/posts {body}`, `POST …/topics/<t>/messages {body, critical?}`, `DELETE /web/api/spaces/<s> {confirm: "<s>"}` | per contract; invite code shown once; a `cancelled: false` result shows "the invite was already used, expired or cancelled" and refreshes |
 
 ```ts
-// api/http.ts
+// api/api-error.ts
 export class ApiError extends Error { constructor(readonly status: number, readonly code: string, message: string) { super(message); } }
-export interface Http { get<T>(path: string, decode: Decoder<T>): Promise<T>; send<T>(method: "POST" | "DELETE", path: string, body: unknown, decode: Decoder<T>): Promise<T>; }
-export function createHttp(deps: { fetchFn: typeof fetch; csrf(): string | undefined }): Http;
+// api/http.ts
+export type FetchFn = (path: string, init: RequestInit) => Promise<Response>;   // main.ts passes the global fetch
+export interface Http {
+	get<T>(path: string, decode: Decoder<T>): Promise<T>;
+	send<T>(method: "POST" | "DELETE", path: string, body: unknown, decode: Decoder<T>): Promise<T>;   // + X-CSRF-Token
+	exempt<T>(method: "POST" | "DELETE", path: string, headers: Record<string, string>, decode: Decoder<T>): Promise<T>;   // sign-in/out: no CSRF, no body
+}
+export function createHttp(deps: { fetchFn: FetchFn; csrf(): string | undefined }): Http;
 // api/decode.ts
 export type Decoder<T> = (json: unknown) => T;   // throws ApiError(0, "invalid_response", …) on shape mismatch
 ```
@@ -179,9 +189,9 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 
 - **Owner of the Go side: Arch-server** (`server/internal/web/`: `embed.go`, the handlers, `dist/`). Confirmed by message: `GET /web/` → `index.html`, `GET /web/assets/*` → hashed bundles, no SPA fallback, the server never runs bun.
 - `gui/scripts/build.ts`:
-  1. `Bun.build({ entrypoints: ["src/main.ts"], outdir: "<out>/assets", target: "browser", minify: true, naming: "[name]-[hash].[ext]", sourcemap: "none" })`;
+  1. `Bun.build({ entrypoints: ["src/main.ts", "src/style.css"], outdir: "<out>/assets", target: "browser", minify: true, naming: "[name]-[hash].[ext]", sourcemap: "none" })`;
   2. removes stale `<out>/assets/*` first;
-  3. writes `<out>/index.html` from `gui/index.html`, replacing the script placeholder with `/web/assets/main-<hash>.js`;
+  3. writes `<out>/index.html` from `gui/index.html`, replacing `%MAIN_SCRIPT%` with `/web/assets/main-<hash>.js` and `%STYLE%` with `/web/assets/style-<hash>.css`;
   4. `--out <dir>` (default `../server/internal/web/dist`), used by Docker (§pipeline).
 - **Placeholder (contracts.md §10.5).** `server/internal/web/embed.go` uses `//go:embed all:dist`; tracked are only `server/internal/web/dist/.gitkeep` and `server/internal/web/.gitignore` (`dist/*`, `!dist/.gitkeep`). Without a GUI build the server answers `GET /web/` with a built-in fallback page, so `go build`/`go test` work on a fresh checkout without bun, and a local GUI build leaves `git status` clean.
   - The root `.gitignore` line `dist/` (`.gitignore:2`) matches `server/internal/web/dist/` and would keep `.gitkeep` from being added: W1a changes it to `/dist/` (the release output of `scripts/build.py --out dist`).
@@ -202,8 +212,8 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 | `api/decode.ts` | valid shapes pass, every missing/wrong field throws `invalid_response` |
 | `poll/poller.ts` | fake `Clock`: interval, pause when hidden, backoff, refresh after mutation |
 | `views/*.ts` | assert the VNode tree (`h()` output): texts, order, keys, links (`hrefOf`), buttons per kind (no admin nav for a member) |
-| `view/mount.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure. Its patch decision function (`samePlace(a, b)`) is pure and tested. |
-| `scripts/build.ts` | builds into a temp `--out`; asserts `index.html` references an existing `assets/main-*.js` |
+| `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage). The patch decision function (`samePlace(a, b)`) is pure and tested. |
+| `scripts/build.ts` | builds into a temp `--out` (in-process and through the command line); asserts `index.html` references an existing `assets/main-*.js` and `assets/style-*.css` |
 | fitness | `tests/no-raw-html.test.ts`: no `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` in `gui/src` |
 
 Server behaviour (cookie flags, 401/403/405, CSRF binding, loopback rule) is tested in Go by Arch-server's W slices; the GUI tests only the client's side of each contract.
