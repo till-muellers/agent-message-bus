@@ -64,7 +64,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `session/` (types), `delivery/` (consumption observer is composed here) |
 | `lib/commands/` | `/bus` command logic and its sub-actions (accept, invite flag, status) | `session/`, `connection/`, `local-server/`, `spawn/`, `version/` |
 | `lib/local-server/` | `/bus server start|stop|status`, binary resolution, release download | `process/`, `bus/` |
-| `lib/spawn/` | Worker start: invite + launch, `bus_spawn_worker` tool, forwarded plugin flags, worker plugin-version check (S1) | `launch/`, `bus/`, `version/`, `process/` |
+| `lib/spawn/` | Worker start: invite + launch, `bus_spawn_worker` tool, forwarded plugin flags, worker plugin-version check (S1) | `launch/`, `bus/`, `version/`, `process/`, `render/` (outgoing card) |
 | `lib/launch/` | Terminal launchers (unchanged) | `process/` |
 | `lib/process/` | Process runner (`execFile`, no shell) shared by launchers, local server and the installed-plugin probe | — |
 | `lib/version/` | This plugin's version (from `package.json`), the installed plugin's version (`omp plugin list --json`), `MIN_SERVER_PROTOCOL`, comparisons | `process/` |
@@ -105,7 +105,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -145,6 +145,7 @@ flowchart TD
   spawn --> version
   spawn --> bus
   spawn --> process
+  spawn --> render
   launch --> process
   localserver --> process
   localserver --> bus
@@ -449,6 +450,11 @@ export function entryCard(pi: CardComponents, details: BusMessageDetails | undef
 - Components from the injected SDK: `pi.pi.Container`, `pi.pi.Text`, `pi.pi.Markdown`, `pi.pi.Spacer` (`CA/index.ts:8`; `pi: typeof PiCodingAgent`, `types.ts:1641`). No deep import of `@oh-my-pi/pi-tui/tools/wait` (R4 in omp-parity analysis).
 - Card: title `"<from> → you · <space> · <where>"` (`where` per the outline table in `omp-rendering.feature:37-48`), body quoted (`│ `) and collapsed to 3 lines plus `… N more lines` unless `expanded`, warning tone + label `critical` from `theme`. Only `Container` and `Text` are needed (one `Text` per line). Control characters of the sender's text are removed, so escape sequences cannot take effect (their printable rest shows); the title stays on one line with its quotes escaped; collapsed lines are cut to 100 characters, a trailing newline is dropped. A message without entries renders `undefined`, so omp falls back to its plain custom message.
 - The renderer is a pure function of `details`; tests assert the component tree via a fake `pi.pi` (no TTY).
+
+### 4.4 Send receipts and outgoing card (E10d; `omp-tools.feature` receipt rule)
+
+- Result text (`render/send-receipt.ts`, model-facing): `bus_send_direct` → `Delivered to <to>.` (`live`) or `Queued for <to>; it is not connected right now.` (`queued`); `bus_send_topic` → `Delivered to N subscriber(s): <a> live, <b> queued.`, the live receipts first, each group in the server's name order (`Delivered to 0 subscriber(s).` without receipts). Unknown fields are ignored; a result without valid receipts stays pretty JSON (`toolResult`'s text hook). `bus_add_post` keeps its JSON (the `postId` is needed).
+- Call card (`render/outgoing-card.ts`, TUI `renderCall`): `"<self> → <to> · <space> · <where>"` with `where` `direct`, `topic` (to `#<topic>`) or `spawn` (`bus_spawn_worker`, the task as body), the body quoted and collapsed like §4.3, critical in the warning tone. `<self>` is the cached bus identity (`BusContext.who().agent`, §5), `you` while unknown; arguments still streaming in show as `…`. Once the arguments are complete, `<self>` is fixed per arguments object (omp keeps one per call), so a redraw after `/bus promote` or `/bus logout` keeps the sender; a resumed session's cards show its identity at resume.
 
 ---
 

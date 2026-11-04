@@ -60,6 +60,8 @@ export interface ConnectionDeps {
 	connected?: (connected: boolean) => Promise<void>;
 	/** Where handed-over entries and connection changes are published for other extensions. */
 	events?: BusEvents;
+	/** The bus agent the session acts as, for the outgoing cards of the send tools. */
+	self?: () => string | undefined;
 }
 
 export interface Connection {
@@ -133,7 +135,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			return false;
 		}
 		const kind = view.sub ? "sub" : "main";
-		const hooks = { threadRead: unread.read, membershipChanged: deps.membershipChanged };
+		const hooks = { threadRead: unread.read, membershipChanged: deps.membershipChanged, self: deps.self };
 		await registerRemoteTools(pi, { client, getActive, state: tools, warn, kind, agentId: view.agentId, wait, ...hooks });
 		return true;
 	}

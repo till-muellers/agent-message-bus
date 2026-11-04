@@ -157,7 +157,7 @@ function registerSessionEvents(pi: ExtensionAPI, store: CredentialStore, session
 		guarded(async () => {
 			if (!localToolsRegistered && ctx.agent?.kind === "main") {
 				localToolsRegistered = true;
-				pi.registerTool(spawnToolDefinition(pi, spawn));
+				pi.registerTool(spawnToolDefinition(pi, spawn, session.self));
 			}
 			await session.setContext(ctx);
 			const joined = await redeemFlag();

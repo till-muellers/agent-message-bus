@@ -4,6 +4,8 @@ import type { BusClient, RemoteTool } from "../bus/client.ts";
 import type { ActiveCredentials } from "../session/stored-credentials.ts";
 import { errorMessage, NOT_LOGGED_IN } from "../bus/errors.ts";
 import { toZod } from "../bus/schema.ts";
+import { fixedSender, isSendTool, outgoingCard, sentMessage } from "../render/outgoing-card.ts";
+import { receiptText } from "../render/send-receipt.ts";
 import { THREAD_TOOL, threadView } from "../render/thread-view.ts";
 import { toolResult } from "./tool-result.ts";
 import { attribute, ATTRIBUTED_TOOLS } from "./attribution.ts";
@@ -36,6 +38,8 @@ export interface RemoteToolsOptions {
 	threadRead?: (space: string, threadId: number) => void;
 	/** Awaited after every successful membership tool: the session's spaces changed. */
 	membershipChanged?: () => Promise<void>;
+	/** The bus agent the session acts as, for the outgoing card of a send; undefined while unknown. */
+	self?: () => string | undefined;
 }
 
 /** A tool this session registers: its name and how to build its definition. */
@@ -65,10 +69,15 @@ async function callRemote(tool: RemoteTool, params: Record<string, unknown>, opt
 	return result;
 }
 
-/** `bus_read_thread` renders its result as a thread. */
-function rendering(pi: ExtensionAPI, tool: RemoteTool): Pick<Parameters<ExtensionAPI["registerTool"]>[0], "renderResult"> {
-	if (tool.name !== THREAD_TOOL) return {};
-	return { renderResult: (result, { expanded }, theme) => threadView(pi.pi, result, expanded, theme) };
+type Rendering = Pick<Parameters<ExtensionAPI["registerTool"]>[0], "renderCall" | "renderResult">;
+
+/** `bus_read_thread` renders its result as a thread; a send renders its call as an outgoing card. */
+function rendering(pi: ExtensionAPI, tool: RemoteTool, self: RemoteToolsOptions["self"]): Rendering {
+	const { name } = tool;
+	if (name === THREAD_TOOL) return { renderResult: (result, { expanded }, theme) => threadView(pi.pi, result, expanded, theme) };
+	if (!isSendTool(name)) return {};
+	const sender = fixedSender(self ?? (() => undefined));
+	return { renderCall: (args, { expanded, isPartial }, theme) => outgoingCard(pi.pi, sentMessage(name, args, sender(args, isPartial)), expanded, theme) };
 }
 
 function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, options: RemoteToolsOptions): Parameters<ExtensionAPI["registerTool"]>[0] {
@@ -78,8 +87,8 @@ function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, options: RemoteTools
 		description: tool.description,
 		parameters: toZod(tool.inputSchema, pi.zod),
 		...presentationOf(tool.name),
-		...rendering(pi, tool),
-		execute: (_toolCallId: string, params: Record<string, unknown>) => toolResult(() => callRemote(tool, params, options)),
+		...rendering(pi, tool, options.self),
+		execute: (_toolCallId: string, params: Record<string, unknown>) => toolResult(() => callRemote(tool, params, options), value => receiptText(tool.name, value)),
 	};
 }
 

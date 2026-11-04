@@ -215,7 +215,7 @@ S4  logs:    omp log lines "agent-bus: …"; server log next to the db
 ### E10d Receipt texts + outgoing card
 - **Goal:** `renderResult`/text for send results (`Delivered to peer.`, `Queued for peer; …`, topic summary) and `renderCall` outgoing card.
 - **Specs:** `omp-tools.feature` "Send results read like omp's delivery receipts".
-- **Files:** new `render/send-receipt.ts`; `tools/remote-tools.ts`.
+- **Files:** new `render/send-receipt.ts`, `render/outgoing-card.ts`; `tools/remote-tools.ts`, `tools/tool-result.ts`, `spawn/spawn-tool.ts` (edge `spawn → render`).
 - **Tests:** receipt text table; outgoing card tree.
 - **Docs:** README "Tools". **Depends on:** server 12; P1a. **Size:** S.
 - **Risks:** shape drift → decoder in `send-receipt.ts` ignores unknown fields.

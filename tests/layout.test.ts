@@ -62,6 +62,7 @@ const GRAPH_EDGES: Record<string, true> = {
 	"spawn>version": true,
 	"spawn>bus": true,
 	"spawn>process": true,
+	"spawn>render": true,
 	"launch>process": true,
 	"local-server>process": true,
 	"local-server>bus": true,

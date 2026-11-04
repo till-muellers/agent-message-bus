@@ -248,6 +248,15 @@ describe("context block", () => {
 		await app.emit("session_shutdown");
 	});
 
+	test("a sent message's card names the bus identity the session acts as, the spawn tool's too", async () => {
+		const { app } = await member();
+		const theme = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
+		const title = (name: string, args: unknown) => (app.tool(name).renderCall?.(args, { expanded: false, isPartial: false }, theme) as FakeComponent).children[0].text;
+		expect(title("bus_send_direct", { space: "demo", to: "lead", body: "done" })).toBe("worker → lead · demo · direct");
+		expect(title("bus_spawn_worker", { space: "demo", name: "w1" })).toBe("worker → w1 · demo · spawn");
+		await app.emit("session_shutdown");
+	});
+
 	test("other tool calls do not refetch the identity; a membership tool does, and the handler never waits for it", async () => {
 		const { promise: slow, resolve: answer } = Promise.withResolvers<Response>();
 		const { promise: asked, resolve: ask } = Promise.withResolvers<void>();

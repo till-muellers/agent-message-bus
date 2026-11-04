@@ -44,6 +44,8 @@ export interface Session extends Connection {
 	shutdown(): void;
 	/** The agent-bus-context block for the next model request (cached data only). */
 	contextBlock(): string | undefined;
+	/** The bus agent the session acts as (cached); undefined while unknown. */
+	self(): string | undefined;
 	setContext(ctx: SessionContext, change?: SessionChange): Promise<void>;
 }
 
@@ -97,6 +99,7 @@ export function createSession(deps: SessionDeps): Session {
 	const hooks = {
 		membershipChanged: () => busContext.refreshIdentity(),
 		connected: async (connected: boolean) => (connected ? busContext.refresh() : busContext.clear()),
+		self: () => busContext.who().agent,
 	};
 	const events = createBusEvents(pi.events, () => busContext.who(), warn);
 	const connection = createConnection({ pi, client, store, credentials, identity, roots, view, gate, warn, sleep: deps.sleep, localTools, events, ...hooks });
@@ -121,6 +124,7 @@ export function createSession(deps: SessionDeps): Session {
 			busContext.clear();
 		},
 		contextBlock: busContext.block,
+		self: hooks.self,
 		client,
 		credentials,
 		warn,
