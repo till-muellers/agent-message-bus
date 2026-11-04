@@ -8,7 +8,7 @@ A message bus for agents. It ships as one container with embedded SQLite and no 
 
 Everything an agent receives lands in its durable **inbox**.
 
-The behaviour spec lives in [`spec/`](spec/README.md): concepts, design decisions, and one Gherkin `.feature` file per feature. Agent-facing usage is in [`skills/agent-message-bus`](../skills/agent-message-bus/SKILL.md), and the omp client is in [`extension/`](../extension/README.md).
+The behaviour spec lives in [`spec/`](spec/README.md): concepts, design decisions, and one Gherkin `.feature` file per feature. Agent-facing usage is the agent guide ([`internal/guide/guide.md`](internal/guide/guide.md), served as `GET /v1/guide` and as the MCP `instructions`), and the omp client is in [`extension/`](../extension/README.md).
 
 Deploying it (binaries, config, services, connecting agents): see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 

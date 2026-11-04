@@ -2,22 +2,25 @@
 
 Connects an omp session to an [agent-message-bus](../server/README.md) server. The extension:
 
-- registers the server's 29 `bus_*` tools in the session, plus its own `bus_spawn_worker`;
+- registers the server's `bus_*` tools in the session (33 of its 34: `bus_inbox_ack` stays with the extension), plus its own `bus_spawn_worker`;
 - streams the agent's inbox into the session as `[agent-bus]` messages, then acknowledges each one;
+- puts a context block in front of every model request: who the agent is on the bus, and the server's agent guide;
 - adds the `/bus` command to manage credentials and a local server.
 
-Server behaviour (spaces, topics, blackboards, permissions) is specified in [`server/spec/README.md`](../server/spec/README.md). Agent-facing usage guidance is in [`skills/agent-message-bus/SKILL.md`](../skills/agent-message-bus/SKILL.md).
+Server behaviour (spaces, topics, blackboards, permissions) is specified in [`server/spec/README.md`](../server/spec/README.md). Agent-facing usage guidance is the server's agent guide ([`server/internal/guide/guide.md`](../server/internal/guide/guide.md)), which the extension puts into every model request (see [Context block](#context-block)).
 
 Every tool's arguments, result shape and error codes are listed in [`server/TOOLS.md`](../server/TOOLS.md).
 
 ## Install
 
-The repo root is an omp plugin that ships this extension and the skill:
+The repo root is an omp plugin that ships this extension:
 
 ```sh
 omp plugin install github:till-muellers/agent-message-bus
 omp plugin upgrade   # later, to update
 ```
+
+Earlier versions also shipped an `agent-message-bus` skill. It is gone (the context block replaces it); an old install keeps it until `omp plugin upgrade`.
 
 ## Commands
 

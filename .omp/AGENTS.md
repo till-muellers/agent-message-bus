@@ -4,7 +4,7 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ## Stack
 - Server: Go (`server/`), SQLite embedded via pure-Go `modernc.org/sqlite`, MCP via `github.com/modelcontextprotocol/go-sdk`. One static binary, `CGO_ENABLED=0`.
-- omp plugin: TypeScript on Bun (`extension/`, `skills/`), typechecked with `tsc --noEmit`.
+- omp plugin: TypeScript on Bun (`extension/`), typechecked with `tsc --noEmit`.
 - Web GUI: strict TypeScript on Bun without a framework (`gui/`, its own `package.json` and `tsconfig.json`), bundled into `server/internal/web/dist/` and embedded by the server.
 - Python: release tooling only (`scripts/build.py`).
 - CI: GitHub Actions (`.github/workflows/ci.yml`, `release.yml`).
@@ -15,7 +15,6 @@ Conventions and working method for contributors and coding agents in this repo.
 |---|---|
 |`server/`|Go server. `main.go`, `cmd/tooldoc/`, `internal/`, `migrations/`, `spec/`.|
 |`extension/`|omp extension (TypeScript). `index.ts` wires `lib/<feature>/`; `lib/shared/` holds helpers that are not tied to the bus.|
-|`skills/agent-message-bus/`|Agent-facing skill.|
 |`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_build.py` (pytest).|
 |`gui/`|Web GUI: `src/` (browser code), `tests/` (bun), `scripts/build.ts` (bundles into `server/internal/web/dist/`), `index.html` (shell template).|
 |`scripts/build.py`|Release build: builds the GUI (`--skip-gui` to skip), cross-compiles the server and writes `SHA256SUMS`.|
@@ -86,7 +85,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Any unrelated changes in the diff? Remove them or mention them.
 - Are errors handled and wrapped with context?
 - Any new dependency? It needs approval first.
-- Tool changed? `server/TOOLS.md` regenerated, extension README and skill still accurate.
+- Tool changed? `server/TOOLS.md` regenerated, extension README and the agent guide `server/internal/guide/guide.md` still accurate.
 
 ## Code conventions
 
