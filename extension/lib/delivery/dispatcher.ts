@@ -4,8 +4,9 @@
  * waiting `bus_wait` wants goes to that waiter instead (§3.4). While the session is busy, the posts of a
  * thread are held for a short window and handed over as one notice; `bus_wait` takes held entries (§3.5).
  *
- * The message (`render/details.ts`) carries the entry, so the request that consumes it acks it. A
- * reconnect replays the entries that were not acked; the ones this connection already handed over are skipped.
+ * The message (`render/details.ts`) carries the entry, so the request that consumes it acks it. There is one
+ * dispatcher per connection start (`delivery-start.ts`): a stream reconnect within the start replays the entries that
+ * were not acked, and the ones this dispatcher already handed over are skipped.
  */
 import type { Entry } from "../bus/entry.ts";
 import { parseDeliveryClass } from "../bus/entry.ts";
@@ -25,8 +26,8 @@ export interface Dispatcher {
 	takeHeld(filter: WaitFilter): Entry[];
 	/** `bus_wait`: the next entry matching `filter`, given to the caller instead of omp; [] on timeout or abort. */
 	waitNext(filter: WaitFilter, timeoutMs: number, signal?: AbortSignal): Promise<Entry[]>;
-	/** The stream stopped: the held entries are dropped unhanded, so a replay delivers them again. */
-	dropHeld(): void;
+	/** The start's stream stopped: the held entries are dropped unhanded and the waiting `bus_wait` calls return []. */
+	stop(): void;
 }
 
 export interface DispatcherDeps {
@@ -91,7 +92,7 @@ function createProgress(): { advance(id: number): void; until(id: number, ms: nu
 	};
 }
 
-/** The dispatcher of one connection: it maps every entry to the mechanism its class asks for. */
+/** The dispatcher of one connection start: it maps every entry to the mechanism its class asks for. */
 export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 	const handedOver = new Set<number>();
 	const waitCalls = createWaiters();
@@ -100,7 +101,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 	return {
 		receive(entry) {
 			deps.watermark.received(entry.id);
-			// A reconnect replays the entries that were not acked; this connection already handed them over.
+			// A reconnect replays the entries that were not acked; this start already handed them over.
 			if (handedOver.has(entry.id)) return;
 			handedOver.add(entry.id);
 			deliver(entry);
@@ -109,8 +110,9 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 		takeHeld: notices.take,
 		waitNext: waitCalls.wait,
 		handedUpTo: progress.until,
-		dropHeld() {
-			for (const entry of notices.clear()) handedOver.delete(entry.id);
+		stop() {
+			notices.clear();
+			waitCalls.cancel();
 		},
 	};
 }

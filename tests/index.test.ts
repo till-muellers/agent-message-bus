@@ -128,6 +128,39 @@ describe("inbox streaming", () => {
 		expect(restarted.sent).toHaveLength(1);
 	});
 
+	test("a session switch delivers again what the last session was handed but did not consume", async () => {
+		for (const reason of ["new", "resume", "fork"]) {
+			const stream = liveStream();
+			const bus = fakeBus({ streams: [stream.response, () => new Response(streamOf([frame(entry(1))]))] });
+			const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+			const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+			await app.emit("session_start");
+			await stream.opened;
+			stream.push(entry(1));
+			await app.emit("session_switch", { type: "session_switch", reason });
+			await app.warning("invalid token");
+			expect({ reason, sent: app.sent.map(s => s.message.content) }).toEqual({ reason, sent: [envelope(entry(1)), envelope(entry(1))] });
+			await app.emit("session_shutdown");
+		}
+	});
+
+	test("posts held when the session switches do not stall the acks of the next session", async () => {
+		const post = entry(1, { type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "design" });
+		const stream = liveStream();
+		const bus = fakeBus({ streams: [stream.response, () => new Response(streamOf([frame(entry(2))]))] });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui", idle: false });
+		await app.emit("session_start");
+		await stream.opened;
+		stream.push(post);
+		await app.emit("session_switch", { type: "session_switch", reason: "new" });
+		await app.warning("invalid token");
+		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(2))]);
+		await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message })));
+		expect(callsTo(bus, "/bus_inbox_ack").map(call => call.body)).toEqual([{ upTo: 2 }]);
+		await app.emit("session_shutdown");
+	});
+
 	test("another session holding the stream warns once, retries, and delivers once the stream opens", async () => {
 		const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
 		const { sent, warnings } = await runSession("tui", {

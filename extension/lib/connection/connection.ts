@@ -10,13 +10,13 @@ import type { BusClient } from "../bus/client.ts";
 import { createRootPublication, type RootIdentities, rootKeyOf } from "../session/root-identities.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
 import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
-import { createAckWatermark } from "../delivery/ack-watermark.ts";
 import { createAcker } from "../delivery/acker.ts";
-import { type Consume, createConsumer } from "../delivery/consumer.ts";
+import type { Consume } from "../delivery/consumer.ts";
 import { NOT_LOGGED_IN } from "../bus/errors.ts";
 import type { BusEvents } from "../delivery/bus-events.ts";
 import { phaseOf } from "../delivery/delivery-class.ts";
-import { createDispatcher, type Dispatcher } from "../delivery/dispatcher.ts";
+import { createDeliveryStart } from "../delivery/delivery-start.ts";
+import type { Dispatcher } from "../delivery/dispatcher.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
@@ -66,9 +66,9 @@ export interface ConnectionDeps {
 
 export interface Connection {
 	getActive(): ActiveCredentials | undefined;
-	/** The dispatcher of this connection; it knows what it handed over. */
-	dispatcher: Dispatcher;
-	/** Marks entries consumed; the ack follows the watermark. */
+	/** The dispatcher of the current connection start; it knows what this start handed over. */
+	dispatcher(): Dispatcher;
+	/** Marks entries consumed; the ack follows the current start's watermark. */
 	consume: Consume;
 	/** Re-resolves the credentials, registers the server tools once, restarts the inbox loop and switches the tools on or off to match. */
 	restart(): Promise<void>;
@@ -96,23 +96,26 @@ export function createConnection(deps: ConnectionDeps): Connection {
 	// promote or logout of the main session reaches its next call.
 	const getActive = () => (view.sub ? deps.roots.lookup(view.sessionFile) : active);
 	let toldNoIdentity = false;
-	const watermark = createAckWatermark();
-	const consume = createConsumer({ watermark, ack: createAcker({ client, getActive, warn }) });
+	const ack = createAcker({ client, getActive, warn });
 	const unread = createUnreadPosts((key, text) => view.setStatus(key, text));
-	const dispatcher = createDispatcher({
-		phase: () => phaseOf(view.mode, view.isIdle()),
-		watermark,
-		handOver: (message, mechanism) => {
-			pi.sendMessage(message, mechanism);
-			unread.add(message.details.entries);
-			for (const entry of message.details.entries) deps.events?.entry(entry, mechanism.deliverAs);
-		},
-		warn,
-	});
+	const startDelivery = () =>
+		createDeliveryStart({
+			phase: () => phaseOf(view.mode, view.isIdle()),
+			handOver: (message, mechanism) => {
+				pi.sendMessage(message, mechanism);
+				unread.add(message.details.entries);
+				for (const entry of message.details.entries) deps.events?.entry(entry, mechanism.deliverAs);
+			},
+			warn,
+			ack,
+		});
+	// Each restart starts over (client.md §3.3): what the last start handed over or left pending is forgotten.
+	let delivery = startDelivery();
+	const consume: Consume = ids => delivery.consume(ids);
 	const onState = deps.events?.connection;
-	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, dispatcher, onState });
+	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, onState });
 	const wait: WaitToolDeps = {
-		dispatcher: () => (inbox.isOpen() ? dispatcher : undefined),
+		dispatcher: () => (inbox.isOpen() ? delivery.dispatcher : undefined),
 		forward: serverWait(client, getActive),
 		consumed: consume,
 	};
@@ -149,7 +152,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 
 	return {
 		getActive,
-		dispatcher,
+		dispatcher: () => delivery.dispatcher,
 		consume,
 		stop() {
 			inbox.stop();
@@ -157,6 +160,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 		},
 		async restart() {
 			inbox.stop();
+			delivery = startDelivery();
 			// The posts were handed to the session or identity that is going away.
 			unread.clear();
 			const creds = await resolve();
@@ -165,7 +169,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			// The context block must be ready before a streamed entry can start a turn.
 			await deps.connected?.(connected);
 			if (!connected) return deactivateTools(pi, ours());
-			if (!view.sub) inbox.start();
+			if (!view.sub) inbox.start(delivery.dispatcher);
 			await activateBusTools(pi, ours());
 		},
 		async logout() {
