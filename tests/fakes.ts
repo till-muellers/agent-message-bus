@@ -281,6 +281,26 @@ function sessionContext(session: BootSession, notes: string[], statuses: Map<str
 	};
 }
 
+/** omp's extension event bus (`utils/event-bus.ts`) without its safety net: a throwing listener reaches the emitter. */
+export interface FakeEvents {
+	emit(channel: string, data: unknown): void;
+	on(channel: string, handler: (data: unknown) => void): () => void;
+}
+
+export function fakeEvents(): FakeEvents {
+	const listeners = new Map<string, Set<(data: unknown) => void>>();
+	return {
+		emit: (channel, data) => {
+			for (const handler of listeners.get(channel) ?? []) handler(data);
+		},
+		on(channel, handler) {
+			const set = listeners.get(channel) ?? new Set();
+			listeners.set(channel, set.add(handler));
+			return () => void set.delete(handler);
+		},
+	};
+}
+
 /** Records what a logger receives; `warning(m)` resolves once `agent-bus: m` was logged. */
 function recordingLogger() {
 	const warnings: string[] = [];
@@ -327,12 +347,12 @@ export interface Booted {
  * The one fake omp: loads the extension against a recording `pi` whose active tool set starts as `read` plus a foreign
  * `bus_` tool. Tools registered with `defaultInactive` stay out of the active set until the extension activates them.
  */
-export function boot(options: BusExtensionOptions, session: BootSession = {}): Promise<Booted> {
-	return bootExtension(createBusExtension({ sleep: noSleep, ...options }), session);
+export function boot(options: BusExtensionOptions, session: BootSession = {}, events: FakeEvents = fakeEvents()): Promise<Booted> {
+	return bootExtension(createBusExtension({ sleep: noSleep, ...options }), session, events);
 }
 
 /** Loads one extension instance of `extension`: a main session and its subagents share one factory, as in omp. */
-export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<void>, session: BootSession = {}): Promise<Booted> {
+export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<void>, session: BootSession = {}, events: FakeEvents = fakeEvents()): Promise<Booted> {
 	const tools: BootTool[] = [];
 	let active = ["read", "bus_foreign"];
 	const handlers: Record<string, Handler[]> = {};
@@ -358,6 +378,7 @@ export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<voi
 		setActiveTools: async (names: string[]) => void (active = names),
 		registerCommand: (_name: string, command: Command) => void commands.push(command),
 		on: (event: string, handler: Handler) => void (handlers[event] ??= []).push(handler),
+		events,
 		logger,
 	} as unknown as ExtensionAPI;
 	await extension(pi);

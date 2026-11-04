@@ -41,6 +41,7 @@ import { type Session, type SessionContext, createSession } from "./lib/session/
 import { createRootIdentities } from "./lib/session/root-identities.ts";
 import type { SessionChange } from "./lib/session/session-identity.ts";
 import { errorMessage } from "./lib/bus/errors.ts";
+import { announceInstance } from "./lib/delivery/bus-events.ts";
 import type { InboxLoopOptions } from "./lib/delivery/inbox-loop.ts";
 import { type DetachedSpawner, spawnDetached } from "./lib/launch/detached.ts";
 import { LAUNCHERS } from "./lib/launch/index.ts";
@@ -182,6 +183,11 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 	// subagents share this closure, and with it the identities the main sessions publish.
 	const roots = createRootIdentities();
 	return async pi => {
+		// An installed plugin and a working-tree copy can both load into one session: only the first one runs.
+		if (announceInstance(pi.events).deferred()) {
+			pi.logger.warn("agent-bus: another copy of the extension is active in this session; this copy stays off");
+			return;
+		}
 		const env = options.env ?? process.env;
 		const busEnv = consumeEnv(env);
 		const store = createCredentialStore(env);

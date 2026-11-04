@@ -18,6 +18,8 @@ export interface BusContext {
 	clear(): void;
 	/** The block text; undefined while the session has no bus identity. */
 	block(): string | undefined;
+	/** The agent the session acts as and, for a member, its space; empty while unknown. */
+	who(): { agent?: string; space?: string };
 }
 
 export interface BusContextDeps {
@@ -48,6 +50,10 @@ export function createBusContext(deps: BusContextDeps): BusContext {
 			const id = identity.current();
 			if (!id) return undefined;
 			return deps.isSub() ? subagentBlock(id, deps.agentId() ?? "<id>") : mainBlock(id, guide.text());
+		},
+		who() {
+			const id = identity.current();
+			return id ? { agent: id.name, space: id.space } : {};
 		},
 	};
 }

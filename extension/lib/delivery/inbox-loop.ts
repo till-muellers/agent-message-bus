@@ -16,6 +16,8 @@ export interface InboxLoopOptions {
 	onConflict: (error: BusError) => void | Promise<void>;
 	/** The stream opened (true) or ended (false); a refused open reports nothing. */
 	onStream: (open: boolean) => void;
+	/** The loop waits to open the stream again; not reported while another session holds it (`onConflict`). */
+	onRetry?: () => void;
 	/** Backoff wait; injectable for tests. */
 	sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
@@ -92,6 +94,7 @@ export async function runInboxLoop(options: InboxLoopOptions): Promise<void> {
 			if (signal.aborted || (await report(error, options, state))) return;
 		}
 		if (signal.aborted) return;
+		if (!state.conflicted) options.onRetry?.();
 		await sleep(state.delay, signal);
 		state.delay = Math.min(state.delay * 2, MAX_DELAY_MS);
 	}

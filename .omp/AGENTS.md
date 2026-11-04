@@ -120,7 +120,7 @@ Facts that are not obvious from the code and that cost time to find out:
 
 **Loading the working-tree extension**
 - Use `omp -e <repo>/extension/index.ts`. In omp 18.12, `--plugin-dir <repo>` did not register the extension's flags.
-- A plugin installed with `omp plugin install` loads as well. Both copies register the `bus_*` tools and the `/bus` command, and the installed copy may be an older version.
+- A plugin installed with `omp plugin install` loads as well. Copies with the `agent-bus:instance` handshake (E10c) let only the first one to load run; an older installed copy without it still registers its `bus_*` tools and `/bus` next to the working tree.
 
 **Env credentials**
 - `AGENT_BUS_URL`/`AGENT_BUS_TOKEN` are read once at load and then deleted from `process.env`.

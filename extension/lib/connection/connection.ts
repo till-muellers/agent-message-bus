@@ -14,6 +14,7 @@ import { createAckWatermark } from "../delivery/ack-watermark.ts";
 import { createAcker } from "../delivery/acker.ts";
 import { type Consume, createConsumer } from "../delivery/consumer.ts";
 import { NOT_LOGGED_IN } from "../bus/errors.ts";
+import type { BusEvents } from "../delivery/bus-events.ts";
 import { phaseOf } from "../delivery/delivery-class.ts";
 import { createDispatcher, type Dispatcher } from "../delivery/dispatcher.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
@@ -57,6 +58,8 @@ export interface ConnectionDeps {
 	membershipChanged?: () => Promise<void>;
 	/** Awaited on every restart once it is known whether the server was connected, before the inbox stream opens. */
 	connected?: (connected: boolean) => Promise<void>;
+	/** Where handed-over entries and connection changes are published for other extensions. */
+	events?: BusEvents;
 }
 
 export interface Connection {
@@ -100,10 +103,12 @@ export function createConnection(deps: ConnectionDeps): Connection {
 		handOver: (message, mechanism) => {
 			pi.sendMessage(message, mechanism);
 			unread.add(message.details.entries);
+			for (const entry of message.details.entries) deps.events?.entry(entry, mechanism.deliverAs);
 		},
 		warn,
 	});
-	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, dispatcher });
+	const onState = deps.events?.connection;
+	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, dispatcher, onState });
 	const wait: WaitToolDeps = {
 		dispatcher: () => (inbox.isOpen() ? dispatcher : undefined),
 		forward: serverWait(client, getActive),
@@ -163,6 +168,8 @@ export function createConnection(deps: ConnectionDeps): Connection {
 		},
 		async logout() {
 			inbox.stop();
+			// Published while the identity is still known.
+			deps.events?.connection("logged-out");
 			active = undefined;
 			publication.clear();
 			unread.clear();

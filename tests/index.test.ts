@@ -18,6 +18,7 @@ import {
 	errorResponse,
 	fakeBus,
 	type FakeBusOptions,
+	fakeEvents,
 	type FakeComponent,
 	frame,
 	listSpaces,
@@ -333,6 +334,74 @@ describe("context block", () => {
 		expect(block).not.toContain("GUIDE");
 		expect(app.warnings.filter(w => w.includes("guide"))).toEqual(["agent-bus: guide not loaded: not_found: no route"]);
 		await app.emit("session_shutdown");
+	});
+});
+
+describe("bus events", () => {
+	const tempDir = useTempDirs();
+	const memberWho = () => Response.json({ result: { kind: "member", name: "worker", space: "demo", spaces: [{ name: "demo", role: "member" }] } });
+
+	/** A member session on `events` whose streams are `streams`; it runs until the streams ran out (the final 401). */
+	async function session(events: ReturnType<typeof fakeEvents>, streams: FakeBusOptions["streams"], list: RemoteTool[] = []) {
+		const bus = fakeBus({ streams, list, tools: { bus_whoami: memberWho, bus_list_participants: () => Response.json({ result: [] }) } });
+		const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" }, events);
+		return { app, bus };
+	}
+
+	test("a listener gets every handed-over entry with its delivery mode, and a throwing one stops neither delivery nor ack", async () => {
+		const events = fakeEvents();
+		const seen: unknown[] = [];
+		events.on("agent-bus:entry", data => {
+			seen.push(data);
+			throw new Error("listener broke");
+		});
+		const { app, bus } = await session(events, [() => new Response(streamOf([frame(entry(1)), frame(entry(2, { class: "interrupt" }))]))]);
+		await app.emit("session_start");
+		await app.warning("invalid token");
+		expect(seen).toEqual([
+			{ entry: entry(1), deliverAs: "aside" },
+			{ entry: entry(2, { class: "interrupt" }), deliverAs: "steer" },
+		]);
+		expect(app.sent).toHaveLength(2);
+		await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message })));
+		expect(callsTo(bus, "/bus_inbox_ack").map(call => call.body)).toEqual([{ upTo: 2 }]);
+		await app.emit("session_shutdown");
+	});
+
+	test("the connection states are published with the agent and its space", async () => {
+		const events = fakeEvents();
+		const states: unknown[] = [];
+		events.on("agent-bus:connection", data => void states.push(data));
+		const conflict = () => errorResponse(409, "conflict", "agent worker already has an active inbox stream");
+		const { app } = await session(events, [conflict, conflict, () => new Response(streamOf([frame(entry(1))]))]);
+		await app.emit("session_start");
+		await app.warning("invalid token");
+		await app.run("logout");
+		const who = { agent: "worker", space: "demo" };
+		expect(states).toEqual([
+			{ state: "conflict", ...who },
+			{ state: "connected", ...who },
+			{ state: "retrying", ...who },
+			{ state: "logged-out", ...who },
+		]);
+		await app.emit("session_shutdown");
+	});
+
+	test("of two copies on one event bus only the first registers tools and opens the stream; the second says so", async () => {
+		const events = fakeEvents();
+		const list = [listSpaces];
+		const first = await session(events, [() => new Response(streamOf([]))], list);
+		const second = await session(events, [() => new Response(streamOf([]))], list);
+		await first.app.emit("session_start");
+		await second.app.emit("session_start");
+		await first.app.warning("invalid token");
+		expect(first.app.tools.map(t => t.name)).toContain("bus_list_spaces");
+		expect(second.app.tools).toEqual([]);
+		expect(second.app.commands).toEqual([]);
+		expect(callsTo(second.bus, "/v1/inbox/stream")).toEqual([]);
+		expect(second.app.warnings).toEqual(["agent-bus: another copy of the extension is active in this session; this copy stays off"]);
+		await first.app.emit("session_shutdown");
 	});
 });
 
