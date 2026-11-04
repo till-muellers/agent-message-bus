@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
+import type { Entry } from "../../extension/lib/bus/entry.ts";
 import { createAckWatermark } from "../../extension/lib/delivery/ack-watermark.ts";
+import type { Mechanism, SessionPhase } from "../../extension/lib/delivery/delivery-class.ts";
 import { createDispatcher } from "../../extension/lib/delivery/dispatcher.ts";
+import type { BusMessage } from "../../extension/lib/render/details.ts";
 import { entry } from "../fakes.ts";
 
 /** A dispatcher of an idle interactive session that records the ids it hands over to omp. */
@@ -81,5 +84,74 @@ describe("the dispatcher's waiters (bus_wait)", () => {
 		it.receive(entry(1));
 		expect(handed).toEqual([]);
 		expect(await it.handedUpTo(1, 0)).toBe(true);
+	});
+});
+
+/** A dispatcher in `phase` that records every message it hands over, with its mechanism. */
+function recording(phase: SessionPhase) {
+	const watermark = createAckWatermark();
+	const messages: { message: BusMessage; mechanism: Mechanism }[] = [];
+	const it = createDispatcher({ phase: () => phase, watermark, handOver: (message, mechanism) => void messages.push({ message, mechanism }) });
+	const handed = () => messages.map(m => [m.message.details.entryIds, m.mechanism.deliverAs]);
+	return { it, messages, handed, watermark };
+}
+
+function post(id: number, threadId = 7, extra: Partial<Entry> = {}): Entry {
+	return entry(id, { type: "thread_post", blackboard: "plan", threadId, threadTitle: "design", from: "peer", ...extra });
+}
+
+describe("blackboard notices in the dispatcher", () => {
+	beforeEach(() => jest.useFakeTimers());
+	afterEach(() => jest.useRealTimers());
+
+	test("while busy, 3 posts to one thread within the window become one aside with 3 entryIds, acked together", () => {
+		const { it, messages, handed, watermark } = recording("interactive-busy");
+		for (const id of [1, 2, 3]) it.receive(post(id));
+		expect(handed()).toEqual([]);
+		jest.advanceTimersByTime(1500);
+		expect(handed()).toEqual([[[1, 2, 3], "aside"]]);
+		expect(messages[0].message.content.match(/<agent-bus-entry /g)?.length).toBe(3);
+		expect(watermark.consumed(messages[0].message.details.entryIds)).toBe(3);
+	});
+
+	test("posts to different threads stay separate notices", () => {
+		const { it, handed } = recording("interactive-busy");
+		it.receive(post(1, 7));
+		it.receive(post(2, 8));
+		jest.advanceTimersByTime(1500);
+		expect(handed()).toEqual([
+			[[1], "aside"],
+			[[2], "aside"],
+		]);
+	});
+
+	test("an idle session gets a post at once, as a notice", () => {
+		const { it, messages, handed } = recording("interactive-idle");
+		it.receive(post(1, 7, { body: Array.from({ length: 50 }, () => "x").join("\n") }));
+		expect(handed()).toEqual([[[1], "aside"]]);
+		expect(messages[0].message.content).toContain("30 lines left out; read the full thread");
+	});
+
+	test("a critical post is never held and steers in full", () => {
+		const { it, messages, handed } = recording("interactive-busy");
+		const body = Array.from({ length: 50 }, () => "x").join("\n");
+		it.receive(post(1, 7, { critical: true, class: "interrupt", body }));
+		expect(handed()).toEqual([[[1], "steer"]]);
+		expect(messages[0].message.content).toContain(body);
+	});
+
+	test("a lifecycle notice of class deferred is delivered on the next turn, not held", () => {
+		const { it, handed } = recording("interactive-busy");
+		it.receive(entry(1, { type: "thread_removed", threadId: 7, class: "deferred", body: undefined }));
+		expect(handed()).toEqual([[[1], "nextTurn"]]);
+	});
+
+	test("held entries are returned at once by takeHeld and never handed to omp afterwards", () => {
+		const { it, handed } = recording("interactive-busy");
+		it.receive(post(1, 7));
+		it.receive(post(2, 8));
+		expect(it.takeHeld({}).map(e => e.id)).toEqual([1, 2]);
+		jest.advanceTimersByTime(1500);
+		expect(handed()).toEqual([]);
 	});
 });

@@ -141,6 +141,8 @@ The server stamps every entry with a delivery **class**; the class and the phase
 
 In one-shot `print`/`json` modes (and when the mode is unknown), every entry waits for the next turn, because those modes run their own prompt right after `session_start` and a turn of their own would compete with it.
 
+**Blackboard notices:** a thread post of class `queue` arrives as a short notice: the whole post when it has at most 20 lines and 2 KiB, else its first lines and `N lines left out; read the full thread with bus_read_thread {space, threadId}.` While the session is busy, the posts to one thread (same space, board and thread) that arrive within 1.5 s of the first are held and handed over as one message: one fenced envelope per post, the reply hint only on the last, `details.entryIds` listing every post, so they are acked together once that message entered a model request. Posts to different threads stay separate; an idle session gets each post at once. A critical post (`interrupt`) is never held and steers in full; a lifecycle notice (`deferred`) waits for the next turn. `bus_wait` returns the posts still held at once, and they are not handed over afterwards.
+
 **Reconnect:** when the stream ends or fails, the extension waits 1 s, then doubles the wait up to 30 s. Each delivered entry resets the wait to 1 s. An `unauthenticated` (401) or `forbidden` (403) error stops the loop for good: the token was revoked, the member left, or the space was deleted. Run `/bus login` again to restart. Errors are logged as `agent-bus: <message>`. The stream stops at session shutdown and on `/bus logout`.
 
 ## One identity per agent

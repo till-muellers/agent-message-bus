@@ -20,7 +20,7 @@ async function runLoop(streams: (() => Response)[], tools: Record<string, ToolHa
 		client: createClient(bus.fetchFn),
 		getActive: () => ({ url: URL_, token: "tok" }),
 		signal,
-		dispatcher: { receive: (e: Entry) => void delivered.push(e.id), handedUpTo: async () => true, waitNext: async () => [] } satisfies Dispatcher,
+		dispatcher: { receive: (e: Entry) => void delivered.push(e.id), handedUpTo: async () => true, takeHeld: () => [], waitNext: async () => [] } satisfies Dispatcher,
 		onError: error => void errors.push(error.message),
 		onConflict: async (error: BusError) => void conflicts.push(error.code),
 		onStream: isOpen => void open.push(isOpen),

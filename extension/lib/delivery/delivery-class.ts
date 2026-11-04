@@ -47,6 +47,11 @@ export function mechanismFor(cls: DeliveryClass, phase: SessionPhase): Mechanism
 	return MECHANISMS[cls][phase];
 }
 
+/** Whether the session is in the middle of a run. */
+export function isBusy(phase: SessionPhase): boolean {
+	return phase === "interactive-busy" || phase === "oneshot-busy";
+}
+
 /** Whether the dispatcher may hold an entry of this class for coalescing. */
 export function holdable(cls: DeliveryClass): boolean {
 	return cls === "queue";

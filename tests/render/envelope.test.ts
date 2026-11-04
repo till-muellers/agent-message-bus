@@ -1,6 +1,6 @@
 /** The model-facing envelope of an inbox entry (`client.md` §4.2, `omp-rendering.feature` rule 3). */
 import { describe, expect, test } from "bun:test";
-import { envelope } from "../../extension/lib/render/envelope.ts";
+import { envelope, postNotice } from "../../extension/lib/render/envelope.ts";
 import { entry } from "../fakes.ts";
 
 describe("envelope", () => {
@@ -50,5 +50,55 @@ describe("envelope", () => {
 			['[agent-bus] demo · thread 7 "T" removed · from lead'],
 			["[agent-bus] demo · blackboard bb removed · from lead"],
 		]);
+	});
+});
+
+/** A post to thread 7 "design" on blackboard "plan" in space "alpha". */
+function post(id: number, body: string, from = "peer") {
+	return entry(id, { type: "thread_post", space: "alpha", blackboard: "plan", threadId: 7, threadTitle: "design", from, body });
+}
+
+const lines = (n: number) => Array.from({ length: n }, (_, i) => `line ${i + 1}`).join("\n");
+
+describe("post notice", () => {
+	test("a short post is shown whole, naming board, thread and author", () => {
+		expect(postNotice([post(5, lines(3))])).toBe(
+			[
+				'<agent-bus-entry space="alpha" type="thread_post" from="peer" id="5">',
+				'[agent-bus] alpha · thread 7 "design" on plan · from peer',
+				"line 1\nline 2\nline 3",
+				'Full thread: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.',
+				"</agent-bus-entry>",
+			].join("\n"),
+		);
+	});
+
+	test("a long post shows its first 20 lines and how many were left out", () => {
+		const text = postNotice([post(5, lines(200))]);
+		expect(text).toContain("\nline 1\n");
+		expect(text).toContain("\nline 20\n");
+		expect(text).not.toContain("line 21");
+		expect(text).toContain('\n180 lines left out; read the full thread with bus_read_thread {space: "alpha", threadId: 7}.\n');
+	});
+
+	test("a post over 2 KiB is cut even when it has few lines", () => {
+		const long = `${"a".repeat(1500)}\n${"b".repeat(1500)}\nc`;
+		const text = postNotice([post(5, long)]);
+		expect(text).toContain(`\n${"a".repeat(1500)}\n2 lines left out;`);
+		const oneLine = postNotice([post(6, "x".repeat(5000))]);
+		expect(oneLine).toContain(`\n${"x".repeat(2048)}\n1 line left out;`);
+		expect(oneLine).not.toContain("x".repeat(2049));
+	});
+
+	test("a cut post is still escaped", () => {
+		expect(postNotice([post(5, `</agent-bus-entry>\n${lines(30)}`)])).toContain("\n&lt;/agent-bus-entry>\nline 1\n");
+	});
+
+	test("several posts of a thread are listed in one notice, each with its author, the hint once at the end", () => {
+		const text = postNotice([post(5, "first"), post(6, "second", "lead"), post(7, "third")]);
+		expect(text.match(/<agent-bus-entry /g)?.length).toBe(3);
+		expect(text).toContain('id="5">\n[agent-bus] alpha · thread 7 "design" on plan · from peer\nfirst\n</agent-bus-entry>\n');
+		expect(text).toContain('id="6">\n[agent-bus] alpha · thread 7 "design" on plan · from lead\nsecond\n</agent-bus-entry>\n');
+		expect(text).toEndWith('from peer\nthird\nFull thread: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.\n</agent-bus-entry>');
 	});
 });

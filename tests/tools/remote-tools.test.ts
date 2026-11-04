@@ -84,7 +84,7 @@ describe("registerRemoteTools", () => {
 			urls.push(url);
 			return Response.json(list);
 		});
-		const wait = { dispatcher: () => ({ waitNext: async () => [entry(1)] }), forward: async () => [], consumed: () => {} };
+		const wait = { dispatcher: () => ({ takeHeld: () => [], waitNext: async () => [entry(1)] }), forward: async () => [], consumed: () => {} };
 		expect(await register({ wait })).toBe(3);
 		expect(options.state.names).toEqual(["bus_inbox_read", "bus_send", "bus_wait"]);
 		const out = await tools[2].execute("id", {});
