@@ -75,10 +75,14 @@ export function liveStream() {
 	const encoder = new TextEncoder();
 	const opened = Promise.withResolvers<void>();
 	let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-	const body = new ReadableStream<Uint8Array>({
-		start: c => void (controller = c),
-		pull: () => opened.resolve(),
-	});
+	// No queue to fill ahead: `pull` runs only when the extension reads.
+	const body = new ReadableStream<Uint8Array>(
+		{
+			start: c => void (controller = c),
+			pull: () => opened.resolve(),
+		},
+		{ highWaterMark: 0 },
+	);
 	return {
 		response: () => new Response(body),
 		opened: opened.promise,

@@ -6,6 +6,8 @@ export interface FetchInit {
 	headers: Record<string, string>;
 	body?: string;
 	signal?: AbortSignal;
+	/** Bun's socket idle timer in ms (not in the Fetch standard); a long wait sends nothing until it answers. */
+	timeout?: number;
 }
 
 export type FetchLike = (url: string, init: FetchInit) => Promise<Response>;
@@ -92,6 +94,7 @@ export function createClient(fetchFn: FetchLike = fetch): BusClient {
 				headers: { ...auth(token), "Content-Type": "application/json" },
 				body: JSON.stringify(args),
 				signal: callSignal(options),
+				timeout: options.timeoutMs,
 			});
 			const body: unknown = await response.json();
 			if (!body || typeof body !== "object" || !("result" in body)) throw new BusError("invalid_response", `${name}: response has no result`);

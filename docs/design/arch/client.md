@@ -324,7 +324,7 @@ No upstream-pi fallback (PO-6): `followUp` is gone from the extension, and there
 ### 3.3 Dispatcher and ack watermark (E2; `mail/omp-mail-delivery.feature`, `omp-delivery.feature` ack rule)
 
 ```ts
-// lib/delivery/dispatcher.ts — one per connection; reset on restart (session switch drops asides, R2)
+// lib/delivery/dispatcher.ts — one per connection start; reset on restart (session switch drops asides, R2)
 export interface Dispatcher {
 	receive(entry: Entry): void;
 	/** bus_wait (E10a): held entries matching `filter`, removed from the hold (never handed to omp afterwards). */
@@ -374,7 +374,7 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 
 - Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, description and `inputSchema` from `GET /v1/tools`); `tool-selection.ts` excludes the server tool from mirroring. Subagents never register it.
 - Order: `takeHeld(filter)` → non-empty returns at once (E10a, when the dispatcher starts holding); else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`).
-- Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`), and no ack.
+- Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`), and no ack. The same value goes into Bun's `fetch` `timeout` (its socket idle timer, 5 min by default): the server sends nothing until the wait ends, so a 300 s wait would otherwise be cut.
 - `timeoutSeconds` outside 1..300 is refused locally with the server's error (`invalid: timeoutSeconds must be 1..300`).
 - Cancellation: the `execute` `signal` (`CA/extensibility/extensions/types.ts:925-933`) aborts the wait; nothing is consumed.
 - Server dependency: slice 9 (server `bus_wait`, contract `{"result":[Entry…]}`) for the schema and the fallback; it ships under protocol 2 (contracts.md §6), so `MIN_SERVER_PROTOCOL` stays 2.

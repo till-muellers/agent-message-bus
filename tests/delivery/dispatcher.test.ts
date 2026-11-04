@@ -64,6 +64,15 @@ describe("the dispatcher's waiters (bus_wait)", () => {
 		expect(await it.waitNext({}, 60_000, aborted.signal)).toEqual([]);
 	});
 
+	test("an entry already handed to omp is never returned, not even when a reconnect replays it", async () => {
+		const { it, handed } = dispatcher();
+		it.receive(entry(1));
+		const wait = it.waitNext({}, 1);
+		it.receive(entry(1));
+		expect(await wait).toEqual([]);
+		expect(handed).toEqual([1]);
+	});
+
 	test("an entry a waiter took counts as handed over, so a replay does not reach omp", async () => {
 		const { it, handed } = dispatcher();
 		const wait = it.waitNext({}, 1000);
