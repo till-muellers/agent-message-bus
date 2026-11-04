@@ -7,9 +7,9 @@ Feature: Invites in the web GUI
   #
   # Invite codes are stored hashed, so a pending code cannot be shown again
   # after it was created. The web GUI therefore shows the invited name, who
-  # invited it and the expiry, never the code. The opaque invite id and
-  # cancelling one invite by it (PO-3) come with
-  # docs/design/specs/web/gui-invite-cancel.feature (slice 10).
+  # invited it, the expiry and an opaque invite id (PO-3; numbered migration
+  # after 0001_schema), never the code. Cancelling one invite by its id is
+  # gui-invite-cancel.feature.
   #
   # The operator signs in with an admin token. An admin acts as a leader in
   # every space without joining it (see ../admin-role.feature):

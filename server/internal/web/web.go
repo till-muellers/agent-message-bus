@@ -2,7 +2,7 @@
 // that are re-validated on every request, the JSON reads under /web/api/, the mutations and
 // the admin area, whose writes need the session's CSRF token. It is a transport like
 // internal/rpc: it reads through the feature services, writes through the tool registry
-// and owns no SQL.
+// (and invites.Service.Cancel, which has no tool) and owns no SQL.
 // It is served on its own listener (AMB_WEB_ADDR), never on the API listener.
 package web
 
@@ -77,6 +77,8 @@ func (g *Web) Mount(mux *http.ServeMux) {
 	mux.Handle("GET /web/api/spaces/{space}/threads/{id}", g.api(g.thread))
 	mux.Handle("GET /web/api/inbox", g.api(g.readInbox))
 	mux.Handle("POST /web/api/spaces/{space}/invites", g.mutation(g.invite))
+	mux.Handle("GET /web/api/spaces/{space}/invites", g.api(g.listInvites))
+	mux.Handle("DELETE /web/api/spaces/{space}/invites/{id}", g.mutation(g.cancelInvite))
 	mux.Handle("POST /web/api/spaces/{space}/revoke", g.mutation(g.revoke))
 	mux.Handle("POST /web/api/spaces/{space}/threads/{id}/posts", g.mutation(g.post))
 	mux.Handle("POST /web/api/spaces/{space}/topics/{topic}/messages", g.mutation(g.send))

@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS invites_id;
+ALTER TABLE invites DROP COLUMN id;

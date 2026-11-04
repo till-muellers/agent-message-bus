@@ -45,6 +45,9 @@ func TestListPending(t *testing.T) {
 	}
 	for _, p := range []auth.Principal{e.lead, admin} {
 		got := listPending(t, e, p, "demo")
+		for i := range got {
+			got[i].ID = "" // TestListPendingHasID checks the ids
+		}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("%s: ListPending = %+v, want %+v", p.AgentName, got, want)
 		}

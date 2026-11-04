@@ -67,6 +67,11 @@ Feature: Transports
       And every tool has a non-empty description
       And the first tool's inputSchema has type "object"
 
+    Scenario: There is no cancel tool
+      # PO-3: cancelling one invite is a web API endpoint only (web/gui-invite-cancel.feature).
+      When the admin calls GET /v1/tools
+      Then the list does not contain "bus_cancel_invite"
+
     Scenario: Input schemas use a closed, flat subset of JSON Schema
       When the admin calls GET /v1/tools
       Then every inputSchema has type "object", "properties", "required" and "additionalProperties" false

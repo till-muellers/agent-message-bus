@@ -3,6 +3,7 @@ package invites
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -23,6 +24,16 @@ func newCode() (string, error) {
 		b[i] = alphabet[v&31]
 	}
 	return string(b[:4]) + "-" + string(b[4:]), nil
+}
+
+// newID returns the opaque id of a new invite: 8 random bytes as 16 lowercase hex chars,
+// unrelated to its code.
+func newID() (string, error) {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generating invite id: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // normalize lowercases code and drops every character outside [a-z0-9].
