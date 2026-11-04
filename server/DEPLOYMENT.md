@@ -143,9 +143,10 @@ Without a wrapper, point the action at the exe directly (output then isn't logge
 
 ## 6. Docker (optional)
 
-No registry needed; build locally from the repo root:
+No registry needed; build locally from the repo root. The image embeds the web GUI from `server/internal/web/dist/`, so build the GUI first (needs [bun](https://bun.sh)); without that step the image serves the fallback page "The web GUI was not built" at `/web/`:
 
 ```sh
+bun run build:gui                 # writes server/internal/web/dist/
 docker build -t agent-message-bus server
 docker run -d --name amb -p 8080:8080 -v amb-data:/data agent-message-bus
 docker exec amb /agent-message-bus admin-token

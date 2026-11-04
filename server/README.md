@@ -36,9 +36,10 @@ One instance runs per data dir. While it runs, `<datadir>/agent-message-bus.stat
 
 **Upgrade.** Pre-release databases are not upgraded: stop the server and delete `agent-message-bus.db`, `-wal` and `-shm` before starting this version.
 
-Optional Docker (local build, no registry; the image sets `AMB_DB_PATH=/data/agent-message-bus.db`):
+Optional Docker (local build, no registry; the image sets `AMB_DB_PATH=/data/agent-message-bus.db`). Build the GUI before `docker build`: the image embeds the web GUI from `internal/web/dist/`, and without that step it serves the fallback page.
 
 ```powershell
+bun run --cwd .. build:gui   # builds the GUI into internal/web/dist/
 docker build -t agent-message-bus .
 docker run -d --name amb -p 8080:8080 -v amb-data:/data agent-message-bus   # image sets AMB_ADDR=:8080, AMB_WEB_ADDR=off
 docker exec amb /agent-message-bus admin-token
