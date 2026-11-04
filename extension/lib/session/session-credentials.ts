@@ -5,7 +5,9 @@
  * token accepted by `/bus accept` live here, behind named operations: the
  * callers say what happened (`promote`, `loggedIn`, `inviteAccepted`,
  * `loggedOut`, `ended`) instead of reaching into the state. The precedence is
- * promote > env > accepted > the stored agent token.
+ * promote > env > accepted > the stored agent token. Only a main session
+ * resolves here: a subagent acts with the identity its root session published
+ * (`root-identities.ts`), never with its own.
  */
 import type { ActiveCredentials, StoredCredentials } from "./stored-credentials.ts";
 import { trimUrl } from "./stored-credentials.ts";

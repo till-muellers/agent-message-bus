@@ -14,12 +14,15 @@ import type { AckWatermark } from "../delivery/ack-watermark.ts";
 import type { SessionCredentials } from "./session-credentials.ts";
 import { createSessionCredentials } from "./session-credentials.ts";
 import { createSessionIdentity, type IdentityContext, type SessionChange } from "./session-identity.ts";
+import type { RootIdentities } from "./root-identities.ts";
 import type { ActiveCredentials, CredentialStore } from "./stored-credentials.ts";
 import type { BusEnv } from "./env.ts";
 
 /** The parts of the omp context a session reads: mode, agent kind, idleness and the session file. */
 export interface SessionContext extends IdentityContext {
 	mode?: string;
+	/** The agent the session runs: its kind and its registry id. */
+	agent?: { kind?: string; id?: string };
 	/** Whether the agent is idle right now. */
 	isIdle(): boolean;
 }
@@ -54,6 +57,8 @@ export interface SessionDeps {
 	gate: ServerGate;
 	/** The watermark of the acked entries. */
 	watermark: AckWatermark;
+	/** The identities root sessions publish for their subagents; one registry per extension factory. */
+	roots: RootIdentities;
 	/** The sleep the inbox loop waits with. */
 	sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 	/** How long a one-shot run waits for the inbox backlog after an invite; 5 s by default. */
@@ -80,12 +85,12 @@ async function highestInboxId(client: BusClient, active: ActiveCredentials | und
 
 /** Builds the session of this extension. */
 export function createSession(deps: SessionDeps): Session {
-	const { pi, store, busEnv, dir, client, localTools, gate, watermark } = deps;
+	const { pi, store, busEnv, dir, client, localTools, gate, watermark, roots } = deps;
 	const warn = (message: string) => pi.logger.warn(`agent-bus: ${message}`);
 	const credentials = createSessionCredentials(busEnv.credentials);
 	const identity = createSessionIdentity(dir, credentials);
 	const view: SessionView = { sub: false, isIdle: () => true };
-	const connection = createConnection({ pi, client, store, credentials, identity, view, gate, watermark, warn, sleep: deps.sleep, localTools });
+	const connection = createConnection({ pi, client, store, credentials, identity, roots, view, gate, watermark, warn, sleep: deps.sleep, localTools });
 	const backlogTimeoutMs = deps.backlogTimeoutMs ?? BACKLOG_TIMEOUT_MS;
 	/**
 	 * A one-shot run starts its own prompt right after the session start, so the entries of the
@@ -120,6 +125,7 @@ export function createSession(deps: SessionDeps): Session {
 			view.mode = ctx.mode;
 			view.sub = ctx.agent?.kind === "sub";
 			view.agentId = ctx.agent?.id;
+			view.sessionFile = ctx.sessionManager?.getSessionFile();
 			view.isIdle = () => ctx.isIdle();
 			return identity.bind(ctx, change);
 		},

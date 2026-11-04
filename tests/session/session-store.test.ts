@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createSessionStore, sessionKey } from "../../extension/lib/session/session-store.ts";
 import { URL_, useTempDirs } from "../fakes.ts";
@@ -19,17 +19,9 @@ describe("session store", () => {
 		await expect(store.load()).rejects.toThrow(`Session credential file ${store.path} is unreadable. Run /bus accept again.`);
 	});
 
-	test("sessionKey: the session file's name; a subagent walks up to its interactive root session", async () => {
-		const dir = await tempDir();
-		await writeFile(join(dir, "root.jsonl"), "");
-		await mkdir(join(dir, "root", "sub1"), { recursive: true });
-		await writeFile(join(dir, "root", "sub1.jsonl"), "");
-		const nested = join(dir, "root", "sub1", "sub2.jsonl");
-		expect(sessionKey(undefined, false)).toBeUndefined();
-		expect(sessionKey(undefined, true)).toBeUndefined();
-		expect(sessionKey(join(dir, "root.jsonl"), false)).toBe("root");
-		expect(sessionKey(nested, false)).toBe("sub2");
-		expect(sessionKey(nested, true)).toBe("root");
-		expect(sessionKey(join(dir, "lone.jsonl"), true)).toBe("lone");
+	test("sessionKey: the session file's name without .jsonl, nested or not", () => {
+		expect(sessionKey(undefined)).toBeUndefined();
+		expect(sessionKey(join("/s", "root.jsonl"))).toBe("root");
+		expect(sessionKey(join("/s", "root", "sub1", "sub2.jsonl"))).toBe("sub2");
 	});
 });

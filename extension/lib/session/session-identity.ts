@@ -6,10 +6,8 @@ import type { SessionCredentials } from "./session-credentials.ts";
 import type { ActiveCredentials } from "./stored-credentials.ts";
 import { createSessionStore, type SessionStore, sessionKey } from "./session-store.ts";
 
-/** The parts of the omp context that identify a session: its agent kind and its session file. */
+/** The part of the omp context that identifies a session: its session file. */
 export interface IdentityContext {
-	/** The agent the session runs: its kind and its registry id. */
-	agent?: { kind?: string; id?: string };
 	sessionManager?: { getSessionFile(): string | undefined };
 }
 
@@ -21,7 +19,7 @@ export interface IdentityContext {
 export type SessionChange = { kind: "same" } | { kind: "new" } | { kind: "branch"; previousSessionFile: string | undefined };
 
 export interface SessionIdentity {
-	/** Keys the identity by `ctx`'s session file (a subagent's by its root session's); `change` decides what happens to the accepted token. */
+	/** Keys the identity by `ctx`'s session file; `change` decides what happens to the accepted token. */
 	bind(ctx: IdentityContext, change?: SessionChange): Promise<void>;
 	/** Reads the bound session's file into `accepted`; a session without a file keeps the token held in memory. */
 	load(): Promise<void>;
@@ -34,17 +32,16 @@ export interface SessionIdentity {
 /** `dir` holds `sessions/<key>.json`; `credentials` is the session's credential set whose accepted token this owns. */
 export function createSessionIdentity(dir: string, credentials: SessionCredentials): SessionIdentity {
 	let store: SessionStore | undefined;
-	const storeOf = (file: string | undefined, sub: boolean) => {
-		const key = sessionKey(file, sub);
+	const storeOf = (file: string | undefined) => {
+		const key = sessionKey(file);
 		return key ? createSessionStore(dir, key) : undefined;
 	};
 	return {
 		async bind(ctx, change = { kind: "same" }) {
-			const sub = ctx.agent?.kind === "sub";
-			store = storeOf(ctx.sessionManager?.getSessionFile(), sub);
+			store = storeOf(ctx.sessionManager?.getSessionFile());
 			if (change.kind === "new") credentials.setAccepted(undefined);
 			if (change.kind !== "branch") return;
-			const previous = storeOf(change.previousSessionFile, sub);
+			const previous = storeOf(change.previousSessionFile);
 			// A branch without a previous session file keeps the token it already holds.
 			if (!previous) return;
 			const carried = await previous.load();

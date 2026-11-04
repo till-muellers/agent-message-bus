@@ -6,7 +6,7 @@ import { createSessionIdentity } from "../../extension/lib/session/session-ident
 import type { ActiveCredentials } from "../../extension/lib/session/stored-credentials.ts";
 import { URL_, useTempDirs } from "../fakes.ts";
 
-const ctx = (sessionFile: string | undefined, kind = "main") => ({ agent: { kind }, sessionManager: { getSessionFile: () => sessionFile } });
+const ctx = (sessionFile: string | undefined) => ({ sessionManager: { getSessionFile: () => sessionFile } });
 const creds: ActiveCredentials = { url: URL_, token: "acc-tok" };
 
 /** The accepted token of a credential set, as its owner resolves it. */
@@ -117,19 +117,5 @@ describe("session identity", () => {
 		await identity.clear();
 		expect(accepted(credentials)).toBeUndefined();
 		await expect(stat(join(dir, "sessions", "s1.json"))).rejects.toThrow();
-	});
-
-	test("a subagent binds to its root session's key", async () => {
-		const dir = await tempDir();
-		await writeFile(join(dir, "root.jsonl"), "");
-		await mkdir(join(dir, "root"));
-		const root = createSessionIdentity(dir, createSessionCredentials(undefined));
-		await root.bind(ctx(join(dir, "root.jsonl")));
-		await root.save(creds);
-		const credentials = createSessionCredentials(undefined);
-		const sub = createSessionIdentity(dir, credentials);
-		await sub.bind(ctx(join(dir, "root", "task-1.jsonl"), "sub"));
-		await sub.load();
-		expect(accepted(credentials)).toEqual(creds);
 	});
 });

@@ -228,16 +228,17 @@ Design: the registry lives in that closure, so there is no module-level mutable 
 export interface RootIdentities {
 	/** Main session: publish the credentials it currently acts with (after every restart). */
 	publish(rootKey: string, creds: ActiveCredentials): void;
-	/** Main session: logout, revoke, shutdown. */
+	/** Main session: logout, shutdown. */
 	withdraw(rootKey: string): void;
-	/** Subagent session: read at every tool call; never the store, never the env. */
-	lookup(rootKey: string): ActiveCredentials | undefined;
+	/** Subagent session: read at every tool call; the nearest root session holding `sessionFile`; never the store, never the env. */
+	lookup(sessionFile: string | undefined): ActiveCredentials | undefined;
 }
 export function createRootIdentities(): RootIdentities;   // Map<string, ActiveCredentials>
+export function rootKeyOf(sessionFile: string | undefined): string | undefined; // main: its file without `.jsonl`
 ```
 
-- Key: `sessionKey(sessionFile, sub)` (`lib/session-store.ts:46-48`), which already resolves a subagent's file to its interactive root.
-- A subagent's `resolve()` is `roots.lookup(rootKey)` only; its tools call `getActive()` per call, so a later `/bus promote` in the main session reaches the subagent's next call.
+- Key: the main session's file without `.jsonl`, i.e. the artifacts dir its subagents' files live in (`<root>/<id>.jsonl`). A subagent's `lookup(sessionFile)` walks up its own file's dirs (nested subagents included, at most 8 levels) to the nearest published key. (Corrected in E4b: the first design reused `sessionKey(sessionFile, sub)` (`lib/session-store.ts:46-48`), whose walk needs `<root>.jsonl` on disk; omp writes a session file only after its first assistant message, so a subagent started in the first turn missed its root.)
+- A subagent's `resolve()` is `roots.lookup(sessionFile)` only; its tools call `getActive()` per call, so a later `/bus promote` in the main session reaches the subagent's next call.
 - A main session without a session file (`--no-session`) has no key: its subagents get no bus tools (logged once). `[INFERENCE: acceptable; rare]`
 - Risk: if omp ever re-evaluates the module per subagent, `lookup` returns `undefined` and subagents get no tools (safe failure). Smoke step in E4b checks "subagent posts as the promoted leader".
 

@@ -1,10 +1,13 @@
 /**
  * The session's live bus connection: the active credentials, the registered `bus_*` tools and the inbox loop.
- * Subagents register no inbox tools and run no inbox loop: their parent session owns the inbox.
+ * A main session publishes the credentials it acts with for its subagents (`root-identities.ts`); a subagent
+ * acts only with what its root session published, registers no inbox tools and runs no inbox loop: its main
+ * session owns the inbox.
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { activateBusTools, deactivateBusTools, deactivateTools } from "./activation.ts";
 import type { BusClient } from "../bus/client.ts";
+import { createRootPublication, type RootIdentities, rootKeyOf } from "../session/root-identities.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
 import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
 import type { AckWatermark } from "../delivery/ack-watermark.ts";
@@ -22,6 +25,8 @@ export interface SessionView {
 	sub: boolean;
 	/** The id of the agent that runs the session (`ctx.agent.id`); the subagent's id in a subagent session. */
 	agentId?: string;
+	/** The session's file (`ctx.sessionManager.getSessionFile()`): the root key of a main session, the way to it for a subagent. */
+	sessionFile?: string;
 	/** Whether the agent is idle right now (bound to the latest omp context). */
 	isIdle(): boolean;
 }
@@ -32,6 +37,8 @@ export interface ConnectionDeps {
 	store: CredentialStore;
 	credentials: Pick<SessionCredentials, "resolve">;
 	identity: Pick<SessionIdentity, "load">;
+	/** The identities root sessions publish for their subagents; shared by every session of the process. */
+	roots: RootIdentities;
 	view: SessionView;
 	/** Keeps the extension off a server that is too old; checked before the tools are activated. */
 	gate: ServerGate;
@@ -51,64 +58,73 @@ export interface Connection {
 	restart(): Promise<void>;
 	/** Stops the loop, drops the credentials and deactivates every bus tool; registered tools stay and fail until the next login. */
 	logout(): Promise<void>;
+	/** Session end: stops the loop and withdraws the identity published for the subagents. */
 	stop(): void;
 }
 
-export function createConnection({ pi, client, store, credentials, identity, view, gate, watermark, warn, sleep, localTools }: ConnectionDeps): Connection {
+export function createConnection(deps: ConnectionDeps): Connection {
+	const { pi, client, view, warn, localTools } = deps;
 	const tools = { registered: false, names: [] as string[] };
-	let withheld = false;
+	const publication = createRootPublication(deps.roots);
 	let active: ActiveCredentials | undefined;
-	const getActive = () => active;
+	// A subagent reads its root session's identity at every call, never the store or the env, so a later
+	// promote or logout of the main session reaches its next call.
+	const getActive = () => (view.sub ? deps.roots.lookup(view.sessionFile) : active);
+	let toldNoIdentity = false;
 	const dispatcher = createDispatcher({
 		phase: () => phaseOf(view.mode, view.isIdle()),
-		watermark,
+		watermark: deps.watermark,
 		handOver: (content, mechanism, details) => pi.sendMessage({ customType: "agent-bus", content, display: true, details }, mechanism),
 	});
-	const inbox = createInboxRunner({ client, getActive, warn, sleep, dispatcher });
+	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, dispatcher });
 	const ours = () => [...tools.names, ...localTools];
+
+	/** A main session resolves its own credentials and publishes them; a subagent takes its root session's. */
+	async function resolve(): Promise<ActiveCredentials | undefined> {
+		if (view.sub) return getActive();
+		await deps.identity.load();
+		active = deps.credentials.resolve(await deps.store.load());
+		publication.set(rootKeyOf(view.sessionFile), active);
+		return active;
+	}
+
+	/** Registers the session's tools unless the server is too old; false when it is. */
+	async function connect(creds: ActiveCredentials): Promise<boolean> {
+		const verdict = await deps.gate.check(creds.url);
+		if (verdict !== "ok") {
+			warn(verdict.refused);
+			return false;
+		}
+		await registerRemoteTools(pi, { client, getActive, state: tools, warn, kind: view.sub ? "sub" : "main", agentId: view.agentId });
+		return true;
+	}
+
+	/** A subagent without its root session's identity gets no bus tools: one line, then silence. */
+	function noIdentity(): void {
+		if (!view.sub || toldNoIdentity) return;
+		toldNoIdentity = true;
+		warn("no bus tools for the subagent: its main session has no bus identity");
+	}
+
 	return {
 		getActive,
 		dispatcher,
-		stop: inbox.stop,
+		stop() {
+			inbox.stop();
+			publication.clear();
+		},
 		async restart() {
 			inbox.stop();
-			await identity.load();
-			const resolved = credentials.resolve(await store.load());
-			active = resolved;
-			if (active) {
-				// A subagent acts as its root session's identity only when that identity is an accepted
-				// invite; with any other source it gets no bus tools at all (one line, then silence).
-				if (view.sub && resolved?.source !== "accepted") {
-					if (!withheld) {
-						withheld = true;
-						warn("bus tools withheld for the subagent: the session's identity is not an accepted invite");
-					}
-					await deactivateTools(pi, ours());
-					return;
-				}
-				// A server that is too old gets no tools and no stream.
-				const verdict = await gate.check(active.url);
-				if (verdict !== "ok") {
-					warn(verdict.refused);
-					await deactivateTools(pi, ours());
-					return;
-				}
-				await registerRemoteTools(pi, {
-					client,
-					getActive,
-					state: tools,
-					warn,
-					kind: view.sub ? "sub" : "main",
-					agentId: view.agentId,
-				});
-			}
-			if (active && !view.sub) inbox.start();
-			if (active) await activateBusTools(pi, ours());
-			else await deactivateTools(pi, ours());
+			const creds = await resolve();
+			if (!creds) noIdentity();
+			if (!creds || !(await connect(creds))) return deactivateTools(pi, ours());
+			if (!view.sub) inbox.start();
+			await activateBusTools(pi, ours());
 		},
 		async logout() {
 			inbox.stop();
 			active = undefined;
+			publication.clear();
 			await deactivateBusTools(pi);
 		},
 	};

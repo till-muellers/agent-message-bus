@@ -39,6 +39,7 @@ import { createServerCli, type ServerCli } from "./lib/local-server/server-cli.t
 import { consumeEnv, type BusEnv } from "./lib/session/env.ts";
 import { configDir, createCredentialStore, type CredentialStore } from "./lib/session/stored-credentials.ts";
 import { type Session, type SessionContext, createSession } from "./lib/session/session.ts";
+import { createRootIdentities } from "./lib/session/root-identities.ts";
 import type { SessionChange } from "./lib/session/session-identity.ts";
 import { errorMessage } from "./lib/bus/errors.ts";
 import type { InboxLoopOptions } from "./lib/delivery/inbox-loop.ts";
@@ -178,6 +179,9 @@ function registerSessionEvents(pi: ExtensionAPI, store: CredentialStore, session
 }
 
 export function createBusExtension(options: BusExtensionOptions = {}): (pi: ExtensionAPI) => Promise<void> {
+	// omp binds one instance per session but loads the module once: the main session and its
+	// subagents share this closure, and with it the identities the main sessions publish.
+	const roots = createRootIdentities();
 	return async pi => {
 		const env = options.env ?? process.env;
 		const busEnv = consumeEnv(env);
@@ -196,6 +200,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 			gate,
 			watermark,
 			backlogTimeoutMs: options.backlogTimeoutMs,
+			roots,
 		});
 		// Every model request acks the entries it carried.
 		const acker = createAcker({ client, getActive: session.getActive, warn: session.warn });

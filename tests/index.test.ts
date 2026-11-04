@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { BusExtensionOptions } from "../extension/index.ts";
+import { type BusExtensionOptions, createBusExtension } from "../extension/index.ts";
+import type { RemoteTool } from "../extension/lib/bus/client.ts";
 import { createCredentialStore } from "../extension/lib/session/stored-credentials.ts";
 import { formatEntry } from "../extension/lib/render/envelope.ts";
 import type { RunOptions, Runner } from "../extension/lib/process/runner.ts";
 import {
 	boot,
+	type Booted,
+	bootExtension,
 	type BootSession,
 	CODE,
 	callsTo,
@@ -17,6 +20,7 @@ import {
 	frame,
 	listSpaces,
 	memberBus,
+	noSleep,
 	streamOf,
 	type ToolHandler,
 	URL_,
@@ -204,21 +208,6 @@ describe("accepted identity", () => {
 		const resumed = await boot({ fetchFn: bus.fetchFn, env }, { sessionFile });
 		await resumed.emit("session_start");
 		await resumed.emit("session_shutdown");
-		expect(callsTo(bus, "/v1/invites/accept")).toEqual([]);
-		expect(toolListAuth(bus)).toEqual(["Bearer acc-tok"]);
-	});
-
-	test("a subagent whose session file is <root>/<id>.jsonl acts with the token its root session accepted", async () => {
-		const dir = await tempDir();
-		const env = { OMP_AGENT_BUS_DIR: dir };
-		const root = join(dir, "root.jsonl");
-		await writeFile(root, "");
-		const main = await boot({ fetchFn: memberBus().fetchFn, env }, { sessionFile: root });
-		await main.run(`accept ${URL_} ${CODE}`);
-		await main.emit("session_shutdown");
-		const bus = memberBus();
-		const sub = await boot({ fetchFn: bus.fetchFn, env }, { kind: "sub", sessionFile: join(dir, "root", "task-1.jsonl") });
-		await sub.emit("session_start");
 		expect(callsTo(bus, "/v1/invites/accept")).toEqual([]);
 		expect(toolListAuth(bus)).toEqual(["Bearer acc-tok"]);
 	});
@@ -467,40 +456,161 @@ describe("tool activation and credentials", () => {
 			Object.assign(process.env, saved);
 		}
 	});
+});
 
-	test("a main session gets the bus tools and the local spawn tool; a subagent gets the allow-list only", async () => {
-		const schema = { type: "object" as const, properties: {} };
-		const list = ["bus_inbox_read", "bus_send", "bus_inbox_ack", "bus_read_thread", "bus_add_post"].map(name => ({
-			name,
-			description: name,
-			inputSchema: schema,
-		}));
-		const results: Record<string, { tools: string[]; streamed: boolean }> = {};
-		for (const kind of ["sub", "main"]) {
-			const bus = fakeBus({ list });
-			const dir = await tempDir();
-			const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: dir } }, { kind, sessionFile: join(dir, "s.jsonl") });
-			// The subagent acts as its root session's identity: the accepted invite.
-			await app.run(`accept ${URL_} ${CODE}`);
-			await app.emit("session_start");
-			await app.emit("session_shutdown");
-			results[kind] = { tools: app.tools.map(t => t.name), streamed: callsTo(bus, "/v1/inbox/stream").length > 0 };
+describe("subagent identity", () => {
+	const tempDir = useTempDirs();
+	const addPost: RemoteTool = { name: "bus_add_post", description: "Post", inputSchema: { type: "object", properties: {} } };
+	const minted: ToolHandler = args => Response.json({ result: { name: args.name, token: `${args.name}-tok` } });
+	const whoami: ToolHandler = () => Response.json({ result: { kind: "leader", name: "lead2", spaces: [] } });
+
+	/** A bus whose bus_add_post answers with the caller's bearer. */
+	const postBus = () => fakeBus({ list: [addPost], tools: { bus_add_post: (_args, auth) => Response.json({ result: auth }), bus_mint_leader: minted, bus_whoami: whoami } });
+
+	/**
+	 * A main session on `<dir>/root.jsonl` and, from the same factory, starters for its subagents (`<dir>/root/<id>.jsonl`).
+	 * The root file is never written: omp writes it only after the first assistant message, often after a subagent started.
+	 */
+	async function family(env: NodeJS.ProcessEnv, bus = postBus()) {
+		const dir = env.OMP_AGENT_BUS_DIR ?? "";
+		const extension = createBusExtension({ fetchFn: bus.fetchFn, env, sleep: noSleep });
+		const main = await bootExtension(extension, { mode: "tui", sessionFile: join(dir, "root.jsonl") });
+		const startSub = async () => {
+			const sub = await bootExtension(extension, { kind: "sub", agentId: "Explore", sessionFile: join(dir, "root", "task-1.jsonl") });
+			await sub.emit("session_start");
+			return sub;
+		};
+		return { main, startSub, extension };
+	}
+
+	const post = async (app: Booted) =>
+		JSON.parse((await app.tool("bus_add_post").execute("id", { body: "tests pass" })).content[0].text) as string;
+
+	test("the subagent posts with the identity its main session acts with, however the main session got it", async () => {
+		const hows: Record<string, (dir: string) => Promise<{ env: NodeJS.ProcessEnv; start(main: Booted): Promise<void> }>> = {
+			"by accepting an invite": async dir => ({ env: { OMP_AGENT_BUS_DIR: dir }, start: main => main.run(`accept ${URL_} ${CODE}`) }),
+			"from AGENT_BUS_URL + AGENT_BUS_TOKEN": async dir => ({ env: { OMP_AGENT_BUS_DIR: dir, AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env-tok" }, start: main => main.emit("session_start") }),
+			"from /bus promote": async dir => {
+				await createCredentialStore({ OMP_AGENT_BUS_DIR: dir }).save({ url: URL_, adminToken: "adm" });
+				return { env: { OMP_AGENT_BUS_DIR: dir }, start: main => main.run("promote lead2") };
+			},
+			"from the stored agent token": async dir => {
+				await createCredentialStore({ OMP_AGENT_BUS_DIR: dir }).save({ url: URL_, token: "stored-tok" });
+				return { env: { OMP_AGENT_BUS_DIR: dir }, start: main => main.emit("session_start") };
+			},
+		};
+		const authors: Record<string, string> = {};
+		for (const [how, setUp] of Object.entries(hows)) {
+			const { env, start } = await setUp(await tempDir());
+			const { main, startSub } = await family(env);
+			await start(main);
+			const sub = await startSub();
+			authors[how] = await post(sub);
+			await main.emit("session_shutdown");
 		}
-		expect(results).toEqual({
-			sub: { tools: ["bus_read_thread", "bus_add_post"], streamed: false },
-			main: { tools: ["bus_inbox_read", "bus_send", "bus_read_thread", "bus_add_post", "bus_spawn_worker"], streamed: true },
+		expect(authors).toEqual({
+			"by accepting an invite": "Bearer acc-tok",
+			"from AGENT_BUS_URL + AGENT_BUS_TOKEN": "Bearer env-tok",
+			"from /bus promote": "Bearer lead2-tok",
+			"from the stored agent token": "Bearer stored-tok",
 		});
 	});
 
-	test("a subagent whose identity is not an accepted invite gets no bus tool and one warning", async () => {
+	test("a subagent gets the five blackboard tools at most and no inbox stream; the main session gets every bus tool", async () => {
 		const schema = { type: "object" as const, properties: {} };
-		const list = ["bus_read_thread", "bus_add_post"].map(name => ({ name, description: name, inputSchema: schema }));
+		const list = ["bus_inbox_read", "bus_send", "bus_inbox_ack", "bus_read_thread", "bus_add_post"].map(name => ({ name, description: name, inputSchema: schema }));
 		const bus = fakeBus({ list });
-		const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" } }, { kind: "sub" });
-		await app.emit("session_start");
-		await app.emit("session_shutdown");
-		expect(app.tools.map(t => t.name)).toEqual([]);
-		expect(app.warnings).toEqual(["agent-bus: bus tools withheld for the subagent: the session's identity is not an accepted invite"]);
+		const { main, startSub } = await family({ OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env-tok" }, bus);
+		await main.emit("session_start");
+		const streams = callsTo(bus, "/v1/inbox/stream").length;
+		const sub = await startSub();
+		await sub.emit("session_shutdown");
+		await main.emit("session_shutdown");
+		expect(sub.tools.map(t => t.name)).toEqual(["bus_read_thread", "bus_add_post"]);
+		expect(callsTo(bus, "/v1/inbox/stream").length).toBe(streams);
+		expect(main.tools.map(t => t.name)).toEqual(["bus_spawn_worker", "bus_inbox_read", "bus_send", "bus_read_thread", "bus_add_post"]);
+	});
+
+	test("a subagent that ends leaves its main session's identity to the next subagent", async () => {
+		const { main, startSub } = await family({ OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env-tok" });
+		await main.emit("session_start");
+		await (await startSub()).emit("session_shutdown");
+		const next = await startSub();
+		expect(await post(next)).toBe("Bearer env-tok");
+		await main.emit("session_shutdown");
+		await expect(post(next)).rejects.toThrow("Not logged in to the agent bus.");
+	});
+
+	test("a session switch moves the identity to the new session's subagents and away from the old one's", async () => {
+		const dir = await tempDir();
+		const bus = postBus();
+		const extension = createBusExtension({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: dir, AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env-tok" }, sleep: noSleep });
+		const session: BootSession = { mode: "tui", sessionFile: join(dir, "first.jsonl") };
+		const main = await bootExtension(extension, session);
+		await main.emit("session_start");
+		const old = await bootExtension(extension, { kind: "sub", sessionFile: join(dir, "first", "task-1.jsonl") });
+		await old.emit("session_start");
+		session.sessionFile = join(dir, "second.jsonl");
+		await main.emit("session_switch", { reason: "new" });
+		const fresh = await bootExtension(extension, { kind: "sub", sessionFile: join(dir, "second", "task-1.jsonl") });
+		await fresh.emit("session_start");
+		await expect(post(old)).rejects.toThrow("Not logged in to the agent bus.");
+		expect(await post(fresh)).toBe("Bearer env-tok");
+		await main.emit("session_shutdown");
+	});
+
+	test("after the main session logs out, the subagent's next call fails as not logged in", async () => {
+		const { main, startSub } = await family({ OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env-tok" });
+		await main.emit("session_start");
+		const sub = await startSub();
+		await main.run("logout");
+		await expect(post(sub)).rejects.toThrow("Not logged in to the agent bus. Run /bus login <url> <token>.");
+	});
+
+	test("a later /bus promote in the main session reaches the subagent's next call", async () => {
+		const dir = await tempDir();
+		await createCredentialStore({ OMP_AGENT_BUS_DIR: dir }).save({ url: URL_, adminToken: "adm", token: "worker-tok" });
+		const { main, startSub } = await family({ OMP_AGENT_BUS_DIR: dir });
+		await main.emit("session_start");
+		const sub = await startSub();
+		const before = await post(sub);
+		await main.run("promote lead2");
+		const after = await post(sub);
+		await main.emit("session_shutdown");
+		expect([before, after]).toEqual(["Bearer worker-tok", "Bearer lead2-tok"]);
+	});
+
+	test("without credentials in the main session the subagent gets no bus tool and says so once", async () => {
+		const { main, startSub } = await family({ OMP_AGENT_BUS_DIR: await tempDir() });
+		await main.emit("session_start");
+		const sub = await startSub();
+		await sub.emit("session_start");
+		expect(sub.tools.map(t => t.name)).toEqual([]);
+		expect(sub.warnings).toEqual(["agent-bus: no bus tools for the subagent: its main session has no bus identity"]);
+	});
+
+	test("a subagent never falls back to a stored identity: a main session without a session file gives it none", async () => {
+		const dir = await tempDir();
+		await createCredentialStore({ OMP_AGENT_BUS_DIR: dir }).save({ url: URL_, token: "worker-tok" });
+		const bus = postBus();
+		const extension = createBusExtension({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: dir }, sleep: noSleep });
+		const main = await bootExtension(extension, { mode: "tui" });
+		await main.emit("session_start");
+		const sub = await bootExtension(extension, { kind: "sub", sessionFile: join(dir, "root", "task-1.jsonl") });
+		await sub.emit("session_start");
+		await main.emit("session_shutdown");
+		expect(sub.tools.map(t => t.name)).toEqual([]);
+		expect(toolListAuth(bus)).toEqual(["Bearer worker-tok"]);
+	});
+
+	test("a subagent under another session's dir gets nothing from this main session", async () => {
+		const dir = await tempDir();
+		const { main, extension } = await family({ OMP_AGENT_BUS_DIR: dir, AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "env-tok" });
+		await main.emit("session_start");
+		const other = await bootExtension(extension, { kind: "sub", sessionFile: join(dir, "other", "task-1.jsonl") });
+		await other.emit("session_start");
+		await main.emit("session_shutdown");
+		expect(other.tools.map(t => t.name)).toEqual([]);
 	});
 });
 
