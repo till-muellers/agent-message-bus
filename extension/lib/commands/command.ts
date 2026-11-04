@@ -55,11 +55,9 @@ interface Subcommand {
 }
 
 async function status(deps: CommandDeps): Promise<CommandResult> {
-	const stored = await deps.store.load();
-	const active = deps.session.resolve(stored);
-	const url = active?.url ?? (stored ? trimUrl(stored.url) : undefined);
-	const token = active?.token ?? stored?.adminToken;
-	if (!url || !token) return { message: `Not logged in.\n${USAGE}`, level: "info" };
+	const active = deps.session.resolve(await deps.store.load());
+	if (!active) return { message: `Not logged in.\n${USAGE}`, level: "info" };
+	const { url, token } = active;
 	const me = (await deps.client.callTool(url, token, "bus_whoami", {})) as Whoami;
 	const spaces = me.spaces.map(s => `${s.name} (${s.role})`).join(", ") || "none";
 	const lines = [`${url}: ${me.kind}${me.name ? ` ${me.name}` : ""}; spaces: ${spaces}`];

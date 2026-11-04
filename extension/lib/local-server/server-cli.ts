@@ -12,7 +12,7 @@ export type ServerCli = (args: string[]) => Promise<string>;
 export interface ServerCommandDeps {
 	cli: ServerCli;
 	store: CredentialStore;
-	/** Re-resolves the credentials: the bus tools end up active exactly when agent credentials resolve. */
+	/** Re-resolves the credentials: the bus tools end up active exactly when credentials resolve (an admin token alone acts as that admin). */
 	restart(): Promise<void>;
 	/** The full `/bus logout`. */
 	logout(): Promise<CommandResult>;

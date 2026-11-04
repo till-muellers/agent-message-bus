@@ -633,7 +633,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 
 | Command | Effect |
 | :--- | :--- |
-| `/bus login <url> <token>` | Checks the token with `bus_whoami` and stores it. An admin token is kept for `/bus promote`. A leader or member token registers the tools, starts the inbox stream and deletes this session's accepted-token file from `/bus accept`. |
+| `/bus login <url> <token>` | Checks the token with `bus_whoami` and stores it. An admin token is kept for `/bus promote` and, when no other credential resolves, makes the session a full agent session of that admin. A leader or member token registers the tools, starts the inbox stream and deletes this session's accepted-token file from `/bus accept`. |
 | `/bus promote <leader-name>` | Uses the stored admin token to call `bus_mint_leader`; this session then acts as that leader. The leader token lives in session memory only. |
 | `/bus accept <url> <code>` | Redeems an invite code via `POST /v1/invites/accept` and joins its space as that member. The member token is stored for this omp session only, in its accepted-token file. If the invite carries a `task`, it arrives as a direct message from the inviter. |
 | `/bus spawn <space> <name> [task]` | Leaders: invites member `<name>` with `[task]` as the invite's `task` and starts it as a new omp session in a new terminal tab, which joins by itself and gets `[task]` as a direct message from the inviter. |
