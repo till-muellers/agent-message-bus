@@ -3,7 +3,7 @@ import { afterEach } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import type { ExtensionAPI, MessageRenderer } from "@oh-my-pi/pi-coding-agent";
 import { type BusExtensionOptions, createBusExtension } from "../extension/index.ts";
 import type { FetchLike, RemoteTool } from "../extension/lib/bus/client.ts";
 import type { CredentialStore, StoredCredentials } from "../extension/lib/session/stored-credentials.ts";
@@ -43,6 +43,30 @@ export const fakeZ = {
 	object: (shape: Record<string, FakeNode>) => fakeNode({ type: "object", shape }),
 };
 export const z = fakeZ as unknown as Zod;
+
+/** What the fake `pi.pi` components record: the children of a container, the text of a text. */
+export interface FakeComponent {
+	kind: "container" | "text";
+	children: FakeComponent[];
+	text?: string;
+}
+
+class FakeContainer implements FakeComponent {
+	kind = "container" as const;
+	children: FakeComponent[] = [];
+	addChild(child: FakeComponent): void {
+		this.children.push(child);
+	}
+}
+
+class FakeText implements FakeComponent {
+	kind = "text" as const;
+	children: FakeComponent[] = [];
+	constructor(readonly text = "") {}
+}
+
+/** Stand-in for `pi.pi`'s TUI components; the renderers only build trees of them. */
+export const fakeComponents = { Container: FakeContainer, Text: FakeText } as unknown as ExtensionAPI["pi"];
 
 export function toJson(node: FakeNode): JsonSchema {
 	const out: JsonSchema = { type: node.type };
@@ -285,6 +309,8 @@ export interface Booted {
 	context(messages: readonly unknown[]): Promise<void>;
 	commands: Command[];
 	active(): string[];
+	/** The message renderers by custom type. */
+	renderers: Map<string, MessageRenderer>;
 }
 
 /**
@@ -305,8 +331,11 @@ export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<voi
 	const userMessages: string[] = [];
 	const sent: Sent[] = [];
 	const { warnings, warning, logger } = recordingLogger();
+	const renderers = new Map<string, MessageRenderer>();
 	const pi = {
 		zod: z,
+		pi: fakeComponents,
+		registerMessageRenderer: (customType: string, renderer: MessageRenderer) => void renderers.set(customType, renderer),
 		registerTool: (tool: BootTool) => {
 			tools.push(tool);
 			if (!tool.defaultInactive) active.push(tool.name);
@@ -335,5 +364,5 @@ export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<voi
 	const context = async (messages: readonly unknown[]) => {
 		for (const handler of handlers["context"] ?? []) await handler({ type: "context", messages }, ctx);
 	};
-	return { tools, tool, notes, warnings, warning, userMessages, sent, emit, run, context, commands, active: () => active };
+	return { tools, tool, notes, warnings, warning, userMessages, sent, emit, run, context, commands, active: () => active, renderers };
 }

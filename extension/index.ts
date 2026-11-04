@@ -31,6 +31,7 @@ import { createClient, type FetchLike } from "./lib/bus/client.ts";
 import { COMMAND_DESCRIPTION, runCommand } from "./lib/commands/command.ts";
 import { createServerGate, type ServerGate } from "./lib/connection/server-gate.ts";
 import { createContextHandler } from "./lib/context/context-handler.ts";
+import { registerEntryCard } from "./lib/render/entry-card.ts";
 import { createInviteFlag } from "./lib/commands/invite-flag.ts";
 import { findOnPath, resolveBinary } from "./lib/local-server/binary.ts";
 import { createServerCli, type ServerCli } from "./lib/local-server/server-cli.ts";
@@ -200,6 +201,7 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		});
 		// Every model request acks the entries it carried.
 		pi.on("context", createContextHandler(session.consume));
+		registerEntryCard(pi);
 		const which = options.which ?? ((name: string) => findOnPath(name, env.PATH));
 		// This plugin's version is the protocol the workers must understand; it is read once at load.
 		const ownVersion = await pluginVersion().catch(() => "unknown");
