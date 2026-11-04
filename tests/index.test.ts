@@ -268,6 +268,53 @@ describe("context block", () => {
 		await app.emit("session_shutdown");
 	});
 
+	test("the identity is read before the stream opens, so a turn an inbox entry starts already has the block", async () => {
+		const { app, bus } = await member({ streams: [() => new Response(streamOf([frame(entry(1))]))] });
+		await app.warning("invalid token");
+		const order = bus.calls.map(c => c.url.slice(c.url.lastIndexOf("/") + 1));
+		expect(order.indexOf("bus_whoami")).toBeLessThan(order.indexOf("stream"));
+		expect(order.indexOf("bus_list_participants")).toBeLessThan(order.indexOf("stream"));
+		expect(app.sent).toHaveLength(1);
+		expect(blockOf(await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message }))))?.customType).toBe("agent-bus-context");
+		await app.emit("session_shutdown");
+	});
+
+	test("a server the extension refuses gives no block and is not asked for the identity or the guide", async () => {
+		const { app, bus } = await member({ protocol: 1 });
+		expect(await app.context([])).toBeUndefined();
+		expect([...callsTo(bus, "/bus_whoami"), ...callsTo(bus, "/v1/guide")]).toEqual([]);
+		await app.emit("session_shutdown");
+	});
+
+	test("promote and a session switch rebuild the block; a token revoked by then drops it", async () => {
+		const env = { OMP_AGENT_BUS_DIR: await tempDir() };
+		await createCredentialStore(env).save({ url: URL_, adminToken: "adm" });
+		let revoked = false;
+		const led = [{ name: "demo", role: "leader" }];
+		const who = (auth: string | undefined) => (auth === "Bearer lead-tok" ? { kind: "leader", name: "lead", spaces: led } : { kind: "admin", name: "ops", spaces: [] });
+		const bus = fakeBus({
+			tools: {
+				bus_whoami: (_args, auth) => (revoked ? errorResponse(401, "unauthenticated", "invalid token") : Response.json({ result: who(auth) })),
+				bus_list_spaces: () => Response.json({ result: [] }),
+				bus_mint_leader: args => Response.json({ result: { name: args.name, token: "lead-tok" } }),
+			},
+		});
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+		await app.emit("session_start");
+		expect(blockOf(await app.context([]))?.content).toContain("You are admin `ops`");
+		await app.run("promote lead");
+		const promoted = blockOf(await app.context([]))?.content;
+		expect(promoted).toContain("You are leader `lead`");
+		expect(promoted).not.toContain("You are admin");
+		led.push({ name: "beta", role: "leader" });
+		await app.emit("session_switch", { type: "session_switch", reason: "new" });
+		expect(blockOf(await app.context([]))?.content).toContain("You are leader `lead` on the agent message bus at http://bus.test.\nSpaces you lead: `beta`, `demo`.");
+		revoked = true;
+		await app.emit("session_switch", { type: "session_switch", reason: "new" });
+		expect(await app.context([])).toBeUndefined();
+		await app.emit("session_shutdown");
+	});
+
 	test("no block without credentials or after logout", async () => {
 		const bare = await boot({ fetchFn: fakeBus().fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir() } }, { mode: "tui" });
 		await bare.emit("session_start");

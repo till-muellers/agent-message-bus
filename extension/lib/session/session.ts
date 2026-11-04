@@ -92,14 +92,13 @@ export function createSession(deps: SessionDeps): Session {
 	const credentials = createSessionCredentials(busEnv.credentials);
 	const identity = createSessionIdentity(dir, credentials);
 	const view: SessionView = { sub: false, isIdle: () => true, setStatus: () => {} };
-	const membershipChanged = () => busContext.refreshIdentity();
-	const connection = createConnection({ pi, client, store, credentials, identity, roots, view, gate, warn, sleep: deps.sleep, localTools, membershipChanged });
+	// The context block is read again on every connected restart, and dropped when the server is not connected.
+	const hooks = {
+		membershipChanged: () => busContext.refreshIdentity(),
+		connected: async (connected: boolean) => (connected ? busContext.refresh() : busContext.clear()),
+	};
+	const connection = createConnection({ pi, client, store, credentials, identity, roots, view, gate, warn, sleep: deps.sleep, localTools, ...hooks });
 	const busContext = createBusContext({ client, getActive: connection.getActive, warn, isSub: () => view.sub, agentId: () => view.agentId });
-	/** Reconnects, then reads the identity and the guide of the context block again. */
-	async function restart(): Promise<void> {
-		await connection.restart();
-		await busContext.refresh();
-	}
 	const backlogTimeoutMs = deps.backlogTimeoutMs ?? BACKLOG_TIMEOUT_MS;
 	/**
 	 * A one-shot run starts its own prompt right after the session start, so the entries of the
@@ -115,7 +114,6 @@ export function createSession(deps: SessionDeps): Session {
 	}
 	return {
 		...connection,
-		restart,
 		async logout() {
 			await connection.logout();
 			busContext.clear();
@@ -128,7 +126,7 @@ export function createSession(deps: SessionDeps): Session {
 		clearAccepted: () => identity.clear(),
 		accept: (url, code) => acceptInvite({ client, session: credentials, identity, gate }, url, code),
 		async join(joined) {
-			await restart();
+			await connection.restart();
 			await waitForBacklog();
 			return joined.result;
 		},

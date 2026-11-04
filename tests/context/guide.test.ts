@@ -26,4 +26,15 @@ describe("the guide", () => {
 		expect(guide.text()).toBeUndefined();
 		expect(warnings).toEqual(["guide not loaded: http_404: not found"]);
 	});
+
+	test("a load that a later one overtook does not write its guide", async () => {
+		const { promise: old, resolve: answerOld } = Promise.withResolvers<string>();
+		const answers = [old, Promise.resolve("NEW")];
+		const guide = createGuide(() => answers.shift() ?? Promise.resolve("?"), () => {});
+		const first = guide.load();
+		await guide.load();
+		answerOld("OLD");
+		await first;
+		expect(guide.text()).toBe("NEW");
+	});
 });

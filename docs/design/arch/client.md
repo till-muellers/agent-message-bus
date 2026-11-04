@@ -468,7 +468,7 @@ export function createGuide(fetchGuide: () => Promise<string>, warn: (m: string)
 // lib/context/context-block.ts — pure text
 export function mainBlock(id: BusIdentity, guide: string | undefined): string;
 export function subagentBlock(id: BusIdentity, agentId: string): string;
-// lib/context/bus-context.ts — identity cache + guide → block text; built by session/session.ts (restart refreshes, logout clears)
+// lib/context/bus-context.ts — identity cache + guide → block text; built by session/session.ts: the connection's `connected(ok)` hook refreshes it on every restart before the inbox stream opens (so a turn a streamed entry starts has the block) and clears it when the server is not connected; logout clears it
 export function createBusContext(deps: { client: BusClient; getActive(): ActiveCredentials | undefined; warn(m: string): void; isSub(): boolean; agentId(): string | undefined }):
 	{ refresh(): Promise<void>; refreshIdentity(): Promise<void>; clear(): void; block(): string | undefined };
 // lib/context/context-handler.ts

@@ -55,6 +55,8 @@ export interface ConnectionDeps {
 	localTools: readonly string[];
 	/** Awaited after a successful membership tool (`tools/membership-refresh.ts`). */
 	membershipChanged?: () => Promise<void>;
+	/** Awaited on every restart once it is known whether the server was connected, before the inbox stream opens. */
+	connected?: (connected: boolean) => Promise<void>;
 }
 
 export interface Connection {
@@ -152,7 +154,10 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			unread.clear();
 			const creds = await resolve();
 			if (!creds) noIdentity();
-			if (!creds || !(await connect(creds))) return deactivateTools(pi, ours());
+			const connected = creds !== undefined && (await connect(creds));
+			// The context block must be ready before a streamed entry can start a turn.
+			await deps.connected?.(connected);
+			if (!connected) return deactivateTools(pi, ours());
 			if (!view.sub) inbox.start();
 			await activateBusTools(pi, ours());
 		},
