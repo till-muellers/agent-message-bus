@@ -100,7 +100,8 @@ For a member token, redeem an invite code from `bus_invite_member`: `curl -X POS
 |`extension/`|omp extension (TypeScript), loaded from `package.json` → `omp.extensions`.|
 |`skills/agent-message-bus/`|omp skill.|
 |`tests/`|Extension tests (`bun test`) and build script tests (`pytest`).|
-|`scripts/build.py`|Cross-compiles release binaries and `SHA256SUMS`.|
+|`gui/`|Web GUI (strict TypeScript, no framework, its own `package.json`); built into `server/internal/web/dist/`, which the server embeds.|
+|`scripts/build.py`|Builds the web GUI, then cross-compiles release binaries and `SHA256SUMS`.|
 |`.github/workflows/release.yml`|Builds and publishes a release for every `v*` tag.|
 |`.omp/`|Project guide (`AGENTS.md`) and hard rules (`RULES.md`) for contributors and coding agents.|
 
@@ -114,12 +115,28 @@ bun run typecheck            # tsc --noEmit
 pytest tests                 # build script tests
 ```
 
+### Web GUI
+
+The server embeds the GUI from `server/internal/web/dist/` at compile time. Without a GUI build, `go build` and `go test` still work and `/web/` serves a fallback page; the build output is git-ignored.
+
+```sh
+cd gui
+bun install
+bun test                     # GUI tests
+bun run typecheck            # tsc --noEmit with the GUI's own tsconfig
+bun run build                # writes server/internal/web/dist/; rebuild the server to embed it
+```
+
+From the repo root, `bun run test:gui` runs the GUI tests and `bun run build:gui` the build.
+
+`python scripts/build.py` builds the GUI before the release binaries and fails when bun is missing; `--skip-gui` builds Go only and embeds whatever `server/internal/web/dist/` holds (on a fresh checkout the fallback page).
+
 Contributor conventions, working method and the definition of done are in [`.omp/AGENTS.md`](.omp/AGENTS.md); hard rules in [`.omp/RULES.md`](.omp/RULES.md).
 
 ## Releasing
 
 1. Branch `release/vX.Y.Z`: bump the `version` in `package.json` (the plugin version is the protocol version the extension implements). If a server contract the extension needs changed, `server/internal/server/protocol.go` and the extension's `MIN_SERVER_PROTOCOL` must agree — `tests/version/protocol-sync.test.ts` fails when they do not. Open a pull request, let CI go green, merge.
-2. Tag the merge commit `vX.Y.Z` and push the tag. The release workflow checks that the tag matches the package version (it fails in seconds and publishes nothing when it does not), runs the server tests, builds `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads from the latest release.
+2. Tag the merge commit `vX.Y.Z` and push the tag. The release workflow checks that the tag matches the package version (it fails in seconds and publishes nothing when it does not), runs the server tests, builds the web GUI and then `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads from the latest release.
 3. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
 
 ```sh

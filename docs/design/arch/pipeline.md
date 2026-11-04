@@ -160,4 +160,4 @@ Consolidated in `QUESTIONS.md` (recommendation, rationale, what each blocks). De
 |---|---|---|
 | Q-P1 | Self-contained Docker GUI build with an `oven/bun:1` stage, or build the GUI before `docker build`? | Variant A: build the GUI on the host first, Dockerfile unchanged, no new image (PL-2 docs only). |
 | Q-P2 | Make `web` a required status check on `main`? | Yes (owner action in repo settings, after GUI-1). |
-| Q-P3 | Pin bun in CI (`bun-version`) to the version used locally? | Pin to the version in `gui/bun.lock`'s generator once the first lockfile exists (GUI-1). |
+| Q-P3 | Pin bun in CI (`bun-version`) to the version used locally? | Pin to the version in `gui/bun.lock`'s generator once the first lockfile exists (GUI-1). Done in GUI-1: `bun.lock` records no bun version, so the pin is `gui/package.json` `packageManager: "bun@1.4.2"` (the bun that wrote the first lockfile), read by `setup-bun` through `bun-version-file: gui/package.json` in the `web` job and `release.yml`. |

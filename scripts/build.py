@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-Cross-compile the agent-message-bus server in `server/` into raw release binaries plus SHA256SUMS.
+Build the web GUI into the server's embed dir, then cross-compile the agent-message-bus server in
+`server/` into raw release binaries plus SHA256SUMS.
 
 Writes `agent-message-bus_<version>_<os>_<arch>[.exe]` for every target and a `SHA256SUMS` file into the
-output directory; the release workflow uploads exactly these files for a `v<version>` tag.
+output directory; the release workflow uploads exactly these files for a `v<version>` tag. The GUI step
+needs bun; `--skip-gui` builds Go only and embeds whatever `server/internal/web/dist/` holds (on a fresh
+checkout: nothing, so `/web/` serves the fallback page).
 
-Usage: python scripts/build.py [--version X] [--out dist]
+Usage: python scripts/build.py [--version X] [--out dist] [--skip-gui]
 """
 
 from __future__ import annotations
@@ -20,6 +23,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APP_DIR = REPO_ROOT / "server"
+GUI_DIR = REPO_ROOT / "gui"
+GUI_DIST = APP_DIR / "internal" / "web" / "dist"
 BINARY_NAME = "agent-message-bus"
 OPERATING_SYSTEMS = ("windows", "linux", "darwin")
 ARCHITECTURES = ("amd64", "arm64")
@@ -61,6 +66,32 @@ def find_go() -> str:
     )
 
 
+def find_bun() -> str:
+    """Locate the bun executable or exit with a clear message."""
+    found = shutil.which("bun")
+    if found:
+        return found
+    sys.exit("error: 'bun' not found on PATH; install bun (https://bun.sh) or pass --skip-gui for a Go-only build.")
+
+
+def gui_build_commands(bun: str, out_dir: Path) -> tuple[list[list[str]], Path]:
+    """Return the commands that build the GUI into out_dir, and the directory to run them in."""
+    return [
+        [bun, "install", "--frozen-lockfile"],
+        [bun, "run", "build", "--out", str(out_dir)],
+    ], GUI_DIR
+
+
+def build_gui(bun: str, out_dir: Path) -> None:
+    """Build the GUI into out_dir, the embed dir of the server."""
+    commands, cwd = gui_build_commands(bun, out_dir)
+    for cmd in commands:
+        print(f"running {' '.join(cmd[1:])} in {cwd.name}/")
+        result = subprocess.run(cmd, cwd=cwd, check=False)
+        if result.returncode != 0:
+            sys.exit(f"error: GUI build step '{' '.join(cmd[1:])}' failed (exit {result.returncode})")
+
+
 def build_target(go: str, out_file: Path, goos: str, goarch: str) -> None:
     """Build one static binary for goos/goarch into out_file."""
     env = {**os.environ, "GOOS": goos, "GOARCH": goarch, "CGO_ENABLED": "0"}
@@ -87,14 +118,17 @@ def resolve_out(out: str) -> Path:
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Cross-compile agent-message-bus release binaries.")
+    parser = argparse.ArgumentParser(description="Build the GUI, then cross-compile the release binaries.")
     parser.add_argument("--version", default="dev", help="version embedded in artifact names (default: dev)")
     parser.add_argument("--out", default="dist", help="output directory, relative to the repo root (default: dist)")
+    parser.add_argument("--skip-gui", action="store_true", help="build Go only, embedding the current GUI dist dir")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if not args.skip_gui:
+        build_gui(find_bun(), GUI_DIST)
     go = find_go()
     out_dir = resolve_out(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)

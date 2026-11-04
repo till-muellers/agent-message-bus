@@ -5,6 +5,7 @@ Conventions and working method for contributors and coding agents in this repo.
 ## Stack
 - Server: Go (`server/`), SQLite embedded via pure-Go `modernc.org/sqlite`, MCP via `github.com/modelcontextprotocol/go-sdk`. One static binary, `CGO_ENABLED=0`.
 - omp plugin: TypeScript on Bun (`extension/`, `skills/`), typechecked with `tsc --noEmit`.
+- Web GUI: strict TypeScript on Bun without a framework (`gui/`, its own `package.json` and `tsconfig.json`), bundled into `server/internal/web/dist/` and embedded by the server.
 - Python: release tooling only (`scripts/build.py`).
 - CI: GitHub Actions (`.github/workflows/ci.yml`, `release.yml`).
 
@@ -16,7 +17,8 @@ Conventions and working method for contributors and coding agents in this repo.
 |`extension/`|omp extension (TypeScript). `index.ts` wires `lib/<feature>/`; `lib/shared/` holds helpers that are not tied to the bus.|
 |`skills/agent-message-bus/`|Agent-facing skill.|
 |`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_build.py` (pytest).|
-|`scripts/build.py`|Release build: cross-compiles the server and writes `SHA256SUMS`.|
+|`gui/`|Web GUI: `src/` (browser code), `tests/` (bun), `scripts/build.ts` (bundles into `server/internal/web/dist/`), `index.html` (shell template).|
+|`scripts/build.py`|Release build: builds the GUI (`--skip-gui` to skip), cross-compiles the server and writes `SHA256SUMS`.|
 |`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only by PR.|
 |`.omp/`|This guide and the hard rules (`RULES.md`).|
 
@@ -25,6 +27,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Go race + cover: `go test -race -cover ./...` (needs CGO; CI runs it)
 - Go lint/format: `gofmt -l .`, `go vet ./...`, `golangci-lint run ./...`
 - TS: `bun test tests/`, `bun run typecheck`
+- GUI: `cd gui && bun test && bun run typecheck`; build into the embed dir with `bun run build:gui` (repo root). Go builds and tests work without it (fallback page at `/web/`).
 - Python: `pytest tests` (format with `ruff format`)
 - Tool ledger: `cd server && go run ./cmd/tooldoc > TOOLS.md`
 
@@ -170,7 +173,7 @@ A slice is done when all hold:
 8. **Docs**: README/DEPLOYMENT/extension README lines updated; the slice's `.omp/AGENTS.md` correction applied.
 9. **Local checks** clean (below).
 10. **Review**: self-review with the review checklist; no unrelated changes (or mentioned in the PR); reviewer approval.
-11. **Delivery**: branch `slice/<id>-<slug>`, PR to protected `main`, CI `go`, `typescript`, `python` green, merged by PR.
+11. **Delivery**: branch `slice/<id>-<slug>`, PR to protected `main`, CI `go`, `typescript`, `web`, `python` green, merged by PR.
 
 Locally:
 
@@ -183,5 +186,6 @@ go test -race ./...            # needs CGO; or: docker run --rm -v "$PWD:/src" -
 cd ..
 bun test
 bun run typecheck
+(cd gui && bun test && bun run typecheck)
 pytest tests
 ```

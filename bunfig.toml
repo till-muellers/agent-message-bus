@@ -1,0 +1,3 @@
+[test]
+# The GUI (gui/) has its own package and runs its own tests.
+root = "tests"

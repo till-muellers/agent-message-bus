@@ -66,7 +66,7 @@ gui/
   tests/                bun test, one file per src module
 ```
 
-Why a separate package (web analysis §3.6): the root `package.json` **is the omp plugin** (`@till-muellers/omp-agent-message-bus`, installed from GitHub), and the GUI is not part of the plugin; the Go module must stay free of `node_modules`. `gui/package.json` adds no new package names (only `typescript` and `@types/bun`, already root devDependencies), so it needs no extra approval beyond PO-10. The root `tsconfig.json` keeps `include: ["extension", "tests"]` (unchanged), so the root `tsc` and `bun test tests/` never see `gui/`.
+Why a separate package (web analysis §3.6): the root `package.json` **is the omp plugin** (`@till-muellers/omp-agent-message-bus`, installed from GitHub), and the GUI is not part of the plugin; the Go module must stay free of `node_modules`. `gui/package.json` adds no new package names (only `typescript` and `@types/bun`, already root devDependencies), so it needs no extra approval beyond PO-10. The root `tsconfig.json` keeps `include: ["extension", "tests"]` (unchanged) and the root `bunfig.toml` sets the test root to `tests` (bun's path arguments are substring filters, so `bun test tests/` alone would match `gui/tests/`), so the root `tsc` and `bun test` never see `gui/`.
 
 `gui/tsconfig.json` (key options): `strict`, `noEmit`, `allowImportingTsExtensions`, `verbatimModuleSyntax`, `isolatedModules`, `noUncheckedIndexedAccess`, `lib: ["ESNext", "DOM", "DOM.Iterable"]`, `types: ["bun"]`, `moduleResolution: "bundler"`. Imports use `.ts` extensions (`.omp/AGENTS.md` TypeScript rules).
 
@@ -185,7 +185,7 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
   4. `--out <dir>` (default `../server/internal/web/dist`), used by Docker (§pipeline).
 - **Placeholder (contracts.md §10.5).** `server/internal/web/embed.go` uses `//go:embed all:dist`; tracked are only `server/internal/web/dist/.gitkeep` and `server/internal/web/.gitignore` (`dist/*`, `!dist/.gitkeep`). Without a GUI build the server answers `GET /web/` with a built-in fallback page, so `go build`/`go test` work on a fresh checkout without bun, and a local GUI build leaves `git status` clean.
   - The root `.gitignore` line `dist/` (`.gitignore:2`) matches `server/internal/web/dist/` and would keep `.gitkeep` from being added: W1a changes it to `/dist/` (the release output of `scripts/build.py --out dist`).
-- **Dev loop.** `bun run --cwd gui build --watch` + rebuild/restart the Go server (embed is compile-time). A dev-only `AMB_WEB_DIR` (CR-G2) was declined by Arch-server (Q-A7 in `QUESTIONS.md`; `contracts.md` §12); no spec needs it.
+- **Dev loop.** `bun run --cwd gui build` (re-run after each change; `build.ts` has no watch mode) + rebuild/restart the Go server (embed is compile-time). A dev-only `AMB_WEB_DIR` (CR-G2) was declined by Arch-server (Q-A7 in `QUESTIONS.md`; `contracts.md` §12); no spec needs it.
 - **Headers (contracts.md §10.5).** CSP `default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`, `nosniff`, `no-referrer`; `index.html` no-cache, `assets/*` immutable, `/web/session` and `/web/api/*` no-store. The SPA therefore uses no inline script or style, no `<base>`, and submits forms only through `fetch`.
 
 ---

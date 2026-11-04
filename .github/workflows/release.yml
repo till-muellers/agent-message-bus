@@ -25,11 +25,15 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
+
       - name: Test
         working-directory: server
         run: go test ./...
 
-      - name: Build release binaries
+      - name: Build release binaries (GUI first)
         run: python scripts/build.py --version "${GITHUB_REF_NAME#v}"
 
       - name: Create GitHub Release

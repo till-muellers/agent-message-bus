@@ -52,6 +52,40 @@ jobs:
       - name: Test
         run: bun test tests/
 
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Install GUI
+        run: bun install --frozen-lockfile
+        working-directory: gui
+
+      - name: Typecheck GUI
+        run: bun run typecheck
+        working-directory: gui
+
+      - name: Test GUI
+        run: bun test
+        working-directory: gui
+
+      - name: Build GUI into the embed dir
+        run: bun run build
+        working-directory: gui
+
+      - name: Go build and web tests with the real bundle
+        run: go build ./... && go test ./internal/web/...
+        working-directory: server
+
   python:
     runs-on: ubuntu-latest
     steps:
