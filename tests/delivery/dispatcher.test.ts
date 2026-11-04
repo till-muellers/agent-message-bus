@@ -189,15 +189,14 @@ describe("blackboard notices in the dispatcher", () => {
 		expect(handed()).toEqual([]);
 	});
 
-	test("dropHeld cancels the held notices, and a replay after it delivers them again", () => {
+	test("stop cancels the held notices and ends the waiting bus_wait calls with []", async () => {
 		const { it, handed } = recording("interactive-busy");
+		const wait = it.waitNext({ from: "nobody" }, 60_000);
 		it.receive(post(1));
-		it.dropHeld();
+		it.stop();
+		expect(await wait).toEqual([]);
 		jest.advanceTimersByTime(1500);
 		expect(handed()).toEqual([]);
-		it.receive(post(1));
-		jest.advanceTimersByTime(1500);
-		expect(handed()).toEqual([[[1], "aside"]]);
 	});
 
 	test("a notice omp refuses is warned, not thrown from the timer", () => {

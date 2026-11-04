@@ -16,6 +16,8 @@ export interface Waiters {
 	wait(filter: WaitFilter, ms: number, signal?: AbortSignal): Promise<Entry[]>;
 	/** Gives `entry` to the oldest waiter it matches; false when none wants it. */
 	take(entry: Entry): boolean;
+	/** Ends every waiting call with []: the stream it waited on stopped. */
+	cancel(): void;
 }
 
 interface Waiter {
@@ -55,6 +57,9 @@ export function createWaiters(): Waiters {
 			const waiter = waiters.find(w => matches(w.filter, entry));
 			waiter?.done([entry]);
 			return waiter !== undefined;
+		},
+		cancel() {
+			for (const waiter of [...waiters]) waiter.done([]);
 		},
 	};
 }

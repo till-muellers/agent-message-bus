@@ -105,7 +105,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/delivery-start.ts` (bug 0de.23); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -327,15 +327,15 @@ No upstream-pi fallback (PO-6): `followUp` is gone from the extension, and there
 ### 3.3 Dispatcher and ack watermark (E2; `mail/omp-mail-delivery.feature`, `omp-delivery.feature` ack rule)
 
 ```ts
-// lib/delivery/dispatcher.ts — one per connection start; reset on restart (session switch drops asides, R2)
+// lib/delivery/dispatcher.ts — one per connection start (lib/delivery/delivery-start.ts, with its ack watermark); a restart makes a new pair (session switch drops asides, R2)
 export interface Dispatcher {
 	receive(entry: Entry): void;
 	/** bus_wait (E10a): held entries matching `filter`, removed from the hold (never handed to omp afterwards). */
 	takeHeld(filter: WaitFilter): Entry[];
 	/** bus_wait (E6): the next matching entry, routed to the waiter instead of omp; [] on timeout/abort. */
 	waitNext(filter: WaitFilter, timeoutMs: number, signal?: AbortSignal): Promise<Entry[]>;
-	/** The inbox stopped (E10a): held entries are dropped unhanded, so a replay delivers them again. */
-	dropHeld(): void;
+	/** The start's stream stopped (E10a, 0de.23): held entries are dropped unhanded; waiting bus_wait calls return []. */
+	stop(): void;
 	/** First-prompt bounded wait (E9b): resolves when every id <= `id` was handed over, or after `ms`. */
 	handedUpTo(id: number, ms: number): Promise<boolean>;
 }
@@ -344,7 +344,7 @@ export interface WaitFilter { from?: string; threadId?: number; after?: number; 
 export function createDispatcher(deps: { handOver(message: BusMessage, mechanism: Mechanism): void; watermark: AckWatermark; phase: () => SessionPhase; warn(message: string): void; }): Dispatcher;
 ```
 
-- **Replay dedupe:** the dispatcher keeps the ids it handed over in this connection; a stream reconnect replays unacked ids (`server/spec/inbox.feature:249-257`) and those are skipped. A connection restart (session switch/branch, login, promote) creates a new dispatcher, so asides dropped by omp on a generation change (`agent-session.ts:9687`) are delivered again.
+- **Replay dedupe:** the dispatcher keeps the ids it handed over in this connection start; a stream reconnect within the start replays unacked ids (`server/spec/inbox.feature:249-257`) and those are skipped. A connection restart (session switch/branch, login, promote, accept) creates a new dispatcher and a new watermark (`delivery/delivery-start.ts`, `createDeliveryStart`), so asides dropped by omp on a generation change (`agent-session.ts:9687`) are delivered again, and ids the last start received but never saw consumed (posts held at the switch, an old identity's entries) cannot hold the next acks. `Connection.dispatcher()` and `consume` always reach the current start.
 
 ```ts
 // lib/delivery/ack-watermark.ts — pure
@@ -387,7 +387,7 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 ### 3.5 Blackboard notices (E10a; `omp-blackboards.feature`; PO-5)
 
 - Coalescing is a **rendering** concern, not a delivery decision: while the session is busy, the dispatcher holds entries for which `holdable(class)` is true (`queue` only) and that carry a `threadId`, per `(space, blackboard, threadId)`, for a short window (proposal 1.5 s), then hands them over as **one** message whose `details.entryIds` lists every merged id, with the mechanism `mechanismFor(class, phase)` gives. Held entries are what `bus_wait` can take. No `type` switch: the grouping key is the entry's thread fields.
-- Notice text (`postNotice`): one fenced envelope per post, the reply hint only on the last; a post is shown whole if ≤ 20 lines and ≤ 2 KiB (2048 characters), else its head (the first whole lines within both limits, or the first 2048 characters of a longer first line) + "N lines left out; read the full thread with bus_read_thread {space, threadId}." (omp-parity Q6 proposal). The hold lives in `delivery/post-notices.ts` (`isPostNotice`: a `threadId` and `holdable(class)`; the window starts with the first held entry of a thread, so a stream of posts cannot postpone the notice; a post to a thread whose notice is still held joins it in any phase; stopping the inbox (`dispatcher.dropHeld`) drops the held entries from the replay dedupe, so a replay delivers them again).
+- Notice text (`postNotice`): one fenced envelope per post, the reply hint only on the last; a post is shown whole if ≤ 20 lines and ≤ 2 KiB (2048 characters), else its head (the first whole lines within both limits, or the first 2048 characters of a longer first line) + "N lines left out; read the full thread with bus_read_thread {space, threadId}." (omp-parity Q6 proposal). The hold lives in `delivery/post-notices.ts` (`isPostNotice`: a `threadId` and `holdable(class)`; the window starts with the first held entry of a thread, so a stream of posts cannot postpone the notice; a post to a thread whose notice is still held joins it in any phase; stopping the inbox (`dispatcher.stop`) drops the held entries unhanded, and the next start's fresh dispatcher delivers them when the stream replays them).
 - `interrupt` entries are never held (the mapping says so), so a critical post steers in full; `deferred` entries are `nextTurn` by the mapping (the lifecycle-notice rule of `omp-blackboards.feature:52-70` holds without special code).
 - Status line (E10b): `ctx.ui.setStatus("agent-bus", "bus: 2 new posts in plan/7")` (`types.ts:346`); counts kept per thread from handed-over notices; cleared per thread by a successful `bus_read_thread` or a `thread_removed` entry (per board by `blackboard_removed`), all on logout and on every connection restart (`render/status-line.ts`; the thread view of `bus_read_thread` is `render/thread-view.ts`).
 - `[INFERENCE: omp has no "step boundary is near" event for extensions; the window is a debounce, not a boundary sync. Smoke step E10a-2 measures that 3 rapid posts to a busy agent arrive as one notice.]`
@@ -605,10 +605,11 @@ export function createBusExtension(options?: BusExtensionOptions): (pi: Extensio
 // lib/connection/connection.ts
 export interface Connection {
 	getActive(): ActiveCredentials | undefined;
-	restart(): Promise<void>;   // gate → resolve → publish/withdraw root identity → register selected tools → new dispatcher + stream → activate
+	restart(): Promise<void>;   // new dispatcher + watermark → resolve → publish/withdraw root identity → gate → register selected tools → stream → activate
 	logout(): Promise<void>;
 	stop(): void;
-	dispatcher(): Dispatcher | undefined;
+	dispatcher(): Dispatcher;   // the current start's
+	consume: Consume;           // into the current start's watermark
 }
 
 // lib/tools/remote-tools.ts

@@ -4,21 +4,21 @@ import type { Dispatcher } from "../../extension/lib/delivery/dispatcher.ts";
 import { createInboxRunner } from "../../extension/lib/delivery/inbox-runner.ts";
 import { fakeBus, liveStream, noSleep, URL_ } from "../fakes.ts";
 
-const dispatcher: Dispatcher = { receive: () => {}, handedUpTo: async () => true, takeHeld: () => [], waitNext: async () => [], dropHeld: () => {} };
+const dispatcher: Dispatcher = { receive: () => {}, handedUpTo: async () => true, takeHeld: () => [], waitNext: async () => [], stop: () => {} };
 
 describe("the inbox runner", () => {
 	test("the stream counts as open while it is read; the end of a stopped loop's stream does not close the next one", async () => {
 		const first = liveStream();
 		const second = liveStream();
 		const bus = fakeBus({ streams: [first.response, second.response] });
-		const runner = createInboxRunner({ client: createClient(bus.fetchFn), getActive: () => ({ url: URL_, token: "t" }), dispatcher, warn: () => {}, sleep: noSleep });
+		const runner = createInboxRunner({ client: createClient(bus.fetchFn), getActive: () => ({ url: URL_, token: "t" }), warn: () => {}, sleep: noSleep });
 		expect(runner.isOpen()).toBe(false);
-		runner.start();
+		runner.start(dispatcher);
 		await first.opened;
 		expect(runner.isOpen()).toBe(true);
 		runner.stop();
 		expect(runner.isOpen()).toBe(false);
-		runner.start();
+		runner.start(dispatcher);
 		await second.opened;
 		first.close();
 		// The stopped loop reports its stream's end on its own schedule and exposes no signal for it.
@@ -28,11 +28,13 @@ describe("the inbox runner", () => {
 		second.close();
 	});
 
-	test("stop drops the entries the dispatcher still holds", () => {
-		let dropped = 0;
-		const holding: Dispatcher = { ...dispatcher, dropHeld: () => void dropped++ };
-		const runner = createInboxRunner({ client: createClient(fakeBus().fetchFn), getActive: () => undefined, dispatcher: holding, warn: () => {}, sleep: noSleep });
+	test("stop stops the dispatcher of the start, once", () => {
+		let stopped = 0;
+		const holding: Dispatcher = { ...dispatcher, stop: () => void stopped++ };
+		const runner = createInboxRunner({ client: createClient(fakeBus().fetchFn), getActive: () => undefined, warn: () => {}, sleep: noSleep });
+		runner.start(holding);
 		runner.stop();
-		expect(dropped).toBe(1);
+		runner.stop();
+		expect(stopped).toBe(1);
 	});
 });

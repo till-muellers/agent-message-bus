@@ -23,8 +23,8 @@ export interface PostNotices {
 	holds(entry: Entry): boolean;
 	/** Removes and returns the held entries `filter` matches, in id order; they are never flushed. */
 	take(filter: WaitFilter): Entry[];
-	/** Cancels every window and returns the entries that were held. */
-	clear(): Entry[];
+	/** Cancels every window; the held entries are dropped. */
+	clear(): void;
 }
 
 export interface PostNoticesDeps {
@@ -76,6 +76,8 @@ export function createPostNotices(deps: PostNoticesDeps): PostNotices {
 			});
 			return taken.toSorted((a, b) => a.id - b.id);
 		},
-		clear: () => [...groups].flatMap(([key, group]) => remove(key, group)),
+		clear() {
+			for (const [key, group] of [...groups]) remove(key, group);
+		},
 	};
 }
