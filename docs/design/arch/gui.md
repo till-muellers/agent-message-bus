@@ -38,7 +38,7 @@ gui/
       decode-inbox.ts   decoder of GET /web/api/inbox (entries; the type stays text so newer kinds still show)
       types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadInfo, Thread, Post, Entry, Admin)
       session.ts        signIn(token), restore(), signOut()
-      reads.ts          spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox(after?) (GUI-4)
+      reads.ts          spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox() (GUI-4: limit=500, oldest first; the view says when the list is cut)
       admins.ts         (W2) listAdmins(), mintAdmin(name), revokeAdmin(name)
       mutations.ts      (W3) invite, cancelInvite(space, id) (DELETE), revoke, post, sendTopic, deleteSpace
     state/

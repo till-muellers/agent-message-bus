@@ -39,6 +39,6 @@ describe("the state reads", () => {
 		const fake = fakeFetch(json(200, []));
 		const reads = createReads(createHttp({ fetchFn: fake.fetchFn, csrf: () => undefined }));
 		expect(await reads.inbox()).toEqual([]);
-		expect(fake.requests).toEqual([expect.objectContaining({ method: "GET", path: "/web/api/inbox" })]);
+		expect(fake.requests).toEqual([expect.objectContaining({ method: "GET", path: "/web/api/inbox?limit=500" })]);
 	});
 });

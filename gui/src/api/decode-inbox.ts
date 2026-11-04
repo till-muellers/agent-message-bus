@@ -7,6 +7,7 @@ import type { Entry } from "./types.ts";
 function details(o: Fields, what: string): Partial<Entry> {
 	const found: Partial<Entry> = {
 		topic: optionalText(o, "topic", what),
+		blackboard: optionalText(o, "blackboard", what),
 		threadId: optionalCount(o, "threadId", what),
 		threadTitle: optionalText(o, "threadTitle", what),
 		body: optionalText(o, "body", what),
@@ -26,5 +27,8 @@ function entry(json: unknown, what: string): Entry {
 		createdAt: text(o, "createdAt", what),
 	};
 }
+
+/** The most entries one read returns; the server's maximum (contracts.md §10.2). */
+export const INBOX_LIMIT = 500;
 
 export const decodeEntries: Decoder<Entry[]> = (json) => listOf(json, "inbox", entry);

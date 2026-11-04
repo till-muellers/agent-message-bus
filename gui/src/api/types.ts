@@ -121,6 +121,7 @@ export interface Entry {
 	from: string;
 	critical: boolean;
 	topic?: string;
+	blackboard?: string;
 	threadId?: number;
 	threadTitle?: string;
 	body?: string;

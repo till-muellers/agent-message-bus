@@ -1,4 +1,4 @@
-import { decodeEntries } from "./decode-inbox.ts";
+import { decodeEntries, INBOX_LIMIT } from "./decode-inbox.ts";
 import { decodeSpaceDetail, decodeSpaceList } from "./decode-state.ts";
 import { decodeThread, decodeThreadInfos } from "./decode-threads.ts";
 import type { Http } from "./http.ts";
@@ -10,7 +10,7 @@ export interface Reads {
 	space(name: string): Promise<SpaceDetail>;
 	threads(space: string, board: string): Promise<ThreadInfo[]>;
 	thread(space: string, id: number): Promise<Thread>;
-	/** The signed-in agent's own inbox; never acks, never opens the stream. */
+	/** The signed-in agent's own inbox, oldest first, at most INBOX_LIMIT entries; never acks, never opens the stream. */
 	inbox(): Promise<Entry[]>;
 }
 
@@ -25,6 +25,6 @@ export function createReads(http: Http): Reads {
 		threads: (space, board) =>
 			http.get(`${spacePath(space)}/blackboards/${encodeURIComponent(board)}/threads`, decodeThreadInfos),
 		thread: (space, id) => http.get(`${spacePath(space)}/threads/${id}`, decodeThread),
-		inbox: () => http.get("/web/api/inbox", decodeEntries),
+		inbox: () => http.get(`/web/api/inbox?limit=${INBOX_LIMIT}`, decodeEntries),
 	};
 }

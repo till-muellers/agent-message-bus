@@ -65,6 +65,7 @@ export const entries: Entry[] = [
 		type: "thread_post",
 		from: "lead",
 		critical: true,
+		blackboard: "b",
 		threadId: 1,
 		threadTitle: "plan",
 		body: "reply",
