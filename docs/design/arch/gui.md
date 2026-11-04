@@ -11,7 +11,7 @@ Owner: Arch-client. Specs: `docs/design/specs/web/*.feature`, `docs/design/specs
 - **No runtime dependency.** Browser APIs only (`fetch`, `URL`, `history`/`hashchange`, DOM). Toolchain = the repo's existing one: bun (build, test), TypeScript (`tsc --noEmit`).
 - **The browser never holds a token.** The admin/agent token is typed once into a password field, sent in `Authorization: Bearer` to `POST /web/session`, and the field is cleared. The session is an HttpOnly cookie; the CSRF token lives in memory only (web analysis §3.7, §4.3).
 - **No HTML from data.** Every text node is created with `textContent`/`createTextNode`; `innerHTML`, `outerHTML`, `insertAdjacentHTML` and `document.write` are banned (fitness test, §7). Message bodies and post bodies are user-controlled.
-- **Pure core, thin DOM edge.** Routing, state, API decoding, polling schedule and views are pure TypeScript and unit-tested with `bun test` without a DOM. Only `view/mount.ts`, `router/hash-source.ts` and `main.ts` touch browser globals.
+- **Pure core, thin DOM edge.** Routing, state, API decoding, polling schedule and views are pure TypeScript and unit-tested with `bun test` without a DOM. Only `view/mount.ts`, `view/form-field.ts`, `router/hash-source.ts` and `main.ts` touch browser globals.
 - **One responsibility per file, small functions** (`.omp/RULES.md`).
 
 ---
@@ -23,12 +23,14 @@ gui/
   package.json          private; scripts build/test/typecheck; devDependencies typescript + @types/bun (same versions as root); no dependencies
   bun.lock              its own lockfile
   tsconfig.json         strict; lib ESNext + DOM; types bun; include src, tests, scripts
-  index.html            shell template: <div id="app">, one <script type="module"> placeholder replaced by the build
+  index.html            shell template: <div id="app">, the placeholders %MAIN_SCRIPT% (<script type="module">) and %STYLE% (<link rel="stylesheet">) replaced by the build
   scripts/
-    build.ts            Bun.build → <out>/assets/main-<hash>.js; writes <out>/index.html; --out (default ../server/internal/web/dist)
+    build.ts            Bun.build → <out>/assets/main-<hash>.js + style-<hash>.css; writes <out>/index.html; --out (default ../server/internal/web/dist)
   src/
     main.ts             boot: store + api + router + poller + mount
+    style.css           the one stylesheet (a file, never inline: CSP)
     api/
+      api-error.ts      ApiError(status, code, message); errorMessage(unknown)
       http.ts           fetch wrapper: same-origin credentials, JSON, X-CSRF-Token on non-GET, error envelope → ApiError
       decode.ts         narrowing decoders for every response (unknown → typed); no `as` casts on wire data
       types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, Invite, ThreadList, Thread, Entry, Admin)
@@ -41,6 +43,7 @@ gui/
       actions.ts        Action union
       reducer.ts        pure (state, action) → state
       store.ts          getState / dispatch / subscribe (~30 lines)
+      session-intents.ts signIn / restore / signOut: run the session calls, dispatch the outcome (never rejects)
     router/
       routes.ts         parseRoute(hash) → Route; hrefOf(route) → "#/…" (pure)
       hash-source.ts    hashchange → dispatch(navigate)
@@ -49,6 +52,7 @@ gui/
     view/
       h.ts              h(tag, props, ...children) → VNode (plain objects)
       mount.ts          VNode → DOM with a keyed patch (reuses nodes; keeps focus and input values)
+      form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state)
     views/
       layout.ts         header (signed-in name/kind, nav, sign out), error banner
       login.ts          token form
@@ -150,10 +154,16 @@ As in `contracts.md` §10 (checked, every call present). Sign-in errors the logi
 | Mutations (W3) | `POST …/invites {name, task?}`, `DELETE …/invites/<id>` + `X-CSRF-Token` (→ `{cancelled}`; slice 10, PO-3, `web/gui-invite-cancel.feature:17-19`), `POST …/revoke {name, confirm: "<space>/<name>"}`, `POST …/threads/<id>/posts {body}`, `POST …/topics/<t>/messages {body, critical?}`, `DELETE /web/api/spaces/<s> {confirm: "<s>"}` | per contract; invite code shown once; a `cancelled: false` result shows "the invite was already used, expired or cancelled" and refreshes |
 
 ```ts
-// api/http.ts
+// api/api-error.ts
 export class ApiError extends Error { constructor(readonly status: number, readonly code: string, message: string) { super(message); } }
-export interface Http { get<T>(path: string, decode: Decoder<T>): Promise<T>; send<T>(method: "POST" | "DELETE", path: string, body: unknown, decode: Decoder<T>): Promise<T>; }
-export function createHttp(deps: { fetchFn: typeof fetch; csrf(): string | undefined }): Http;
+// api/http.ts
+export type FetchFn = (path: string, init: RequestInit) => Promise<Response>;   // main.ts passes the global fetch
+export interface Http {
+	get<T>(path: string, decode: Decoder<T>): Promise<T>;
+	send<T>(method: "POST" | "DELETE", path: string, body: unknown, decode: Decoder<T>): Promise<T>;   // + X-CSRF-Token
+	exempt<T>(method: "POST" | "DELETE", path: string, headers: Record<string, string>, decode: Decoder<T>): Promise<T>;   // sign-in/out: no CSRF, no body
+}
+export function createHttp(deps: { fetchFn: FetchFn; csrf(): string | undefined }): Http;
 // api/decode.ts
 export type Decoder<T> = (json: unknown) => T;   // throws ApiError(0, "invalid_response", …) on shape mismatch
 ```

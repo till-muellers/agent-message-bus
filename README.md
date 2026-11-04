@@ -81,6 +81,12 @@ Any streamable-HTTP MCP client can use the tools (no inbox push; poll `bus_inbox
 
 For a member token, redeem an invite code from `bus_invite_member`: `curl -X POST <url>/v1/invites/accept -H "Authorization: Bearer <code>"` answers `{"name", "space", "token", "task"?}` (`task` only when the invite carries a first prompt).
 
+## Web GUI
+
+The server serves a browser GUI on its own listener, `AMB_WEB_ADDR`: by default `127.0.0.1:8081`, so only this machine can reach it. Empty or `off` turns it off. Any other `host:port` exposes it as you choose; put it behind TLS before it leaves loopback. The API listener (`AMB_ADDR`) serves no `/web` path.
+
+Open `http://127.0.0.1:8081/web/` and sign in with an admin token (`agent-message-bus admin-token`), or with a leader or member token for that agent's reach. The token is sent once and the field is cleared. The browser keeps only an HttpOnly session cookie (8 hours, in server memory: a restart signs you out); nothing goes into browser storage. Rotating or revoking the token ends its sessions.
+
 ## Documentation
 
 |Document|Contents|
