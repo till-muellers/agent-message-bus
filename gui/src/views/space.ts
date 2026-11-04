@@ -15,6 +15,8 @@ export interface SpaceViewIntents extends Pick<FormIntents, "invite" | "send"> {
 interface Page {
 	space: string;
 	lead: boolean;
+	/** Admin sessions may also revoke leaders. */
+	admin: boolean;
 	intents: SpaceViewIntents;
 }
 
@@ -28,9 +30,9 @@ function button(key: string, label: string, click: () => void): VNode {
 	return h("button", { type: "button", key, on: { click } }, label);
 }
 
-/** Admins cannot be revoked from a space; leaders and members can, after a confirmation. */
+/** Admins cannot be revoked from a space; members can, and leaders by an admin, after a confirmation. */
 function revokeButton(page: Page, p: Participant): ChildArg {
-	if (!page.lead || p.role === "admin") return null;
+	if (!page.lead || p.role === "admin" || (p.role === "leader" && !page.admin)) return null;
 	return button(`revoke-${p.name}`, "Revoke", () => page.intents.ask({ kind: "revoke", space: page.space, name: p.name, role: p.role }));
 }
 
@@ -41,7 +43,8 @@ function participants(o: Overview, page: Page): VNode {
 
 function topics(o: Overview, page: Page): VNode {
 	const rows = o.topics.map((t) => ({ key: t.name, cells: [t.name, t.createdBy] }));
-	const form = sendForm(o.space, o.topics.map((t) => t.name), page.intents);
+	const names = o.topics.map((t) => t.name).filter((name) => page.lead || name !== "all");
+	const form = sendForm(o.space, names, page.lead, page.intents);
 	return section("topics", "Topics", "No topics.", ["Topic", "Created by"], rows, form);
 }
 
@@ -76,9 +79,9 @@ function deletion(page: Page): VNode {
 }
 
 /** A space: participants, topics with the send form and, with leader rights, invites, revoke and delete. */
-export function spaceView(detail: SpaceDetail, intents: SpaceViewIntents): VNode {
+export function spaceView(detail: SpaceDetail, intents: SpaceViewIntents, admin: boolean): VNode {
 	const o = detail.overview;
-	const page: Page = { space: o.space, lead: detail.invites !== undefined, intents };
+	const page: Page = { space: o.space, lead: detail.invites !== undefined, admin, intents };
 	return h(
 		"div",
 		{ key: `space-${o.space}` },

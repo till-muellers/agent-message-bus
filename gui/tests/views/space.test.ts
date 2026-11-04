@@ -26,7 +26,7 @@ function click(view: VNode, key: string): void {
 }
 
 describe("the space page", () => {
-	const view = spaceView(spaceDetail, intents);
+	const view = spaceView(spaceDetail, intents, true);
 
 	test("is titled with the space name", () => {
 		expect(findAll(view, byTag("h1")).map(textOf)).toEqual(["demo"]);
@@ -78,11 +78,11 @@ describe("the space page", () => {
 	});
 
 	test("a session without leader rights sees no invites section", () => {
-		expect(section(spaceView({ ...spaceDetail, invites: undefined }, intents), "invites")).toBeUndefined();
+		expect(section(spaceView({ ...spaceDetail, invites: undefined }, intents, false), "invites")).toBeUndefined();
 	});
 
 	test("empty lists say so", () => {
-		const empty = spaceView({ ...spaceDetail, overview: { ...spaceDetail.overview, blackboards: [], recentThreads: [] }, invites: [] }, intents);
+		const empty = spaceView({ ...spaceDetail, overview: { ...spaceDetail.overview, blackboards: [], recentThreads: [] }, invites: [] }, intents, true);
 		expect(textOf(section(empty, "blackboards") ?? empty)).toContain("No blackboards");
 		expect(textOf(section(empty, "threads") ?? empty)).toContain("No threads");
 		expect(textOf(section(empty, "invites") ?? empty)).toContain("No open invites");
@@ -109,12 +109,23 @@ describe("the space page", () => {
 	});
 
 	test("without leader rights there is no revoke, invite or delete", () => {
-		const member = spaceView({ ...spaceDetail, invites: undefined }, intents);
+		const member = spaceView({ ...spaceDetail, invites: undefined }, intents, false);
 		expect(findAll(member, (n) => n.tag === "button").map((b) => b.key).filter((k) => k !== undefined)).toEqual([]);
 		expect(findAll(member, (n) => n.key === "invite-form")).toEqual([]);
 	});
 
 	test("everyone gets the send form for the space's topics", () => {
 		expect(findAll(view, (n) => n.key === "send-form")).toHaveLength(1);
+	});
+
+	test("a leader session revokes members only: leaders cannot be revoked", () => {
+		const leader = spaceView(spaceDetail, intents, false);
+		expect(findAll(leader, (n) => n.tag === "button" && textOf(n) === "Revoke").map((b) => b.key)).toEqual(["revoke-worker"]);
+	});
+
+	test("without leader rights the send form offers neither all nor critical", () => {
+		const member = spaceView({ ...spaceDetail, invites: undefined }, intents, false);
+		expect(findAll(member, byTag("option")).map(textOf)).toEqual(["notes"]);
+		expect(findAll(member, (n) => n.attrs.name === "critical")).toEqual([]);
 	});
 });

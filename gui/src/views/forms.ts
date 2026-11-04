@@ -34,7 +34,8 @@ export function inviteForm(space: string, intents: Pick<FormIntents, "invite">):
 	);
 }
 
-export function sendForm(space: string, topics: readonly string[], intents: Pick<FormIntents, "send">): VNode {
+/** Only leaders and admins may send critical messages; the caller leaves out topics it may not send to. */
+export function sendForm(space: string, topics: readonly string[], lead: boolean, intents: Pick<FormIntents, "send">): VNode {
 	const submit = onSubmit((f) => intents.send(space, field(f, "topic"), field(f, "body"), f.has("critical")));
 	const options = topics.map((topic) => h("option", { key: topic, value: topic }, topic));
 	return h(
@@ -42,7 +43,7 @@ export function sendForm(space: string, topics: readonly string[], intents: Pick
 		{ key: "send-form", on: { submit } },
 		labelled("send-topic", "Send to topic", h("select", { id: "send-topic", name: "topic", required: true }, options)),
 		labelled("send-body", "Message", h("textarea", { id: "send-body", name: "body", rows: 2, required: true })),
-		h("label", null, h("input", { type: "checkbox", name: "critical" }), " critical"),
+		lead ? h("label", null, h("input", { type: "checkbox", name: "critical" }), " critical") : null,
 		h("button", { type: "submit" }, "Send"),
 	);
 }

@@ -17,7 +17,7 @@ describe("the forms", () => {
 	});
 
 	test("the send form offers the topics in the server's order and a critical flag", () => {
-		const form = sendForm("demo", ["all", "notes"], none);
+		const form = sendForm("demo", ["all", "notes"], true, none);
 		expect(fieldsOf(form)).toEqual(["topic", "body", "critical"]);
 		expect(findAll(form, byTag("option")).map(textOf)).toEqual(["all", "notes"]);
 	});
@@ -26,5 +26,9 @@ describe("the forms", () => {
 		const form = postForm("demo", 1, none);
 		expect(fieldsOf(form)).toEqual(["body"]);
 		expect(textOf(form)).toContain("Post reply");
+	});
+
+	test("the send form without leader rights has no critical flag", () => {
+		expect(fieldsOf(sendForm("demo", ["notes"], false, none))).toEqual(["topic", "body"]);
 	});
 });

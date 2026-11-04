@@ -65,14 +65,14 @@ gui/
       mount.ts          VNode → DOM with a keyed patch (reuses nodes; keeps focus and input values)
       form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state); takeForm(event): all fields, then resets the form
     views/
-      layout.ts         header (signed-in name/kind, nav, sign out), error banner
+      layout.ts         header (signed-in name/kind, nav, sign out), confirm/outcome section, error banner
       login.ts          token form
       table.ts          table(head, rows): a header row and keyed rows
       time.ts           time(iso): a <time> element with the local formatted text
       spaces.ts         space list: leader and member counts, admin names, open invites with leader rights
-      space.ts          participants, topics + send form, blackboards, recent threads; with leader rights revoke per leader/member, open invites with a cancel button by id, the invite form and delete space
+      space.ts          participants, topics + send form (no `all` or critical without leader rights), blackboards, recent threads; with leader rights revoke per member (and per leader for admin sessions), open invites with a cancel button by id, the invite form and delete space
       board.ts          threads of a blackboard (most recently active first)
-      thread.ts         a thread: title, posts with author and time
+      thread.ts         a thread: title, posts with author and time, reply form (W3)
       inbox.ts          the signed-in agent's own inbox, read-only ("Inbox of <kind> <name>", no acknowledge)
       admins.ts         (W2) admin list, mint form, revoke button per minted admin (none for the bootstrap admin)
       confirm.ts        (W3) confirm section (role alertdialog) naming space / target / role, above the page

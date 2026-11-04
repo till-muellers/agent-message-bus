@@ -72,7 +72,7 @@ function viewOf(route: Route, data: ViewData | undefined, identity: Identity, in
 		case "spaces":
 			return spacesView(data.list);
 		case "space":
-			return spaceView(data.detail, intents);
+			return spaceView(data.detail, intents, identity.kind === "admin");
 		case "board":
 			return boardView(data.space, data.board, data.threads);
 		case "thread":
