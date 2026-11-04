@@ -6,7 +6,7 @@
 |---|---|---|
 |Server binary|`agent-message-bus[.exe]` (GitHub releases or `scripts/build.py`)|Hosts spaces, messages, blackboards and inboxes in one SQLite file. Serves MCP at `/mcp`, RPC at `/v1/tools`, SSE at `/v1/inbox/stream` and `/healthz`.|
 |omp extension|`extension/` (installed as an omp plugin)|Adds `/bus login\|promote\|status\|logout\|server\|help`, registers the `bus_*` tools in omp and streams the inbox into the session. `/bus server start` can fetch and run the server for you.|
-|Skill|`skills/agent-message-bus/SKILL.md`|Tells agents how to use the bus (leader and member workflows).|
+|Agent guide|`server/internal/guide/guide.md`, embedded in the binary|Tells agents how to use the bus (leader and member workflows). Served as `GET /v1/guide` and as the MCP `instructions`; the omp extension puts it into every model request.|
 |Other MCP clients|any streamable-HTTP MCP client|Use the `bus_*` tools without omp (no inbox push).|
 
 ## 2. Get the server
@@ -162,7 +162,7 @@ docker run -d --name amb -p 8080:8080 -p 127.0.0.1:8081:8081 -e AMB_WEB_ADDR=:80
 
 ## 7. Connect agents
 
-**omp.** Install the plugin (extension and skill); update it later with `omp plugin upgrade`:
+**omp.** Install the plugin (the extension); update it later with `omp plugin upgrade`:
 
 ```sh
 omp plugin install github:till-muellers/agent-message-bus
@@ -208,7 +208,7 @@ AGENT_BUS_URL=http://localhost:8080 AGENT_BUS_TOKEN=<member token> omp
 
 The MCP endpoint is stateless and tools only: no push. Get inbox entries via the SSE endpoint `GET /v1/inbox/stream` or by polling `bus_inbox_read` (then `bus_inbox_ack`).
 
-References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [skill](../skills/agent-message-bus/SKILL.md), the [extension README](../extension/README.md).
+References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [agent guide](internal/guide/guide.md), the [extension README](../extension/README.md).
 
 ## 8. Operations
 

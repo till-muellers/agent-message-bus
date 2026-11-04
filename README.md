@@ -6,15 +6,14 @@ A message bus for coding agents. Agents coordinate in **spaces** through:
 - **topics**, including the mandatory `all` broadcast;
 - **blackboards** with threads and posts, the only persistent history.
 
-Everything an agent receives lands in its durable **inbox**. The server is one binary with embedded SQLite and no other processes. It serves the same 29 `bus_*` tools over **MCP** (`/mcp`) and **RPC** (`/v1/tools`), and pushes the inbox over **SSE** (`/v1/inbox/stream`).
+Everything an agent receives lands in its durable **inbox**. The server is one binary with embedded SQLite and no other processes. It serves the same 34 `bus_*` tools over **MCP** (`/mcp`) and **RPC** (`/v1/tools`), and pushes the inbox over **SSE** (`/v1/inbox/stream`).
 
-This repo is also an omp plugin: an extension that registers the tools and streams the inbox into the session, and a skill that tells agents how to use the bus.
+This repo is also an omp plugin: an extension that registers the tools, streams the inbox into the session and tells the agent in every model request who it is on the bus and how to work there (its context block carries the server's agent guide).
 
 ```mermaid
 flowchart LR
   subgraph omp["omp session"]
-    ext["extension<br/>/bus command, bus_* tools"]
-    skill["skill<br/>agent-message-bus"]
+    ext["extension<br/>/bus command, bus_* tools, context block"]
   end
   other["other MCP client"]
   subgraph server["agent-message-bus binary"]
@@ -96,7 +95,7 @@ Open `http://127.0.0.1:8081/web/` and sign in with an admin token (`agent-messag
 |[`server/TOOLS.md`](server/TOOLS.md)|Generated reference of every `bus_*` tool: arguments, results, errors.|
 |[`server/spec/README.md`](server/spec/README.md)|Behaviour spec: concepts, design decisions, Gherkin features.|
 |[`extension/README.md`](extension/README.md)|The omp extension: `/bus` commands, credentials, inbox delivery, local server.|
-|[`skills/agent-message-bus/SKILL.md`](skills/agent-message-bus/SKILL.md)|Agent-facing usage: leader and member workflows, pitfalls, errors.|
+|[`server/internal/guide/guide.md`](server/internal/guide/guide.md)|The agent guide: leader and member workflows, rules. Served as `GET /v1/guide`, as the MCP `instructions` and in the extension's context block.|
 
 ## Repo layout
 
@@ -104,7 +103,6 @@ Open `http://127.0.0.1:8081/web/` and sign in with an admin token (`agent-messag
 |---|---|
 |`server/`|Go server (module `github.com/till-muellers/agent-message-bus/server`).|
 |`extension/`|omp extension (TypeScript), loaded from `package.json` → `omp.extensions`.|
-|`skills/agent-message-bus/`|omp skill.|
 |`tests/`|Extension tests (`bun test`) and build script tests (`pytest`).|
 |`gui/`|Web GUI (strict TypeScript, no framework, its own `package.json`); built into `server/internal/web/dist/`, which the server embeds.|
 |`scripts/build.py`|Builds the web GUI, then cross-compiles release binaries and `SHA256SUMS`.|
