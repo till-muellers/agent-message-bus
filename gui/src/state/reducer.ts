@@ -26,12 +26,16 @@ function loaded(state: AppState, data: ViewData, at: number): AppState {
 	return { ...state, view: { status: "ready", data, at } };
 }
 
-/** Any 401 means the session is gone (expired, revoked, rotated token): back to the login with the reason. */
+/**
+ * Any 401 means the session is gone (expired, revoked, rotated token): back to the login with the reason.
+ * A transient failure (unreachable, rate limit, server error) keeps the last data; a 403 or 404 drops it.
+ */
 function failed(state: AppState, error: ApiError): AppState {
 	if (error.status === 401) {
 		return { ...state, session: { status: "signed-out", error: error.message }, view: { status: "idle" } };
 	}
-	return { ...state, view: { status: "error", error, last: lastData(state.view) } };
+	const transient = error.status === 0 || error.status === 429 || error.status >= 500;
+	return { ...state, view: { status: "error", error, last: transient ? lastData(state.view) : undefined } };
 }
 
 /** Pure: returns state itself when the action changes nothing, so the store notifies nobody. */

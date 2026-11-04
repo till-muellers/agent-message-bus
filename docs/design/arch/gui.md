@@ -34,7 +34,7 @@ gui/
       http.ts           fetch wrapper: same-origin credentials, JSON, X-CSRF-Token on non-GET, error envelope → ApiError
       decode.ts         narrowing decoder primitives (fields, text, count, flag, oneOf, list) + session; no `as` casts on wire data
       decode-state.ts   decoders of GET /web/api/state (space list, space detail); later reads get their own decode-<read>.ts
-      types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, Invite, ThreadList, Thread, Entry, Admin)
+      types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadList, Thread, Entry, Admin)
       session.ts        signIn(token), restore(), signOut()
       reads.ts          spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox(after?) (GUI-4)
       admins.ts         (W2) listAdmins(), mintAdmin(name), revokeAdmin(name)
@@ -61,7 +61,7 @@ gui/
       layout.ts         header (signed-in name/kind, nav, sign out), error banner
       login.ts          token form
       table.ts          table(head, rows): a header row and keyed rows
-      spaces.ts         space list with counts (leaders, admins, members, open invites with leader rights)
+      spaces.ts         space list: leader and member counts, admin names, open invites with leader rights
       space.ts          participants, topics, blackboards, recent threads, open invites (leader rights)
       board.ts          threads of a blackboard (most recently active first)
       thread.ts         a thread: title, posts with author and time

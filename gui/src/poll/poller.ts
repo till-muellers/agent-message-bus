@@ -53,13 +53,13 @@ class RoutePoller implements Poller {
 	}
 
 	refreshNow(): void {
-		this.cancel();
+		this.halt();
 		const { session, route, view } = this.deps.store.getState();
 		if (session.status !== "signed-in") return;
 		if (!this.deps.visible()) return this.schedule();
 		const request = this.deps.load(route);
 		if (!request) return;
-		const mine = ++this.generation;
+		const mine = this.generation;
 		if (view.status === "idle") this.deps.store.dispatch({ type: "view/loading" });
 		request.then(
 			(data) => this.settled(route, mine, { data }),

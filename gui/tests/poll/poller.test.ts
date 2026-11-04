@@ -174,4 +174,29 @@ describe("the poller", () => {
 		await clock.advance(30_000);
 		expect(loads).toHaveLength(1);
 	});
+
+	test("an answer of a superseded load is dropped, also after moving to a page without data", async () => {
+		const store = createStore(reducer, initialState({ name: "spaces" }));
+		const clock = new FakeClock();
+		const pending: ((data: ViewData) => void)[] = [];
+		const poller = createPoller({
+			store,
+			clock,
+			visible: () => true,
+			load: (route) => (route.name === "not-found" ? undefined : new Promise<ViewData>((resolve) => pending.push(resolve))),
+		});
+		poller.start();
+		signIn(store);
+		store.dispatch({ type: "navigate", route: { name: "not-found" } });
+		pending[0]?.({ kind: "spaces", list: spaceList });
+		await settle();
+		expect(clock.pending()).toEqual([]);
+		store.dispatch({ type: "navigate", route: { name: "spaces" } });
+		poller.refreshNow();
+		pending[2]?.({ kind: "spaces", list: spaceList });
+		pending[1]?.({ kind: "spaces", list: { ...spaceList, inboxWaiting: 9 } });
+		await settle();
+		expect(store.getState().view).toMatchObject({ status: "ready", data: { list: { inboxWaiting: 2 } } });
+		expect(clock.pending()).toEqual([5_000]);
+	});
 });

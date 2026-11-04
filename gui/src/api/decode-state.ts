@@ -1,4 +1,4 @@
-import { count, type Decoder, fields, flag, list, oneOf, optionalCount, text, textItem } from "./decode.ts";
+import { count, type Decoder, type Fields, fields, flag, list, oneOf, optionalCount, text, textItem } from "./decode.ts";
 import {
 	type Blackboard,
 	type Overview,
@@ -76,7 +76,7 @@ function overview(json: unknown, what: string): Overview {
 	};
 }
 
-function inboxWaiting(body: Readonly<Record<string, unknown>>): number {
+function inboxWaiting(body: Fields): number {
 	return count(fields(body.inbox, "state.inbox"), "waiting", "state.inbox");
 }
 

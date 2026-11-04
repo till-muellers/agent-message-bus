@@ -84,4 +84,9 @@ describe("the reducer: view data", () => {
 		expect(next.session).toEqual({ status: "signed-out", error: "invalid token" });
 		expect(next.view).toEqual({ status: "idle" });
 	});
+
+	test("a 403 or 404 after the page was shown drops its data: the space is gone or out of reach", () => {
+		const error = new ApiError(404, "not_found", "space demo not found");
+		expect(reducer(ready(), { type: "view/failed", route: { name: "spaces" }, error }).view).toEqual({ status: "error", error });
+	});
 });

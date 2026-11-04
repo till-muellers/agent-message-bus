@@ -5,7 +5,7 @@ import { AGENT_KINDS, type SessionInfo } from "./types.ts";
 export type Decoder<T> = (json: unknown) => T;
 export type Fields = Readonly<Record<string, unknown>>;
 
-export function invalid(what: string): ApiError {
+function invalid(what: string): ApiError {
 	return new ApiError(0, "invalid_response", `invalid response from the server: ${what}`);
 }
 
@@ -24,7 +24,7 @@ export function text(obj: Fields, key: string, what: string): string {
 	return value;
 }
 
-export function optionalText(obj: Fields, key: string, what: string): string | undefined {
+function optionalText(obj: Fields, key: string, what: string): string | undefined {
 	return obj[key] === undefined ? undefined : text(obj, key, what);
 }
 
