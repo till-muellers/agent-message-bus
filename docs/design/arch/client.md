@@ -428,7 +428,7 @@ Reply: bus_send_direct {space: "alpha", to: "peer"}.
 
 - Critical: `critical="true"` on the opening tag and `· CRITICAL` in the header line; both come from `entry.critical`, never from the body.
 - Reply hints per type: direct → `bus_send_direct` to sender; topic → `bus_send_topic` on topic or `bus_send_direct` to sender; thread post → `bus_read_thread` for the full thread, answer with `bus_add_post`; lifecycle notices → no hint.
-- Escaping (forgery scenarios): in the body, `<agent-bus-entry`, `</agent-bus-entry`, `<agent-bus-context` and `</agent-bus-context` become `&lt;…` (same idea as omp's `escapeHarnessTags`, `CA/session/irc-bridge.ts:201-205`). A body line `[agent-bus] … · CRITICAL` stays inside the fence, so it is plainly body text. The `[agent-bus]` header line keeps `omp-mail-delivery.feature:29` true.
+- Escaping (forgery scenarios): in the body and the thread title, `<agent-bus-entry`, `</agent-bus-entry`, `<agent-bus-context`, `</agent-bus-context` and omp's harness tags (`<irc`, `<system-…`, whitespace around the `/` included) become `&lt;…`; the title is kept on one line with its quotes escaped, so it cannot start a header line (corrected in E5a) (same idea as omp's `escapeHarnessTags`, `CA/session/irc-bridge.ts:201-205`). A body line `[agent-bus] … · CRITICAL` stays inside the fence, so it is plainly body text. The `[agent-bus]` header line keeps `omp-mail-delivery.feature:29` true.
 - Plain-text modes (`rpc`, print) see the same `content` (`omp-rendering.feature:59-62`).
 
 ### 4.3 Card renderer (TUI)
