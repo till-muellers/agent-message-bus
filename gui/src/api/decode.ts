@@ -24,7 +24,7 @@ export function text(obj: Fields, key: string, what: string): string {
 	return value;
 }
 
-function optionalText(obj: Fields, key: string, what: string): string | undefined {
+export function optionalText(obj: Fields, key: string, what: string): string | undefined {
 	return obj[key] === undefined ? undefined : text(obj, key, what);
 }
 
@@ -53,9 +53,13 @@ export function oneOf<T extends string>(obj: Fields, key: string, allowed: reado
 
 /** obj[key] as a list, each element narrowed by item (which gets the element's path for messages). */
 export function list<T>(obj: Fields, key: string, what: string, item: (json: unknown, what: string) => T): T[] {
-	const value = obj[key];
-	if (!Array.isArray(value)) throw invalid(`${what}.${key} is not a list`);
-	return value.map((element: unknown, index) => item(element, `${what}.${key}[${index}]`));
+	return listOf(obj[key], `${what}.${key}`, item);
+}
+
+/** A body that is itself a list, each element narrowed by item. */
+export function listOf<T>(json: unknown, what: string, item: (json: unknown, what: string) => T): T[] {
+	if (!Array.isArray(json)) throw invalid(`${what} is not a list`);
+	return json.map((element: unknown, index) => item(element, `${what}[${index}]`));
 }
 
 export function textItem(json: unknown, what: string): string {

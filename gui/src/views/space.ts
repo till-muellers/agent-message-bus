@@ -1,12 +1,8 @@
 import type { Overview, PendingInvite, SpaceDetail } from "../api/types.ts";
-import { formatTime } from "../format/time.ts";
 import { hrefOf } from "../router/routes.ts";
 import { type ChildArg, h, type VNode } from "../view/h.ts";
 import { type Row, table } from "./table.ts";
-
-function time(iso: string): VNode {
-	return h("time", { datetime: iso }, formatTime(iso));
-}
+import { time } from "./time.ts";
 
 /** A titled section with its table, or a sentence when the list is empty. */
 function section(key: string, title: string, empty: string, head: readonly string[], rows: readonly Row[]): VNode {

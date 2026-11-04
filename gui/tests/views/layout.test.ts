@@ -4,7 +4,7 @@ import { ApiError } from "../../src/api/api-error.ts";
 import type { AppState, Route } from "../../src/state/app-state.ts";
 import type { ViewData } from "../../src/state/view-data.ts";
 import { render } from "../../src/views/layout.ts";
-import { spaceDetail, spaceList } from "../fixtures.ts";
+import { entries, spaceDetail, spaceList, thread, threadInfos } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
 const intents = { signIn: (): void => {}, signOut: (): void => {} };
@@ -96,6 +96,18 @@ describe("the layout", () => {
 		const state: AppState = { ...signedIn(admin, route), view: { status: "ready", data: { kind: "space", detail: spaceDetail }, at: 1 } };
 		expect(findAll(render(state, intents), byTag("h1")).map(textOf)).toEqual(["demo"]);
 	});
+
+	const pageCases: [Route, ViewData, string][] = [
+		[{ name: "board", space: "demo", board: "b" }, { kind: "board", space: "demo", board: "b", threads: threadInfos }, "b"],
+		[{ name: "thread", space: "demo", threadId: 1 }, { kind: "thread", space: "demo", thread }, "plan"],
+		[{ name: "inbox" }, { kind: "inbox", entries }, "Inbox of admin admin"],
+	];
+	for (const [route, data, title] of pageCases) {
+		test(`the ${route.name} page shows its data once it is loaded`, () => {
+			const state: AppState = { ...signedIn(admin, route), view: { status: "ready", data, at: 1 } };
+			expect(findAll(render(state, intents), byTag("h1")).map(textOf)).toEqual([title]);
+		});
+	}
 
 	test("the first load of a page says it is loading", () => {
 		expect(mainOf({ ...signedIn(admin), view: { status: "loading" } })).toContain("Loading");
