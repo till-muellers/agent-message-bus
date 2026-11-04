@@ -29,19 +29,23 @@ export interface SessionIdentity {
 	save(creds: ActiveCredentials): Promise<boolean>;
 	/** Forgets the accepted token and deletes the session's file. */
 	clear(): Promise<void>;
+	/** The key of the bound session: its own file's for a main session, its root session's for a subagent. */
+	rootKey(): string | undefined;
 }
 
 /** `dir` holds `sessions/<key>.json`; `credentials` is the session's credential set whose accepted token this owns. */
 export function createSessionIdentity(dir: string, credentials: SessionCredentials): SessionIdentity {
+	let key: string | undefined;
 	let store: SessionStore | undefined;
 	const storeOf = (file: string | undefined, sub: boolean) => {
-		const key = sessionKey(file, sub);
-		return key ? createSessionStore(dir, key) : undefined;
+		const found = sessionKey(file, sub);
+		return found ? createSessionStore(dir, found) : undefined;
 	};
 	return {
 		async bind(ctx, change = { kind: "same" }) {
 			const sub = ctx.agent?.kind === "sub";
-			store = storeOf(ctx.sessionManager?.getSessionFile(), sub);
+			key = sessionKey(ctx.sessionManager?.getSessionFile(), sub);
+			store = key ? createSessionStore(dir, key) : undefined;
 			if (change.kind === "new") credentials.setAccepted(undefined);
 			if (change.kind !== "branch") return;
 			const previous = storeOf(change.previousSessionFile, sub);
@@ -63,5 +67,6 @@ export function createSessionIdentity(dir: string, credentials: SessionCredentia
 			credentials.setAccepted(undefined);
 			await store?.clear();
 		},
+		rootKey: () => key,
 	};
 }

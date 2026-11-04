@@ -185,6 +185,8 @@ export interface BootTool {
 /** Per-session inputs of the fake omp; mutate them to model a session switch. */
 export interface BootSession {
 	kind?: string;
+	/** The agent id omp gives the session (`ctx.agent.id`). */
+	agentId?: string;
 	mode?: string;
 	cwd?: string;
 	flags?: Record<string, string>;
@@ -201,7 +203,7 @@ export interface Sent {
 interface Ctx {
 	mode: string;
 	cwd: string;
-	agent: { kind: string };
+	agent: { kind: string; id?: string };
 	ui: { notify(message: string): void };
 	sessionManager: { getSessionFile(): string | undefined };
 	isIdle(): boolean;
@@ -218,7 +220,7 @@ function sessionContext(session: BootSession, notes: string[]): Ctx {
 			return session.cwd ?? "/w";
 		},
 		get agent() {
-			return { kind: session.kind ?? "main" };
+			return { kind: session.kind ?? "main", id: session.agentId };
 		},
 		ui: { notify: message => void notes.push(message) },
 		sessionManager: { getSessionFile: () => session.sessionFile },
@@ -244,15 +246,40 @@ function recordingLogger() {
 	return { warnings, warning, logger: { warn, info: () => {}, error: () => {}, debug: () => {} } };
 }
 
+type Command = { description: string; handler: (args: string, ctx: Ctx) => Promise<void> };
+
+/** One booted extension instance and what the fake omp recorded for it. */
+export interface Booted {
+	tools: BootTool[];
+	tool(name: string): BootTool;
+	notes: string[];
+	warnings: string[];
+	/** Resolves once `agent-bus: <text>` was logged. */
+	warning(text: string): Promise<void>;
+	userMessages: string[];
+	sent: Sent[];
+	emit(event: string, payload?: unknown): Promise<void>;
+	run(args: string): Promise<void>;
+	/** Fires the `context` event with the messages of a model request. */
+	context(messages: readonly unknown[]): Promise<void>;
+	commands: Command[];
+	active(): string[];
+}
+
 /**
  * The one fake omp: loads the extension against a recording `pi` whose active tool set starts as `read` plus a foreign
  * `bus_` tool. Tools registered with `defaultInactive` stay out of the active set until the extension activates them.
  */
-export async function boot(options: BusExtensionOptions, session: BootSession = {}) {
+export function boot(options: BusExtensionOptions, session: BootSession = {}): Promise<Booted> {
+	return bootExtension(createBusExtension({ sleep: noSleep, ...options }), session);
+}
+
+/** Loads one extension instance of `extension`: a main session and its subagents share one factory, as in omp. */
+export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<void>, session: BootSession = {}): Promise<Booted> {
 	const tools: BootTool[] = [];
 	let active = ["read", "bus_foreign"];
 	const handlers: Record<string, Handler[]> = {};
-	const commands: { description: string; handler: (args: string, ctx: Ctx) => Promise<void> }[] = [];
+	const commands: Command[] = [];
 	const notes: string[] = [];
 	const userMessages: string[] = [];
 	const sent: Sent[] = [];
@@ -269,11 +296,11 @@ export async function boot(options: BusExtensionOptions, session: BootSession = 
 		sendMessage: (message: Sent["message"], options: unknown) => void sent.push({ message, options }),
 		getActiveTools: () => [...active],
 		setActiveTools: async (names: string[]) => void (active = names),
-		registerCommand: (_name: string, command: (typeof commands)[number]) => void commands.push(command),
+		registerCommand: (_name: string, command: Command) => void commands.push(command),
 		on: (event: string, handler: Handler) => void (handlers[event] ??= []).push(handler),
 		logger,
 	} as unknown as ExtensionAPI;
-	await createBusExtension({ sleep: noSleep, ...options })(pi);
+	await extension(pi);
 	const ctx = sessionContext(session, notes);
 	const emit = async (event: string, payload: unknown = { type: event }) => {
 		for (const handler of handlers[event] ?? []) await handler(payload, ctx);
@@ -284,7 +311,6 @@ export async function boot(options: BusExtensionOptions, session: BootSession = 
 		return found;
 	};
 	const run = (args: string) => commands[0].handler(args, ctx);
-	/** Fires the `context` event with the messages of a model request. */
 	const context = async (messages: readonly unknown[]) => {
 		for (const handler of handlers["context"] ?? []) await handler({ type: "context", messages }, ctx);
 	};

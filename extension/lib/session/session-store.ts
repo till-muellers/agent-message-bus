@@ -2,8 +2,9 @@
  * Per-session member credentials from `/bus accept`: `{url, token}` in
  * `<dir>/sessions/<key>.json` (0600), keyed by the omp session file's name so
  * `omp --resume` / `-c` (which reopen the same file) keep the identity.
- * Subagent sessions live in `<parent>/<id>.jsonl` and use their interactive
- * root's key, so they act as the agent their top-level session accepted.
+ * Subagent sessions live in `<parent>/<id>.jsonl` and resolve to their
+ * interactive root's key, under which their main session publishes the
+ * identity they act with (`root-identities.ts`).
  */
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
