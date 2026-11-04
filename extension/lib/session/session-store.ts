@@ -2,19 +2,14 @@
  * Per-session member credentials from `/bus accept`: `{url, token}` in
  * `<dir>/sessions/<key>.json` (0600), keyed by the omp session file's name so
  * `omp --resume` / `-c` (which reopen the same file) keep the identity.
- * Subagent sessions live in `<parent>/<id>.jsonl` and resolve to their
- * interactive root's key, under which their main session publishes the
- * identity they act with (`root-identities.ts`).
+ * Subagents never read it: they act with the identity their main session
+ * publishes (`root-identities.ts`).
  */
-import { existsSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 import type { ActiveCredentials } from "./stored-credentials.ts";
 import { createJsonFileStore, type JsonFileStore } from "../shared/credential-store.ts";
 
 export type SessionStore = JsonFileStore<ActiveCredentials>;
-
-/** How far a subagent session walks up to its root; mirrors omp's `resolveBreadcrumbToInteractiveRoot`. */
-const MAX_NESTING = 8;
 
 function parseActive(json: unknown): ActiveCredentials {
 	const parsed = json as Partial<Record<keyof ActiveCredentials, unknown>> | null;
@@ -32,19 +27,7 @@ export function createSessionStore(dir: string, key: string): SessionStore {
 	});
 }
 
-/** The top-level session file: walks up while the containing dir is a session's artifacts dir (`<dir>.jsonl` exists). */
-function interactiveRoot(sessionFile: string): string {
-	let current = sessionFile;
-	for (let depth = 0; depth < MAX_NESTING; depth++) {
-		const parent = `${dirname(current)}.jsonl`;
-		if (!existsSync(parent)) break;
-		current = parent;
-	}
-	return current;
-}
-
 /** The store key of a session: its file name without `.jsonl`; undefined for a session without a file. */
-export function sessionKey(sessionFile: string | undefined, sub: boolean): string | undefined {
-	if (!sessionFile) return undefined;
-	return basename(sub ? interactiveRoot(sessionFile) : sessionFile, ".jsonl");
+export function sessionKey(sessionFile: string | undefined): string | undefined {
+	return sessionFile ? basename(sessionFile, ".jsonl") : undefined;
 }

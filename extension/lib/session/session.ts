@@ -21,6 +21,8 @@ import type { BusEnv } from "./env.ts";
 /** The parts of the omp context a session reads: mode, agent kind, idleness and the session file. */
 export interface SessionContext extends IdentityContext {
 	mode?: string;
+	/** The agent the session runs: its kind and its registry id. */
+	agent?: { kind?: string; id?: string };
 	/** Whether the agent is idle right now. */
 	isIdle(): boolean;
 }
@@ -123,6 +125,7 @@ export function createSession(deps: SessionDeps): Session {
 			view.mode = ctx.mode;
 			view.sub = ctx.agent?.kind === "sub";
 			view.agentId = ctx.agent?.id;
+			view.sessionFile = ctx.sessionManager?.getSessionFile();
 			view.isIdle = () => ctx.isIdle();
 			return identity.bind(ctx, change);
 		},

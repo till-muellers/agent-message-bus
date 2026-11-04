@@ -3,60 +3,80 @@
  * under its root key; its subagents read them from there, never from the store or the env.
  */
 import { describe, expect, test } from "bun:test";
-import { createRootIdentities, createRootPublication } from "../../extension/lib/session/root-identities.ts";
+import { join } from "node:path";
+import { createRootIdentities, createRootPublication, rootKeyOf } from "../../extension/lib/session/root-identities.ts";
 
 const LEAD = { url: "http://bus", token: "lead-tok" };
 const WORKER = { url: "http://bus", token: "worker-tok" };
+const SESSIONS = join("/sessions", "cwd");
+const ROOT_FILE = join(SESSIONS, "root.jsonl");
+const ROOT = rootKeyOf(ROOT_FILE) ?? "";
 
 describe("root identities", () => {
-	test("a published identity is found under its root key only", () => {
+	test("the root key of a main session is its file without .jsonl; a session without a file has none", () => {
+		expect(ROOT.endsWith(join("cwd", "root"))).toBe(true);
+		expect(rootKeyOf(undefined)).toBeUndefined();
+	});
+
+	test("a subagent finds the identity of the root session whose dir holds its file, nested or not", () => {
 		const roots = createRootIdentities();
-		roots.publish("root", LEAD);
-		expect(roots.lookup("root")).toEqual(LEAD);
-		expect(roots.lookup("other")).toBeUndefined();
+		roots.publish(ROOT, LEAD);
+		expect(roots.lookup(join(SESSIONS, "root", "Explore.jsonl"))).toEqual(LEAD);
+		expect(roots.lookup(join(SESSIONS, "root", "Explore", "Nested.jsonl"))).toEqual(LEAD);
+	});
+
+	test("a subagent of another root session, the root session's own file and a missing file find nothing", () => {
+		const roots = createRootIdentities();
+		roots.publish(ROOT, LEAD);
+		expect(roots.lookup(join(SESSIONS, "other", "Explore.jsonl"))).toBeUndefined();
+		expect(roots.lookup(ROOT_FILE)).toBeUndefined();
+		expect(roots.lookup(undefined)).toBeUndefined();
 	});
 
 	test("a later publish replaces the identity; withdraw removes it", () => {
 		const roots = createRootIdentities();
-		roots.publish("root", WORKER);
-		roots.publish("root", LEAD);
-		expect(roots.lookup("root")).toEqual(LEAD);
-		roots.withdraw("root");
-		expect(roots.lookup("root")).toBeUndefined();
+		const sub = join(SESSIONS, "root", "Explore.jsonl");
+		roots.publish(ROOT, WORKER);
+		roots.publish(ROOT, LEAD);
+		expect(roots.lookup(sub)).toEqual(LEAD);
+		roots.withdraw(ROOT);
+		expect(roots.lookup(sub)).toBeUndefined();
 	});
 
 	test("two registries share nothing", () => {
-		const first = createRootIdentities();
-		first.publish("root", LEAD);
-		expect(createRootIdentities().lookup("root")).toBeUndefined();
+		createRootIdentities().publish(ROOT, LEAD);
+		expect(createRootIdentities().lookup(join(SESSIONS, "root", "Explore.jsonl"))).toBeUndefined();
 	});
 });
 
 describe("root publication of a main session", () => {
+	const subOf = (key: string) => join(key, "Explore.jsonl");
+
 	test("publishes under the current key and withdraws the key it published before", () => {
 		const roots = createRootIdentities();
 		const publication = createRootPublication(roots);
-		publication.set("old", LEAD);
-		publication.set("new", WORKER);
-		expect(roots.lookup("old")).toBeUndefined();
-		expect(roots.lookup("new")).toEqual(WORKER);
+		const [old, next] = [rootKeyOf(join(SESSIONS, "old.jsonl")) ?? "", rootKeyOf(join(SESSIONS, "new.jsonl")) ?? ""];
+		publication.set(old, LEAD);
+		publication.set(next, WORKER);
+		expect(roots.lookup(subOf(old))).toBeUndefined();
+		expect(roots.lookup(subOf(next))).toEqual(WORKER);
 	});
 
 	test("no credentials withdraw the key; no key publishes nothing", () => {
 		const roots = createRootIdentities();
 		const publication = createRootPublication(roots);
-		publication.set("root", LEAD);
-		publication.set("root", undefined);
-		expect(roots.lookup("root")).toBeUndefined();
+		publication.set(ROOT, LEAD);
+		publication.set(ROOT, undefined);
+		expect(roots.lookup(subOf(ROOT))).toBeUndefined();
 		publication.set(undefined, LEAD);
-		expect(roots.lookup("root")).toBeUndefined();
+		expect(roots.lookup(subOf(ROOT))).toBeUndefined();
 	});
 
 	test("clear withdraws what was published", () => {
 		const roots = createRootIdentities();
 		const publication = createRootPublication(roots);
-		publication.set("root", LEAD);
+		publication.set(ROOT, LEAD);
 		publication.clear();
-		expect(roots.lookup("root")).toBeUndefined();
+		expect(roots.lookup(subOf(ROOT))).toBeUndefined();
 	});
 });

@@ -7,7 +7,7 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { activateBusTools, deactivateBusTools, deactivateTools } from "./activation.ts";
 import type { BusClient } from "../bus/client.ts";
-import { createRootPublication, type RootIdentities } from "../session/root-identities.ts";
+import { createRootPublication, type RootIdentities, rootKeyOf } from "../session/root-identities.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
 import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
 import type { AckWatermark } from "../delivery/ack-watermark.ts";
@@ -25,6 +25,8 @@ export interface SessionView {
 	sub: boolean;
 	/** The id of the agent that runs the session (`ctx.agent.id`); the subagent's id in a subagent session. */
 	agentId?: string;
+	/** The session's file (`ctx.sessionManager.getSessionFile()`): the root key of a main session, the way to it for a subagent. */
+	sessionFile?: string;
 	/** Whether the agent is idle right now (bound to the latest omp context). */
 	isIdle(): boolean;
 }
@@ -34,7 +36,7 @@ export interface ConnectionDeps {
 	client: BusClient;
 	store: CredentialStore;
 	credentials: Pick<SessionCredentials, "resolve">;
-	identity: Pick<SessionIdentity, "load" | "rootKey">;
+	identity: Pick<SessionIdentity, "load">;
 	/** The identities root sessions publish for their subagents; shared by every session of the process. */
 	roots: RootIdentities;
 	view: SessionView;
@@ -67,7 +69,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 	let active: ActiveCredentials | undefined;
 	// A subagent reads its root session's identity at every call, never the store or the env, so a later
 	// promote or logout of the main session reaches its next call.
-	const getActive = () => (view.sub ? deps.roots.lookup(deps.identity.rootKey()) : active);
+	const getActive = () => (view.sub ? deps.roots.lookup(view.sessionFile) : active);
 	let toldNoIdentity = false;
 	const dispatcher = createDispatcher({
 		phase: () => phaseOf(view.mode, view.isIdle()),
@@ -82,7 +84,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 		if (view.sub) return getActive();
 		await deps.identity.load();
 		active = deps.credentials.resolve(await deps.store.load());
-		publication.set(deps.identity.rootKey(), active);
+		publication.set(rootKeyOf(view.sessionFile), active);
 		return active;
 	}
 
