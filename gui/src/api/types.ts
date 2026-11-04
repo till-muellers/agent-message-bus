@@ -127,3 +127,17 @@ export interface Entry {
 	body?: string;
 	createdAt: string;
 }
+
+/** One row of bus_list_admins. */
+export interface AdminInfo {
+	name: string;
+	bootstrap: boolean;
+	tokens: number;
+	spaces: string[];
+}
+
+/** The bus_mint_admin result: the token is shown once and never again. */
+export interface MintedAdmin {
+	name: string;
+	token: string;
+}

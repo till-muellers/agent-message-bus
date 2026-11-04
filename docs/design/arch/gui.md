@@ -36,10 +36,11 @@ gui/
       decode-state.ts   decoders of GET /web/api/state (space list, space detail); later reads get their own decode-<read>.ts
       decode-threads.ts decoders of the blackboard reads (thread list, thread with posts)
       decode-inbox.ts   decoder of GET /web/api/inbox (entries; the type stays text so newer kinds still show)
-      types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadInfo, Thread, Post, Entry, Admin)
+      types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadInfo, Thread, Post, Entry, AdminInfo, MintedAdmin)
       session.ts        signIn(token), restore(), signOut()
-      reads.ts          spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox() (GUI-4: limit=500, oldest first; the view says when the list is cut)
-      admins.ts         (W2) listAdmins(), mintAdmin(name), revokeAdmin(name)
+      reads.ts          admins() (GUI-5); spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox() (GUI-4: limit=500, oldest first; the view says when the list is cut)
+      decode-admins.ts  (W2) decoders of the admin list, the minted token and {deleted}
+      admins.ts         (W2) mint(name), revoke(name); the list is the polled read reads.admins()
       mutations.ts      (W3) invite, cancelInvite(space, id) (DELETE), revoke, post, sendTopic, deleteSpace
     state/
       app-state.ts      AppState, Route, Resource<T> types
@@ -49,6 +50,8 @@ gui/
       reducer.ts        pure (state, action) → state
       store.ts          getState / dispatch / subscribe (~30 lines)
       session-intents.ts signIn / restore / signOut: run the session calls, dispatch the outcome (never rejects)
+      mutate.ts         mutate(deps, call, done): awaits a mutation, dispatches done(result) and refreshes; 401 → signed-out, else the server's message as an alert notice (never rejects)
+      admin-intents.ts  (W2) mint → secret/shown, revoke → notice/shown
     router/
       routes.ts         parseRoute(hash) → Route; hrefOf(route) → "#/…" (pure)
       hash-source.ts    hashchange → dispatch(navigate)
@@ -69,7 +72,7 @@ gui/
       board.ts          threads of a blackboard (most recently active first)
       thread.ts         a thread: title, posts with author and time
       inbox.ts          the signed-in agent's own inbox, read-only ("Inbox of <kind> <name>", no acknowledge)
-      admins.ts         (W2) admin list, mint form, revoke button
+      admins.ts         (W2) admin list, mint form, revoke button per minted admin (none for the bootstrap admin)
       confirm.ts        (W3) confirm dialog naming space / target / role
       shown-once.ts     (W2/W3) invite code or admin token shown once
       forms.ts          (W3) invite, post, send-to-topic forms
@@ -112,7 +115,8 @@ export interface AppState {
 	session: SessionState;
 	route: Route;
 	view: Resource<ViewData>;         // the current route's data; replaced on navigation
-	shownOnce?: { label: string; secret: string };  // invite code / admin token; cleared on next navigation (W2/W3)
+	shownOnce?: { label: string; secret: string };  // invite code / admin token; cleared on next navigation and sign-out (W2/W3)
+	notice?: { message: string; alert: boolean };   // last mutation's outcome (alert: the server's refusal); cleared on next navigation
 	confirm?: PendingConfirm;         // W3
 }
 // state/actions.ts
@@ -120,7 +124,7 @@ export type Action =
 	| { type: "session/restored"; identity: Identity; csrf: string } | { type: "session/signed-out"; error?: string }
 	| { type: "navigate"; route: Route }
 	| { type: "view/loading" } | { type: "view/loaded"; route: Route; data: ViewData; at: number } | { type: "view/failed"; route: Route; error: ApiError }   // route: answers for a route already left are dropped
-	| { type: "secret/shown"; label: string; secret: string } | { type: "confirm/open"; confirm: PendingConfirm } | { type: "confirm/close" };
+	| { type: "secret/shown"; label: string; secret: string } | { type: "notice/shown"; message: string; alert: boolean } | { type: "confirm/open"; confirm: PendingConfirm } | { type: "confirm/close" };
 // state/store.ts
 export interface Store { getState(): AppState; dispatch(action: Action): void; subscribe(listener: (s: AppState) => void): () => void; }
 export function createStore(reducer: (s: AppState, a: Action) => AppState, initial: AppState): Store;

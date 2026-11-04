@@ -1,4 +1,4 @@
-import type { Entry, SpaceDetail, SpaceList, Thread, ThreadInfo } from "../src/api/types.ts";
+import type { AdminInfo, Entry, SpaceDetail, SpaceList, Thread, ThreadInfo } from "../src/api/types.ts";
 
 export const spaceList: SpaceList = {
 	spaces: [
@@ -71,4 +71,9 @@ export const entries: Entry[] = [
 		body: "reply",
 		createdAt: "2026-11-04T20:01:00Z",
 	},
+];
+
+export const admins: AdminInfo[] = [
+	{ name: "admin", bootstrap: true, tokens: 0, spaces: [] },
+	{ name: "ops", bootstrap: false, tokens: 2, spaces: ["demo", "other"] },
 ];

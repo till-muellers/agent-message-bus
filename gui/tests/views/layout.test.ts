@@ -4,10 +4,10 @@ import { ApiError } from "../../src/api/api-error.ts";
 import type { AppState, Route } from "../../src/state/app-state.ts";
 import type { ViewData } from "../../src/state/view-data.ts";
 import { render } from "../../src/views/layout.ts";
-import { entries, spaceDetail, spaceList, thread, threadInfos } from "../fixtures.ts";
+import { admins, entries, spaceDetail, spaceList, thread, threadInfos } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
-const intents = { signIn: (): void => {}, signOut: (): void => {} };
+const intents = { signIn: (): void => {}, signOut: (): void => {}, mintAdmin: (): void => {}, revokeAdmin: (): void => {} };
 
 function signedIn(identity: Identity, route: Route = { name: "spaces" }): AppState {
 	return { session: { status: "signed-in", identity, csrf: "c1" }, route, view: { status: "idle" } };
@@ -101,6 +101,7 @@ describe("the layout", () => {
 		[{ name: "board", space: "demo", board: "b" }, { kind: "board", space: "demo", board: "b", threads: threadInfos }, "b"],
 		[{ name: "thread", space: "demo", threadId: 1 }, { kind: "thread", space: "demo", thread }, "plan"],
 		[{ name: "inbox" }, { kind: "inbox", entries }, "Inbox of admin admin"],
+		[{ name: "admins" }, { kind: "admins", admins }, "Admins"],
 	];
 	for (const [route, data, title] of pageCases) {
 		test(`the ${route.name} page shows its data once it is loaded`, () => {
@@ -108,6 +109,20 @@ describe("the layout", () => {
 			expect(findAll(render(state, intents), byTag("h1")).map(textOf)).toEqual([title]);
 		});
 	}
+
+	test("a secret shown once and a notice appear above the page", () => {
+		const secret: AppState = { ...signedIn(admin), shownOnce: { label: "Token of admin ops", secret: "amb_admin_x" } };
+		expect(findAll(render(secret, intents), byTag("code")).map(textOf)).toEqual(["amb_admin_x"]);
+		const notice: AppState = { ...signedIn(admin), notice: { message: "agent lead is a leader agent", alert: true } };
+		const [alert] = findAll(render(notice, intents), (n) => n.attrs.role === "alert");
+		expect(alert && textOf(alert)).toBe("agent lead is a leader agent");
+	});
+
+	test("a success notice is a status, not an alert", () => {
+		const notice: AppState = { ...signedIn(admin), notice: { message: "Admin ops revoked.", alert: false } };
+		const [status] = findAll(render(notice, intents), (n) => n.attrs.role === "status");
+		expect(status && textOf(status)).toBe("Admin ops revoked.");
+	});
 
 	test("the first load of a page says it is loading", () => {
 		expect(mainOf({ ...signedIn(admin), view: { status: "loading" } })).toContain("Loading");

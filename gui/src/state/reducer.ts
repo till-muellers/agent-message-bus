@@ -32,10 +32,15 @@ function loaded(state: AppState, data: ViewData, at: number): AppState {
  */
 function failed(state: AppState, error: ApiError): AppState {
 	if (error.status === 401) {
-		return { ...state, session: { status: "signed-out", error: error.message }, view: { status: "idle" } };
+		return { session: { status: "signed-out", error: error.message }, route: state.route, view: { status: "idle" } };
 	}
 	const transient = error.status === 0 || error.status === 429 || error.status >= 500;
 	return { ...state, view: { status: "error", error, last: transient ? lastData(state.view) : undefined } };
+}
+
+/** A mutation's answer that arrives after sign-out is dropped, so the next user never sees it. */
+function signedIn(state: AppState): boolean {
+	return state.session.status === "signed-in";
 }
 
 /** Pure: returns state itself when the action changes nothing, so the store notifies nobody. */
@@ -44,14 +49,18 @@ export function reducer(state: AppState, action: Action): AppState {
 		case "session/restored":
 			return { ...state, session: { status: "signed-in", identity: action.identity, csrf: action.csrf } };
 		case "session/signed-out":
-			return { ...state, session: { status: "signed-out", error: action.error }, view: { status: "idle" } };
+			return { session: { status: "signed-out", error: action.error }, route: state.route, view: { status: "idle" } };
 		case "navigate":
-			return sameRoute(state.route, action.route) ? state : { ...state, route: action.route, view: { status: "idle" } };
+			return sameRoute(state.route, action.route) ? state : { session: state.session, route: action.route, view: { status: "idle" } };
 		case "view/loading":
 			return { ...state, view: { status: "loading", last: lastData(state.view) } };
 		case "view/loaded":
 			return sameRoute(state.route, action.route) ? loaded(state, action.data, action.at) : state;
 		case "view/failed":
 			return sameRoute(state.route, action.route) ? failed(state, action.error) : state;
+		case "secret/shown":
+			return signedIn(state) ? { ...state, shownOnce: { label: action.label, secret: action.secret }, notice: undefined } : state;
+		case "notice/shown":
+			return signedIn(state) ? { ...state, notice: { message: action.message, alert: action.alert }, shownOnce: undefined } : state;
 	}
 }

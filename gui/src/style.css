@@ -84,3 +84,7 @@ article p {
 	margin: 0.25rem 0 0;
 	white-space: pre-wrap;
 }
+
+section > form {
+	margin-top: 1rem;
+}

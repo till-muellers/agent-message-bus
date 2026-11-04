@@ -1,10 +1,12 @@
+import { createAdminsApi } from "./api/admins.ts";
 import { createHttp, type Http } from "./api/http.ts";
 import { createReads } from "./api/reads.ts";
 import { createSessionApi } from "./api/session.ts";
 import { loadView } from "./poll/load-view.ts";
-import { createPoller } from "./poll/poller.ts";
+import { createPoller, type Poller } from "./poll/poller.ts";
 import { listenToHash } from "./router/hash-source.ts";
 import { parseRoute } from "./router/routes.ts";
+import { createAdminIntents } from "./state/admin-intents.ts";
 import type { AppState } from "./state/app-state.ts";
 import { initialState, reducer } from "./state/reducer.ts";
 import { createSessionIntents } from "./state/session-intents.ts";
@@ -13,7 +15,7 @@ import { mount } from "./view/mount.ts";
 import { type Intents, render } from "./views/layout.ts";
 
 /** Polls the current route every 5 s while the page is visible, and at once when it is shown again. */
-function startPolling(store: Store, http: Http): void {
+function startPolling(store: Store, http: Http): Poller {
 	const reads = createReads(http);
 	const poller = createPoller({
 		load: (route) => loadView(reads, route),
@@ -25,6 +27,19 @@ function startPolling(store: Store, http: Http): void {
 		if (document.visibilityState === "visible") poller.refreshNow();
 	});
 	poller.start();
+	return poller;
+}
+
+function intentsOf(store: Store, http: Http, poller: Poller): { intents: Intents; restore(): Promise<void> } {
+	const session = createSessionIntents(createSessionApi(http), store.dispatch);
+	const admins = createAdminIntents(createAdminsApi(http), { dispatch: store.dispatch, refresh: () => poller.refreshNow() });
+	const intents: Intents = {
+		signIn: (token) => void session.signIn(token),
+		signOut: () => void session.signOut(),
+		mintAdmin: (name) => void admins.mint(name),
+		revokeAdmin: (name) => void admins.revoke(name),
+	};
+	return { intents, restore: () => session.restore() };
 }
 
 function boot(root: HTMLElement): void {
@@ -36,14 +51,13 @@ function boot(root: HTMLElement): void {
 			return session.status === "signed-in" ? session.csrf : undefined;
 		},
 	});
-	const session = createSessionIntents(createSessionApi(http), store.dispatch);
-	const intents: Intents = { signIn: (token) => void session.signIn(token), signOut: () => void session.signOut() };
+	const poller = startPolling(store, http);
+	const { intents, restore } = intentsOf(store, http, poller);
 	const draw = (state: AppState): void => mount(root, render(state, intents));
 	store.subscribe(draw);
 	draw(store.getState());
 	listenToHash(window, store.dispatch);
-	startPolling(store, http);
-	void session.restore();
+	void restore();
 }
 
 const root = document.getElementById("app");
