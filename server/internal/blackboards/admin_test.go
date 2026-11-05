@@ -42,7 +42,7 @@ func TestAdminActsBlackboards(t *testing.T) {
 				return err
 			}
 			id, err := f.svc.CreateThread(ctx, ops, "alpha", "audit", "findings", "first")
-			if err == nil && countSubscriptions(t, f, id) != 0 {
+			if err == nil && subscribed(t, f, ops, id) {
 				t.Error("unjoined admin subscribed to its own thread")
 			}
 			return err
@@ -82,12 +82,10 @@ func TestAdminActsBlackboards(t *testing.T) {
 	}
 }
 
-// countSubscriptions counts the thread subscriptions of the admin "ops" on thread id.
-func countSubscriptions(t *testing.T, f fixture, id int64) int {
+// subscribed reports through ReadThread whether p is subscribed to thread id in alpha.
+func subscribed(t *testing.T, f fixture, p auth.Principal, id int64) bool {
 	t.Helper()
-	var n int
-	err := f.db.QueryRowContext(context.Background(),
-		`SELECT COUNT(*) FROM thread_subscriptions WHERE thread_id = ? AND agent_id = 9`, id).Scan(&n)
+	th, err := f.svc.ReadThread(context.Background(), p, "alpha", id)
 	must(t, err)
-	return n
+	return th.Subscribed
 }

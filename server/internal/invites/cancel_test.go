@@ -9,6 +9,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
+	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 // cancelCase cancels the id that setup returns in space demo as the principal of as (nil =
@@ -137,14 +138,19 @@ func accepted(t *testing.T, e env, code string) {
 	}
 }
 
+// stillMember asserts through spaces that worker remains a member of demo.
 func stillMember(t *testing.T, e env, _ string) {
 	t.Helper()
-	var n int
-	err := e.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM participants p JOIN agents a ON a.id = p.agent_id
-		WHERE a.name = 'worker' AND p.role = 'member'`).Scan(&n)
-	if err != nil || n != 1 {
-		t.Fatalf("worker memberships = %d, %v; want 1", n, err)
+	ps, err := e.spaces.Participants(context.Background(), e.lead, "demo")
+	if err != nil {
+		t.Fatalf("participants of demo: %v", err)
 	}
+	for _, p := range ps {
+		if p.Name == "worker" && p.Role == spaces.RoleMember {
+			return
+		}
+	}
+	t.Fatalf("participants of demo = %+v; want member worker", ps)
 }
 
 // TestCancelAccess: only leaders of the space and admins may cancel.

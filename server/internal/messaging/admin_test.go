@@ -23,11 +23,11 @@ func withAdmin(t *testing.T, w *world) {
 	w.p["lead2"] = auth.Principal{Kind: auth.Leader, AgentID: 10, AgentName: "lead2"}
 }
 
-// adminEntries counts the inbox rows of the admin "ops".
+// adminEntries counts the inbox entries of the admin "ops".
 func adminEntries(t *testing.T, w *world) int {
 	t.Helper()
-	var n int
-	if err := w.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM inbox WHERE agent_id = 9`).Scan(&n); err != nil {
+	n, err := w.ib.Count(context.Background(), w.p["ops"])
+	if err != nil {
 		t.Fatalf("counting admin entries: %v", err)
 	}
 	return n

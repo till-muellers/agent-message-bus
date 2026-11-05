@@ -74,12 +74,3 @@ func mustCreate(t *testing.T, e env, p auth.Principal, space string) {
 		t.Fatalf("creating %s: %v", space, err)
 	}
 }
-
-func countRows(t *testing.T, db *sql.DB, q string, args ...any) int {
-	t.Helper()
-	var n int
-	if err := db.QueryRowContext(context.Background(), q, args...).Scan(&n); err != nil {
-		t.Fatalf("count %q: %v", q, err)
-	}
-	return n
-}

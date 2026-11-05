@@ -150,17 +150,18 @@ func TestMintMemberReinviteSameAgent(t *testing.T) {
 	}
 }
 
+// TestStoredHashIsNotPlaintext: the token resolves by its hash only, so the store keeps
+// Hash(token) and never the plaintext.
 func TestStoredHashIsNotPlaintext(t *testing.T) {
 	t.Parallel()
-	s, db := newTestService(t)
-	tok, _ := mustLeader(t, s, "lead")
-	var hash string
-	if err := db.QueryRow(`SELECT hash FROM tokens`).Scan(&hash); err != nil {
-		t.Fatalf("select hash: %v", err)
+	s, _ := newTestService(t)
+	tok, lead := mustLeader(t, s, "lead")
+	got, err := s.AuthenticateHash(context.Background(), Hash(tok))
+	if err != nil || got != lead {
+		t.Fatalf("AuthenticateHash(Hash(token)) = %+v, %v; want %+v", got, err, lead)
 	}
-	if hash == tok || hash != Hash(tok) {
-		t.Errorf("stored %q, token %q", hash, tok)
-	}
+	_, err = s.AuthenticateHash(context.Background(), tok)
+	apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
 }
 
 func TestRevokeSpaceTokens(t *testing.T) {
@@ -237,16 +238,7 @@ func TestCheckMemberName(t *testing.T) {
 			apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
 		})
 	}
-	if n := countAgentsNamed(t, db, "fresh"); n != 0 {
-		t.Fatalf("CheckMemberName inserted agent fresh (%d rows)", n)
+	if _, err := s.MintLeader(ctx, admin, "fresh"); err != nil {
+		t.Fatalf("CheckMemberName created member agent fresh: MintLeader = %v", err)
 	}
-}
-
-func countAgentsNamed(t *testing.T, db *sql.DB, name string) int {
-	t.Helper()
-	var n int
-	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM agents WHERE name = ?`, name).Scan(&n); err != nil {
-		t.Fatalf("counting agents: %v", err)
-	}
-	return n
 }
