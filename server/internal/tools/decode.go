@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"reflect"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
@@ -53,6 +54,7 @@ func define[A any](name, access, desc, result string, required []string, props m
 		Access:      access,
 		Result:      result,
 		Schema:      object(required, props),
+		argsType:    reflect.TypeFor[A](),
 		Call: func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error) {
 			a, err := decode[A](args)
 			if err != nil {
