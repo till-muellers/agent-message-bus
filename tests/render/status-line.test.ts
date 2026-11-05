@@ -39,6 +39,14 @@ describe("the status line", () => {
 		expect(shown).toEqual([]);
 	});
 
+	test("posts are counted by thread and class like the post notices: a critical post counts, a deferred one does not", () => {
+		const { it, shown } = unread();
+		it.add([post(1, 7, { class: "deferred" })]);
+		expect(shown).toEqual([]);
+		it.add([post(2, 7, { class: "interrupt", critical: true })]);
+		expect(shown).toEqual(["bus: 1 new post in plan/7"]);
+	});
+
 	test("reading a thread clears its count; the last one read clears the bus entry", () => {
 		const { it, last } = unread();
 		it.add([post(1), post(2, 8)]);

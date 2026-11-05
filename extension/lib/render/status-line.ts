@@ -1,10 +1,11 @@
 /**
  * Blackboard activity in omp's status line (`docs/design/arch/client.md` §3.5, `omp-blackboards.feature` rule 4):
- * the posts handed over to the session are counted per thread, "bus: 2 new posts in plan/7"; a successful
- * `bus_read_thread` or the thread's removal clears its thread, a board's removal its threads, logout and a restart
- * clear them all.
+ * the posts handed over to the session are counted per thread, "bus: 2 new posts in plan/7"; a post is told by its
+ * thread and class like a post notice (`isPost`). A successful `bus_read_thread` or the thread's removal clears its
+ * thread, a board's removal its threads, logout and a restart clear them all.
  */
 import type { Entry } from "../bus/entry.ts";
+import { isPost, labelOf } from "./entry-label.ts";
 
 /** The status line key of the extension (`ctx.ui.setStatus`). */
 export const STATUS_KEY = "agent-bus";
@@ -46,9 +47,10 @@ export function createUnreadPosts(show: (key: string, text: string | undefined) 
 	/** Applies one entry; true when a count changed. */
 	const apply = (e: Entry): boolean => {
 		const key = threadKey(e.space, e.threadId);
-		if (e.type === "thread_removed") return threads.delete(key);
-		if (e.type === "blackboard_removed") return removeBoard(threads, e);
-		if (e.type !== "thread_post") return false;
+		const { about, ended } = labelOf(e);
+		if (about === "blackboard") return removeBoard(threads, e);
+		if (about === "thread" && ended) return threads.delete(key);
+		if (!isPost(e)) return false;
 		const count = (threads.get(key)?.count ?? 0) + 1;
 		threads.set(key, { space: e.space, blackboard: e.blackboard, threadId: e.threadId, count });
 		return true;

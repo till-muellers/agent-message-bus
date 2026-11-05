@@ -5,15 +5,16 @@
  * The grouping key is the entry's thread fields, never its type.
  */
 import { type Entry, parseDeliveryClass } from "../bus/entry.ts";
+import { isPost } from "../render/entry-label.ts";
 import { holdable } from "./delivery-class.ts";
 import { matches, type WaitFilter } from "./waiters.ts";
 
 /** How long the first held entry of a thread waits for more (a debounce, not a step-boundary sync). */
 export const NOTICE_WINDOW_MS = 1500;
 
-/** Whether an entry is delivered as a post notice: a thread entry of a class the inbox ledger may hold. */
+/** Whether an entry is delivered as a post notice: a post (`isPost`) of a class the inbox ledger may hold. */
 export function isPostNotice(entry: Entry): boolean {
-	return entry.threadId !== undefined && holdable(parseDeliveryClass(entry.class));
+	return isPost(entry) && holdable(parseDeliveryClass(entry.class));
 }
 
 export interface PostNotices {
