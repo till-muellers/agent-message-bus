@@ -7,9 +7,6 @@
 import type { CardComponents, CardTheme } from "./entry-card.ts";
 import { bodyLines, printable } from "./quote.ts";
 
-/** The tool whose result is rendered as a thread. */
-export const THREAD_TOOL = "bus_read_thread";
-
 /** A collapsed thread shows this many of its newest posts. */
 const NEWEST_POSTS = 3;
 

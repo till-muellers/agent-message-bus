@@ -54,12 +54,15 @@ function actsAs(id: BusIdentity): string {
 	return `${who} in ${led.length === 1 ? "space" : "spaces"} ${quoted(led)}`;
 }
 
-/** The block of a subagent with the agent id `agentId`: blackboards only, as its main session. */
-export function subagentBlock(id: BusIdentity, agentId: string): string {
+/**
+ * The block of a subagent with the agent id `agentId`: blackboards only, as its main session. `tools` is its allow-list
+ * (`subagentTools` of `tools/tool-policy.ts`), passed in because `context/` does not import `tools/` (§1.3).
+ */
+export function subagentBlock(id: BusIdentity, agentId: string, tools: readonly string[]): string {
 	return [
 		OPEN,
 		`You are a subagent of the main session that acts as ${actsAs(id)} on the agent message bus.`,
-		"On the bus you may only read and post on blackboards: bus_list_blackboards, bus_list_threads, bus_read_thread, bus_create_thread, bus_add_post.",
+		`On the bus you may only read and post on blackboards: ${tools.join(", ")}.`,
 		`Your threads and posts show \`${id.name}\` as their author; the extension adds a first line \`[via subagent ${agentId}]\` to each. They don't notify the main session, and a thread you create subscribes \`${id.name}\`, so its notifications go to the main session, not to you.`,
 		"You have no inbox. For anything else on the bus (messages, topics, members) ask the main session with `write agent://<id>` (its id is in your Peers list) and `wait` for the answer; tell it about posts it needs to know.",
 		CLOSE,

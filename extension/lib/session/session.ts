@@ -13,6 +13,7 @@ import type { SessionView } from "../connection/session-view.ts";
 import type { ServerGate } from "../connection/server-gate.ts";
 import { type BusContext, createBusContext } from "../context/bus-context.ts";
 import { createBusEvents } from "../delivery/bus-events.ts";
+import { subagentTools } from "../tools/tool-policy.ts";
 import type { SessionCredentials } from "./session-credentials.ts";
 import { createSessionCredentials } from "./session-credentials.ts";
 import { createSessionIdentity, type IdentityContext, type SessionChange, type SessionIdentity } from "./session-identity.ts";
@@ -158,7 +159,14 @@ function connect(deps: SessionDeps, { credentials, identity, view, warn }: Sessi
 	};
 	const events = createBusEvents(deps.pi.events, () => busContext.who(), warn);
 	const connection = createConnection({ ...deps, credentials, identity, view, warn, events, ...hooks });
-	const busContext = createBusContext({ client: deps.client, getActive: connection.getActive, warn, isSub: () => view.sub, agentId: () => view.agentId });
+	const busContext = createBusContext({
+		client: deps.client,
+		getActive: connection.getActive,
+		warn,
+		isSub: () => view.sub,
+		agentId: () => view.agentId,
+		subagentTools: subagentTools(),
+	});
 	return { connection, busContext, self: hooks.self };
 }
 

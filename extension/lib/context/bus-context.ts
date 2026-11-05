@@ -29,6 +29,8 @@ export interface BusContextDeps {
 	/** Whether the session is a subagent, and its agent id. */
 	isSub(): boolean;
 	agentId(): string | undefined;
+	/** The tools a subagent may use on the bus, named in its block. */
+	subagentTools: readonly string[];
 }
 
 export function createBusContext(deps: BusContextDeps): BusContext {
@@ -49,7 +51,7 @@ export function createBusContext(deps: BusContextDeps): BusContext {
 		block() {
 			const id = identity.current();
 			if (!id) return undefined;
-			return deps.isSub() ? subagentBlock(id, deps.agentId() ?? "<id>") : mainBlock(id, guide.text());
+			return deps.isSub() ? subagentBlock(id, deps.agentId() ?? "<id>", deps.subagentTools) : mainBlock(id, guide.text());
 		},
 		who() {
 			const id = identity.current();
