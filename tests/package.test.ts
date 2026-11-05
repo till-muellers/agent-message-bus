@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
+import { indexedPaths } from "./git-index.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 /** The design record describes the retirement, so it may name the skill. */
@@ -13,12 +14,7 @@ const TEXT = /\.(md|ts|json|go|py|ya?ml|tmpl|html|feature)$/;
 
 /** Every tracked text file of the repo outside the design record (local and ignored files are not the repo's). */
 function trackedTextFiles(): string[] {
-	const listed = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: ROOT });
-	if (listed.exitCode !== 0) throw new Error(`git ls-files failed: ${listed.stderr.toString()}`);
-	return listed.stdout
-		.toString()
-		.split("\0")
-		.filter(rel => TEXT.test(rel) && !rel.startsWith(DESIGN) && existsSync(join(ROOT, rel)));
+	return indexedPaths(ROOT).filter(rel => TEXT.test(rel) && !rel.startsWith(DESIGN) && existsSync(join(ROOT, rel)));
 }
 
 describe("the plugin package", () => {
@@ -30,7 +26,9 @@ describe("the plugin package", () => {
 
 	test("no file outside the design record refers to the retired skill", () => {
 		const self = relative(ROOT, import.meta.path).split(sep).join("/");
-		const offenders = trackedTextFiles().filter(rel => rel !== self && readFileSync(join(ROOT, rel), "utf8").includes("skills/agent-message-bus"));
+		const files = trackedTextFiles();
+		expect(files).toContain(self);
+		const offenders = files.filter(rel => rel !== self && readFileSync(join(ROOT, rel), "utf8").includes("skills/agent-message-bus"));
 		expect(offenders).toEqual([]);
 	});
 });
