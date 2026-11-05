@@ -2,20 +2,25 @@
  * Package fitness (`docs/design/arch/client.md` §9): the skill is retired. The plugin ships no `skills/` folder,
  * and no file outside the design record points at it; agents learn the bus from the context block and the guide.
  */
-import { describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { indexedPaths } from "./git-index.ts";
 
 const ROOT = resolve(import.meta.dir, "..");
 /** The design record describes the retirement, so it may name the skill. */
 const DESIGN = "docs/design/";
 const TEXT = /\.(md|ts|json|go|py|ya?ml|tmpl|html|feature)$/;
+/** Spawning git takes seconds on a loaded host, more than bun's default of 5 s per hook. */
+const GIT_TIMEOUT_MS = 60_000;
 
 /** Every tracked text file of the repo outside the design record (local and ignored files are not the repo's). */
-function trackedTextFiles(): string[] {
-	return indexedPaths(ROOT).filter(rel => TEXT.test(rel) && !rel.startsWith(DESIGN) && existsSync(join(ROOT, rel)));
-}
+let trackedTextFiles: string[] = [];
+
+beforeAll(() => {
+	const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8", timeout: GIT_TIMEOUT_MS }).split("\0");
+	trackedTextFiles = tracked.filter(rel => TEXT.test(rel) && !rel.startsWith(DESIGN) && existsSync(join(ROOT, rel)));
+}, GIT_TIMEOUT_MS);
 
 describe("the plugin package", () => {
 	test("it ships no skill: files has no skills entry and the folder is gone", () => {
@@ -26,9 +31,8 @@ describe("the plugin package", () => {
 
 	test("no file outside the design record refers to the retired skill", () => {
 		const self = relative(ROOT, import.meta.path).split(sep).join("/");
-		const files = trackedTextFiles();
-		expect(files).toContain(self);
-		const offenders = files.filter(rel => rel !== self && readFileSync(join(ROOT, rel), "utf8").includes("skills/agent-message-bus"));
+		expect(trackedTextFiles).toContain(self);
+		const offenders = trackedTextFiles.filter(rel => rel !== self && readFileSync(join(ROOT, rel), "utf8").includes("skills/agent-message-bus"));
 		expect(offenders).toEqual([]);
 	});
 });
