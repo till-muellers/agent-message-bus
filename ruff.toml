@@ -1,0 +1,7 @@
+# Ruff settings for the release tooling (scripts/) and its tests (tests/*.py).
+line-length = 120
+target-version = "py310"
+
+[lint]
+# pycodestyle, pyflakes, isort, pyupgrade, bugbear.
+select = ["E", "F", "W", "I", "UP", "B"]
