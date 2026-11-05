@@ -3,12 +3,9 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -127,53 +124,5 @@ func run(ctx context.Context, cfg config.Config) error {
 	if err := db.Migrate(ctx, conn, migrations.FS); err != nil {
 		return fmt.Errorf("migrate db: %w", err)
 	}
-	return serve(ctx, cfg, conn, token)
-}
-
-func serve(ctx context.Context, cfg config.Config, conn *sql.DB, token string) error {
-	ctx, shutdown := context.WithCancel(ctx)
-	defer shutdown()
-	streamRoot, cancelStreams := context.WithCancel(context.Background())
-	defer cancelStreams()
-	h, err := server.Build(streamRoot, conn, token, shutdown)
-	if err != nil {
-		return err
-	}
-	apiLn, webLn, err := listen(cfg)
-	if err != nil {
-		return err
-	}
-	unpublish, err := instance.Publish(cfg.DataDir(), apiLn.Addr().String(), time.Now())
-	if err != nil {
-		return errors.Join(err, closeListeners(apiLn, webLn))
-	}
-	defer unpublish()
-	var gui *http.Server
-	if webLn != nil {
-		gui = server.NewHTTPServer(h.Web)
-	}
-	return server.Run(ctx, server.NewHTTPServer(h.API), gui, apiLn, webLn, cancelStreams)
-}
-
-// listen opens the API listener and, unless the GUI is disabled, the GUI listener.
-func listen(cfg config.Config) (api, web net.Listener, err error) {
-	api, err = net.Listen("tcp", cfg.Addr)
-	if err != nil {
-		return nil, nil, fmt.Errorf("listen %s: %w", cfg.Addr, err)
-	}
-	if cfg.WebAddr == "" {
-		return api, nil, nil
-	}
-	web, err = net.Listen("tcp", cfg.WebAddr)
-	if err != nil {
-		return nil, nil, errors.Join(fmt.Errorf("listen AMB_WEB_ADDR %s: %w", cfg.WebAddr, err), api.Close())
-	}
-	return api, web, nil
-}
-
-func closeListeners(api, web net.Listener) error {
-	if web == nil {
-		return api.Close()
-	}
-	return errors.Join(api.Close(), web.Close())
+	return server.Serve(ctx, cfg, conn, token)
 }
