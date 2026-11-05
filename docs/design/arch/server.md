@@ -336,8 +336,8 @@ type You struct {
     Name string       `json:"name"`
     Role *spaces.Role `json:"role"` // null for an unjoined admin
 }
-type Service struct{ /* consumer-side interfaces below */ }
-func NewService(r resolver, sp participantLister, tp topicLister, bb boardReader) *Service
+type Service struct{ /* q, the database Resolve reads through, plus the consumer-side interfaces below */ }
+func NewService(q db.DBTX, r resolver, sp participantLister, tp topicLister, bb boardReader) *Service // q since R10
 func (s *Service) Space(ctx context.Context, p auth.Principal, space string) (Overview, error)
 ```
 
