@@ -50,7 +50,7 @@ type Pending struct {
 	ExpiresAt string `json:"expiresAt"` // RFC3339 UTC
 }
 
-// Service creates and redeems invite codes.
+// Service creates, redeems and cancels invite codes; it is the only writer of the invites table.
 type Service struct {
 	db    *sql.DB
 	admit admission

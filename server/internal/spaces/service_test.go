@@ -178,7 +178,7 @@ func TestAuthorizeInvite(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
-				_, err := e.svc.AuthorizeInvite(ctx, tx, tc.p, tc.space, tc.invitee)
+				_, err := e.adm.AuthorizeInvite(ctx, tx, tc.p, tc.space, tc.invitee)
 				return err
 			})
 			apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
@@ -186,7 +186,7 @@ func TestAuthorizeInvite(t *testing.T) {
 	}
 	t.Run("authorized", func(t *testing.T) {
 		err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
-			_, err := e.svc.AuthorizeInvite(ctx, tx, lead, "alpha", "fresh")
+			_, err := e.adm.AuthorizeInvite(ctx, tx, lead, "alpha", "fresh")
 			return err
 		})
 		if err != nil {
@@ -208,7 +208,7 @@ func TestAdmitMember(t *testing.T) {
 	var space, tok2 string
 	err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
 		var err error
-		agentID, space, tok2, err = e.svc.AdmitMember(ctx, tx, member.SpaceID, "work")
+		agentID, space, tok2, err = e.adm.AdmitMember(ctx, tx, member.SpaceID, "work")
 		return err
 	})
 	if err != nil {

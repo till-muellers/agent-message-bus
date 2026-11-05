@@ -40,7 +40,7 @@ func (s *Service) revokeAdminTx(ctx context.Context, tx db.DBTX, name string) ([
 		return nil, false, apperr.New(apperr.Forbidden,
 			"admin is the bootstrap admin; rotate its token with agent-message-bus rotate-token")
 	}
-	tokens, err := s.accounts.RevokeAgentTokens(ctx, tx, id)
+	tokens, err := s.accounts.Revoke(ctx, tx, id, auth.Everywhere())
 	if err != nil {
 		return nil, false, err
 	}

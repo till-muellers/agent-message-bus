@@ -76,8 +76,8 @@ server/
 | Package | Writes | Reads from others (read-only joins, existing precedent `blackboards/repository.go:56-57`) | Hooks it implements | Hooks/services it calls |
 |---|---|---|---|---|
 | `auth` | `agents`, `tokens` | `participants`, `spaces` (only `ListAdmins.spaces`) | — | — |
-| `spaces` | `spaces`, `participants` | `agents` | defines `CreationHook`, `DepartureHook`, `RevocationHook` | `auth` (accounts iface), `inbox` (Stage/Publish via `inbox.InTx`, DeleteSpaceEntries), hooks |
-| `invites` | `invites` | — | `spaces.RevocationHook` (`invites.Revocation`) | `spaces` (admission iface), `inbox.InTx` **[7, R10]** |
+| `spaces` | `spaces`, `participants` | `agents` | defines `CreationHook`, `DepartureHook`, `RevocationHook` | `auth` (`accounts` iface: `AdminAgent`, `Revoke`; `Admitter`'s `memberAccounts`: `CheckMemberName`, `AdmitMember` **[R11]**), `inbox` (Stage/Publish via `inbox.InTx`, DeleteSpaceEntries), hooks |
+| `invites` | `invites` | — | `spaces.RevocationHook` (`invites.Service.OnRevoke` **[R11]**) | `spaces` (admission iface → `spaces.Admitter` **[R11]**), `inbox.InTx` **[7, R10]** |
 | `messaging` | `topics`, `topic_subscriptions` | `agents` | `CreationHook`, `DepartureHook` | resolver, `inbox.InTx`, `inbox.Receipts` **[12, R10]** |
 | `blackboards` | `blackboards`, `threads`, `posts`, `thread_subscriptions` | `agents` | `DepartureHook` | resolver, `inbox.InTx`, `inbox.Receipts` **[12, R10]** |
 | `inbox` | `inbox` | `spaces` (name join), `agents` (kind for notice scope **[13a]**, names for receipts **[12]**) | — | broker |
@@ -91,7 +91,7 @@ Cross-feature *writes* happen only through hooks or service methods inside the c
 |---|---|---|
 | Invite accept writes a `direct_message` inbox row | `invites.Accept` runs in `inbox.InTx(fn)`; `fn` returns the entry; inbox stages it in the same tx | one tx (invites' `inbox.InTx`) |
 | Last participant leaves → space deleted | `spaces.removeParticipant` → `countParticipants` → `deleteSpace` (spaces' own table; FK cascades remove other features' rows) | the caller's tx |
-| Admin revoked → tokens deleted | `spaces.RevokeAdmin` → `accounts.RevokeAgentTokens` (auth method, tx passed in) | one tx (spaces' `inbox.InTx`) |
+| Admin revoked → tokens deleted | `spaces.RevokeAdmin` → `accounts.Revoke(…, auth.Everywhere())` (auth method, tx passed in) **[R11]** | one tx (spaces' `inbox.InTx`) |
 | Admin revoked → leaves every joined space | `spaces.RevokeAdmin` → `removeParticipant` per space (departure hooks run) | same tx |
 
 The FK cascade on `deleteSpace` is the one sanctioned exception to "writes only its own tables": it is declared in `0001_schema` and already relied on by `bus_delete_space` (`spaces/service.go:161-180`, `spec/README.md:87`).
@@ -137,8 +137,15 @@ type AdminInfo struct {
 func (s *Service) MintAdmin(ctx context.Context, p Principal, name string) (string, error)        // logs "admin minted" after commit
 func (s *Service) ListAdmins(ctx context.Context, p Principal) ([]AdminInfo, error)
 func (s *Service) AdminAgent(ctx context.Context, q db.DBTX, name string) (id int64, found, bootstrap bool, err error) // [6b]
-func (s *Service) RevokeAgentTokens(ctx context.Context, q db.DBTX, agentID int64) (int64, error)                   // [6b]
 func RequireAdmin(p Principal) error // forbidden "admin token required"; shared by MintLeader/MintAdmin/ListAdmins
+
+// service.go, revoke.go [R11]: member admission and token revocation, in the caller's transaction.
+func (s *Service) AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, token string, err error) // was MintMember
+func (s *Service) CheckMemberName(ctx context.Context, q db.DBTX, name string) error
+type Scope struct{ /* one space, or every token */ }
+func InSpace(spaceID int64) Scope
+func Everywhere() Scope
+func (s *Service) Revoke(ctx context.Context, q db.DBTX, agentID int64, scope Scope) (int64, error) // replaces RevokeSpaceTokens and RevokeAgentTokens
 ```
 
 - Kind-conflict message becomes article-aware: `agent ops is an admin agent` vs `agent lead is a leader agent` (`auth/service.go:110` uses `a %s`). [4a]
@@ -197,21 +204,29 @@ func (s *Service) Leave(ctx, p, space) error  // !m.Joined() → forbidden "not 
 //   n := countParticipants(tx, spaceID); n == 0 → deleteSpace(tx, spaceID) and drop the hook entries.
 func (s *Service) RevokeAdmin(ctx context.Context, p auth.Principal, name string) (bool, error) // admins.go [6b]
 
-type accounts interface { // renamed from memberAccounts (service.go:16-21)
-    MintMember(ctx context.Context, tx db.DBTX, name string, spaceID int64) (agentID int64, token string, err error)
-    RevokeSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
-    CheckMemberName(ctx context.Context, q db.DBTX, name string) error
-    AdminAgent(ctx context.Context, q db.DBTX, name string) (int64, bool, bool, error) // [6b]
-    RevokeAgentTokens(ctx context.Context, q db.DBTX, agentID int64) (int64, error)    // [6b]
+type accounts interface { // Service's view of auth [R11: 2 methods, was 5]
+    AdminAgent(ctx context.Context, q db.DBTX, name string) (id int64, found, bootstrap bool, err error) // RevokeAdmin's lookup
+    Revoke(ctx context.Context, q db.DBTX, agentID int64, scope auth.Scope) (int64, error)               // InSpace on departure, Everywhere on RevokeAdmin
 }
 
-// admission.go [7]: AdmitMember also returns the member's agent id (invites addresses the task entry).
-func (s *Service) AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, space, token string, err error)
+// admission.go [7, R11]: the invite gate and the admission live in Admitter, apart from Service, so
+// invites (which admits through it) is built before the Service that takes invites as its
+// revocation hook. AdmitMember also returns the member's agent id (invites addresses the task entry).
+type memberAccounts interface { // Admitter's view of auth
+    CheckMemberName(ctx context.Context, q db.DBTX, name string) error
+    AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, token string, err error)
+}
+func NewAdmitter(r *Resolver, a memberAccounts, now func() time.Time) *Admitter
+func (a *Admitter) AuthorizeInvite(ctx context.Context, tx db.DBTX, p auth.Principal, space, name string) (int64, error)
+func (a *Admitter) AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Principal, space string) (int64, error)
+func (a *Admitter) AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, space, token string, err error)
 ```
 
 Revoke matrix [4c/4d] (`revoke.go:30-79`): leader caller → member targets only (unchanged); admin caller (`m.Admin`) → member and leader targets incl. the last leader; target with role `admin` → `conflict "ops is an admin of space demo; admins cannot be revoked from a space"` for every caller.
 
 Participant order [4d] (`repository.go:145-146`): `CASE role WHEN 'admin' THEN 0 WHEN 'leader' THEN 1 ELSE 2 END, name`.
+
+Hooks [R11] (`membership.go`, `Hooks{Departure, Creation, Revocation}`): departure = messaging, blackboards; creation = messaging; revocation = the `invites.Service` itself (`OnRevoke` deletes the revoked name's pending codes), so every write to `invites` goes through `invites.Service`. `CreationHook` stays although messaging is its only adapter: the `all` topic is a row in messaging's `topics` table, which spaces must not write, and spaces cannot call messaging directly because messaging already imports spaces (`Resolver`, `Membership`); the hook is the inward-pointing seam for that write.
 
 ### 3.3 `internal/inbox` [4d, 9, 12, 13a, 13b]
 
@@ -294,7 +309,7 @@ func NoticeAfter(ctx context.Context, n Noticer, p auth.Principal) (Notice, bool
 ### 3.4 `internal/invites` [2, 7, 10, W1b]
 
 ```go
-type admission interface { // invites/service.go:14-17
+type admission interface { // invites/service.go; satisfied by *spaces.Admitter [R11]
     AuthorizeInvite(ctx context.Context, tx db.DBTX, p auth.Principal, space, name string) (int64, error)
     AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, space, token string, err error) // [7]
     AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Principal, space string) (int64, error)                      // list/cancel gate [W1b, 10]
@@ -322,9 +337,10 @@ type Pending struct {
 func (s *Service) ListPending(ctx context.Context, p auth.Principal, space string) ([]Pending, error) // never the code [W1b]
 func (s *Service) ListOpen(ctx context.Context, spaceID int64) ([]Pending, error)             // ListPending without the gate; caller asks Membership.MaySeeInvites [R13]
 func (s *Service) CountOpen(ctx context.Context, spaceIDs []int64) (map[int64]int, error)     // open-invite counts of many spaces in one query, no gate (overview's GUI list) [R13; replaces CountPending]
+func (s *Service) OnRevoke(ctx context.Context, tx db.DBTX, spaceID int64, name string) (bool, error) // spaces.RevocationHook; replaces the dependency-free invites.Revocation [R11]
 ```
 
-`spaces.AuthorizeInvites`: resolve, `Leads()` else `forbidden "only leaders may list or cancel invites"` (`gui-invite-cancel.feature:106-116`). `Create` generates the invite id (8 random bytes, hex) from slice 10 on; `bus_invite_member`'s result does not expose it.
+`spaces.Admitter.AuthorizeInvites`: resolve, `MaySeeInvites()` else `forbidden "only leaders may list or cancel invites"` (`gui-invite-cancel.feature:106-116`). `Create` generates the invite id (8 random bytes, hex) from slice 10 on; `bus_invite_member`'s result does not expose it.
 
 ### 3.5 `internal/overview` (new) [8]
 

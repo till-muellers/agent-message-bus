@@ -58,12 +58,13 @@ func insertToken(ctx context.Context, q db.DBTX, hash string, agentID, spaceID i
 	return nil
 }
 
-// deleteSpaceTokens removes every token of agentID bound to spaceID.
-func deleteSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) error {
-	if _, err := q.ExecContext(ctx, `DELETE FROM tokens WHERE agent_id = ? AND space_id = ?`, agentID, spaceID); err != nil {
-		return fmt.Errorf("deleting space tokens: %w", err)
+// deleteSpaceTokens removes every token of agentID bound to spaceID and returns how many were removed.
+func deleteSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) (int64, error) {
+	res, err := q.ExecContext(ctx, `DELETE FROM tokens WHERE agent_id = ? AND space_id = ?`, agentID, spaceID)
+	if err != nil {
+		return 0, fmt.Errorf("deleting space tokens of agent %d: %w", agentID, err)
 	}
-	return nil
+	return rowsDeleted(res)
 }
 
 // listAdmins reads every admin agent by name with its token count and joined spaces.
@@ -107,6 +108,11 @@ func deleteAgentTokens(ctx context.Context, q db.DBTX, agentID int64) (int64, er
 	if err != nil {
 		return 0, fmt.Errorf("deleting tokens of agent %d: %w", agentID, err)
 	}
+	return rowsDeleted(res)
+}
+
+// rowsDeleted is the number of tokens a DELETE removed.
+func rowsDeleted(res sql.Result) (int64, error) {
 	n, err := res.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("counting deleted tokens: %w", err)

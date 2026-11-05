@@ -4,13 +4,13 @@ import (
 	"context"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
+	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
-// Revocation implements spaces.RevocationHook: revoking a name cancels its pending invite codes.
-// It holds no dependencies, so spaces can take it before the invites Service exists.
-type Revocation struct{}
-
-// OnRevoke deletes every invite for name in spaceID inside the revoking transaction.
-func (Revocation) OnRevoke(ctx context.Context, tx db.DBTX, spaceID int64, name string) (bool, error) {
+// OnRevoke cancels the pending invite codes of a revoked name: it deletes every invite for
+// name in spaceID inside the revoking transaction. It implements spaces.RevocationHook.
+func (s *Service) OnRevoke(ctx context.Context, tx db.DBTX, spaceID int64, name string) (bool, error) {
 	return deleteForName(ctx, tx, spaceID, name)
 }
+
+var _ spaces.RevocationHook = (*Service)(nil)

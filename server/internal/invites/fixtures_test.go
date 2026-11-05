@@ -27,7 +27,7 @@ type env struct {
 }
 
 // newEnv returns invites over real auth, spaces and inbox services, with leader lead of
-// space demo and Revocation wired as the spaces revocation hook.
+// space demo and the invites Service wired as the spaces revocation hook.
 func newEnv(t *testing.T) env {
 	t.Helper()
 	conn := dbtest.Open(t)
@@ -36,14 +36,15 @@ func newEnv(t *testing.T) env {
 	a := auth.NewService(conn, "admin-secret", now)
 	pub := broker.NewMemory(64)
 	ib := inbox.NewService(t.Context(), conn, pub, now)
-	hooks := spaces.Hooks{Revocation: []spaces.RevocationHook{Revocation{}}}
-	sp := spaces.NewService(conn, spaces.NewResolver(), a, ib, now, hooks)
+	r := spaces.NewResolver()
+	svc := NewService(conn, spaces.NewAdmitter(r, a, now), ib, now)
+	sp := spaces.NewService(conn, r, a, ib, now, spaces.Hooks{Revocation: []spaces.RevocationHook{svc}})
 	dbtest.SeedAgent(t, conn, 1, "lead", "leader")
 	lead := auth.Principal{Kind: auth.Leader, AgentID: 1, AgentName: "lead"}
 	if err := sp.Create(context.Background(), lead, "demo"); err != nil {
 		t.Fatalf("creating demo: %v", err)
 	}
-	return env{db: conn, auth: a, spaces: sp, ib: ib, pub: pub, svc: NewService(conn, sp, ib, now), clock: &clock, lead: lead}
+	return env{db: conn, auth: a, spaces: sp, ib: ib, pub: pub, svc: svc, clock: &clock, lead: lead}
 }
 
 // mustCreate creates an invite code for name in demo with the optional first prompt task.
