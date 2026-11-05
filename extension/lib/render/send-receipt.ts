@@ -4,7 +4,7 @@
  * waits in the inbox; a topic message counts its subscribers, the live ones first. Unknown fields are ignored; a
  * result without valid receipts (an older server, a changed shape) has no receipt text, so it stays JSON.
  */
-import { isSendTool } from "./outgoing-card.ts";
+import type { SendKind } from "./outgoing-card.ts";
 
 interface Receipt {
 	to: string;
@@ -32,10 +32,9 @@ function topicText(receipts: Receipt[]): string {
 	return `Delivered to ${receipts.length} subscriber(s)${list ? `: ${list}` : ""}.`;
 }
 
-/** The receipt text of a send tool's result; undefined for other tools and for results without valid receipts. */
-export function receiptText(tool: string, result: unknown): string | undefined {
-	if (!isSendTool(tool)) return undefined;
+/** The receipt text of the result of a send of this kind; undefined for a result without valid receipts. */
+export function receiptText(kind: SendKind, result: unknown): string | undefined {
 	const receipts = receiptsOf(result);
 	if (!receipts) return undefined;
-	return tool === "bus_send_direct" ? directText(receipts) : topicText(receipts);
+	return kind === "direct" ? directText(receipts) : topicText(receipts);
 }

@@ -8,7 +8,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { type JsonSchema, toZod } from "../bus/schema.ts";
 import { argText, fixedSender, outgoingCard } from "../render/outgoing-card.ts";
 import type { SpawnRequest, SpawnResult } from "./spawn.ts";
-import { presentationOf } from "../tools/presentation.ts";
+import { presentationOf } from "../tools/tool-policy.ts";
 import { toolResult } from "../tools/tool-result.ts";
 
 export const SPAWN_TOOL = "bus_spawn_worker";

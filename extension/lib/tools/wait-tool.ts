@@ -13,7 +13,7 @@ import type { Entry } from "../bus/entry.ts";
 import { toZod } from "../bus/schema.ts";
 import type { Dispatcher } from "../delivery/dispatcher.ts";
 import type { WaitFilter } from "../delivery/waiters.ts";
-import { presentationOf } from "./presentation.ts";
+import { presentationOf } from "./tool-policy.ts";
 import { type ToolResult, toolResult } from "./tool-result.ts";
 
 export const WAIT_TOOL = "bus_wait";

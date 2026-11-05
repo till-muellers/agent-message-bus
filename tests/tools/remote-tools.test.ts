@@ -172,10 +172,11 @@ describe("registerRemoteTools", () => {
 		expect((await tools[0].execute("id", {})).content[0].text).toBe(JSON.stringify({ name: "w" }, null, 2));
 	});
 
-	test("a send result reads as its delivery receipt; a result without receipts stays JSON", async () => {
+	test("a send result reads as its delivery receipt; a result without receipts, or of another tool, stays JSON", async () => {
 		const results: Record<string, unknown> = {
 			bus_send_direct: { ok: true, receipts: [{ to: "peer", delivery: "queued" }] },
 			bus_send_topic: { ok: true },
+			bus_add_post: { postId: 7, receipts: [{ to: "peer", delivery: "live" }] },
 		};
 		const fetchFn: FetchLike = async url => {
 			const name = url.split("/").pop() ?? "";
@@ -183,9 +184,10 @@ describe("registerRemoteTools", () => {
 		};
 		const { tools, register } = setup(fetchFn);
 		await register();
-		const [direct, topic] = tools;
+		const [direct, topic, post] = tools;
 		expect((await direct.execute("id", { space: "alpha", to: "peer", body: "hi" })).content[0].text).toBe("Queued for peer; it is not connected right now.");
 		expect((await topic.execute("id", { space: "alpha", topic: "dev", body: "hi" })).content[0].text).toBe(JSON.stringify({ ok: true }, null, 2));
+		expect((await post.execute("id", { space: "alpha", threadId: 1, body: "hi" })).content[0].text).toBe(JSON.stringify(results.bus_add_post, null, 2));
 	});
 
 	test("the send tools render their call as an outgoing card from the session's agent; other tools keep omp's", async () => {
