@@ -49,7 +49,7 @@ Every code claim below is anchored to the repo as of `526635d` (`git log -1`).
 
 ```
 server/
-  main.go                       wiring only (handles Build error; server.NewHTTPServer) [4a, 9]
+  main.go                       CLI dispatch and wiring only: config, DB, migrations, server.Serve [4a, 9, R17]
   cmd/tooldoc/                  unchanged
   migrations/                   0001_schema (+ named migrations, numbered at merge) [1,7,13a,10]
   internal/
@@ -373,7 +373,7 @@ Registry test (table-driven) asserts for every tool: `Access != ""`, `strings.Co
 
 | Package | Change |
 |---|---|
-| `server` | `Build(ctx, streamRoot, conn, adminToken, shutdown) (api, web http.Handler, error)` — calls `authSvc.Bootstrap(ctx)` [4a]; `web` is the GUI mux (only `/web/*`) [W1a]. `protocol.go`: `const Protocol = 2`; `healthz` sets `Agent-Bus-Protocol` [7]. `httpserver.go`: `NewHTTPServer(h http.Handler) *http.Server` with only `ReadHeaderTimeout: 10s`, so `bus_wait` and streams are never cut by a write/idle timeout (CR-7, `contracts.md` §2.5) [9]; reused for the GUI server [W1a]. `run.go`: `Run` serves the API and the GUI server on their own listeners via `httpserver.Serve` and shuts both down gracefully; the first error stops both [W1a]. `GET /v1/guide` [11]. |
+| `server` | `Build(ctx, streamRoot, conn, adminToken, shutdown) (api, web http.Handler, error)` — calls `authSvc.Bootstrap(ctx)` [4a]; `web` is the GUI mux (only `/web/*`) [W1a]. `protocol.go`: `const Protocol = 2`; `healthz` sets `Agent-Bus-Protocol` [7]. `httpserver.go`: `NewHTTPServer(h http.Handler) *http.Server` with only `ReadHeaderTimeout: 10s`, so `bus_wait` and streams are never cut by a write/idle timeout (CR-7, `contracts.md` §2.5) [9]; reused for the GUI server [W1a]. `run.go`: `Run` serves the API and the GUI server on their own listeners via `httpserver.Serve` and shuts both down gracefully; the first error stops both [W1a]. `serve.go`: `Serve(ctx, cfg, conn, adminToken)` builds the handlers, opens the listeners (`listen.go`: the API on `AMB_ADDR`, the GUI on `AMB_WEB_ADDR` unless it is empty or `off`; a failed GUI listen closes the API listener), publishes the instance file and calls `Run`; `main.go` only calls it [R17]. `GET /v1/guide` [11]. |
 | `admin` | token-swap handler requires `p.Bootstrap` else `forbidden "only the bootstrap admin may replace the instance admin token"`; shutdown: any admin [6a] |
 | `rpc` | success body `{"result": …, "mail"?: Notice}` via `inbox.TakeNotice` [13b]; `ListTools(reg)` and `CallTool(reg, notices)` are mounted by `server.Routes` behind `auth.Middleware`, with no route table or principal check of their own [R14] |
 | `mcpserver` | `NewHandler(reg, a, notices)`, instructions = `guide.Text` [11]; trailing hint `TextContent` [13b]; tools run through `reg.Call`; an error without kind is logged and fails the call as the protocol error `internal error`, without its detail, like the HTTP 500 [R14] |
