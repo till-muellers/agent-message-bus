@@ -82,3 +82,35 @@ Input for issue-tracker grooming: one row per slice, ids exactly as in `slices.m
 - **P2b** is built once (first run closes M1) and then runs at every release; its later runs are not new slices.
 - **Merge early:** 3 touches every tool file; open 6a/8/9/10 branches after it merges (`slices.md` slice 3).
 - **Slice 0** is the one R11 size exception (a verbatim copy of reviewed files).
+
+## M4 — architecture review follow-ups
+
+Added 2026-11-05 from [`review-2026-11.md`](review-2026-11.md) (snapshot `668f73d`). Bead epic `agent-message-bus-lpa`; the slice descriptions live in the beads (`bd show agent-message-bus-lpa.<n>`), the findings in the review. Every slice is "no behaviour change" except R15 (explicit GUI capabilities, `contracts.md` §10.2) and R14 (uniform error kinds, `contracts.md` §11), which change the contract first. None is extension-facing, so `Protocol` stays 2.
+
+| order | id | bead | title | findings | track | size | depends_on |
+|---|---|---|---|---|---|---|---|
+| 1 | R1 | lpa.1 | Go↔TS contract fixtures for /web/api | G1 | server-web, gui | M | — |
+| 2 | R2 | lpa.2 | Tool schema ↔ decoder invariant | T1 | server | S | — |
+| 3 | R3 | lpa.3 | Release gated on full CI + pipeline pins | P1, P3 | pipeline | S | — |
+| 4 | R4 | lpa.4 | GUI layering fitness test | G6 | gui | S | — |
+| 5 | R5 | lpa.5 | Move ActiveCredentials to bus/, conflict.ts to delivery/ | X3, X4 | ext-structure | S | — |
+| 6 | R6 | lpa.6 | Inbox ledger: one owner for delivery state | X1, X2, X10 | ext-delivery | M | R5 |
+| 7 | R7 | lpa.7 | One tool policy table in the extension | X5 | ext-delivery | S | — |
+| 8 | R9 | lpa.9 | Server tests assert through interfaces | S7 | server | S | — |
+| 9 | R10 | lpa.10 | Transaction seam out of inbox | S1, S4, S5 | server | M | R9 |
+| 10 | R14 | lpa.14 | Tool registry call path and uniform error kinds | T3, T4, T6, T8 | server | M | R2 |
+| 11 | R13 | lpa.13 | Web reuses space rules; state read moves into overview | T2, T7, S2 | server-web | M | R10 |
+| 12 | R15 | lpa.15 | Explicit GUI capabilities in the state contract | G3, G4 | server-web, gui | M | R1, R13 |
+| 13 | R8 | lpa.8 | Extension wiring: command handler, RootPublication, gate lifetime | X6, X7, X8 | ext-structure | M | R5 |
+| 14 | R11 | lpa.11 | spaces hooks and auth surface | S8, S9 | server | M | R10 |
+| 15 | R12 | lpa.12 | inbox read policy and shared mail-notice helper | S10, T5 | server | S | R10 |
+| 16 | R16 | lpa.16 | GUI internals: patch planner, one Intents interface, stale-load owner | G2, G5, G7 | gui | M | R4 |
+| 17 | R20 | lpa.22 | Decide the consumer-side interface rule (owner decision) | S3 | decision | — | — |
+| 18 | R21 | lpa.20 | Drop single-adapter consumer interfaces (per R20) | S3 | server | M | R20, R10, R13 |
+| 19 | R17 | lpa.17 | main.go listener lifecycle into internal/server | T9 | server | S | — |
+| 20 | R18 | lpa.18 | Tests for the git index reader | P4 | ext-structure | S | — |
+| 21 | R19 | lpa.19 | Entry label in one render module | X9 | ext-delivery | S | R6 |
+| 22 | R22 | lpa.21 | Refresh design docs after the follow-ups | doc drift, P2 | docs | S | R5, R6, R8, R10, R13, R14 |
+| — | R23 | lpa.23 | Neutral message type instead of inbox.Entry (deferred) | S6 | server | M | R10 |
+
+**Parallel tracks:** server (R9 → R10 → R11, R12, R13 → R15), extension (R5 → R6, R8 → R19; R7 independent), GUI (R4 → R16; R1 → R15), pipeline (R3). Fitness slices R1–R4 go first: they lock the contracts before the refactors move code. R10 and R6 are the two M-sized refactors with the most leverage; R10 and R13 touch the same server files, so they run in sequence on one worker.
