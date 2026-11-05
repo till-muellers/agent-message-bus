@@ -8,6 +8,8 @@ import (
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
@@ -72,5 +74,18 @@ func mustCreate(t *testing.T, e env, p auth.Principal, space string) {
 	t.Helper()
 	if err := e.svc.Create(context.Background(), p, space); err != nil {
 		t.Fatalf("creating %s: %v", space, err)
+	}
+}
+
+// wantSpace asserts through the service whether space exists.
+func wantSpace(t *testing.T, e env, space string, exists bool) {
+	t.Helper()
+	_, err := e.svc.Participants(context.Background(), auth.Principal{Kind: auth.Admin}, space)
+	if !exists {
+		apperrtest.WantKind(t, err, apperr.NotFound, "space "+space+" not found")
+		return
+	}
+	if err != nil {
+		t.Fatalf("space %s: %v", space, err)
 	}
 }

@@ -9,22 +9,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 )
 
-// wantGone asserts through the service that space no longer exists. The rows other
-// features keep for it are covered by the schema-level test in cascade_test.go.
-func wantGone(t *testing.T, e env, space string) {
-	t.Helper()
-	_, err := e.svc.Participants(context.Background(), auth.Principal{Kind: auth.Admin}, space)
-	apperrtest.WantKind(t, err, apperr.NotFound, "space "+space+" not found")
-}
-
-// wantExists asserts through the service that space still exists.
-func wantExists(t *testing.T, e env, space string) {
-	t.Helper()
-	if _, err := e.svc.Participants(context.Background(), auth.Principal{Kind: auth.Admin}, space); err != nil {
-		t.Fatalf("space %s: %v", space, err)
-	}
-}
-
 func TestLastDepartureDeletesSpace(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -38,7 +22,6 @@ func TestLastDepartureDeletesSpace(t *testing.T) {
 		{"last member of a leaderless space leaves", func(t *testing.T, e env, lead, ops auth.Principal) error {
 			mustCreate(t, e, lead, "gamma")
 			worker, _ := inviteMember(t, e, lead, "gamma", "worker")
-			seedInbox(t, e, auth.Principal{AgentID: worker.AgentID, SpaceID: worker.SpaceID})
 			wantRevokeIn(t, e, ops, "gamma", "lead")
 			return e.svc.Leave(context.Background(), worker, "gamma")
 		}},
@@ -64,7 +47,10 @@ func TestLastDepartureDeletesSpace(t *testing.T) {
 			if err := tc.depart(t, e, lead, ops); err != nil {
 				t.Fatalf("departure: %v", err)
 			}
-			wantGone(t, e, "gamma")
+			wantSpace(t, e, "gamma", false)
+			if n, err := e.inbox.Count(context.Background(), lead); err != nil || n != 0 {
+				t.Fatalf("departure hook entries for lead = %d, %v; want dropped", n, err)
+			}
 		})
 	}
 }
@@ -84,7 +70,7 @@ func TestLoneLeaderLeaves(t *testing.T) {
 	if err := e.svc.Leave(context.Background(), lead, "solo"); err != nil {
 		t.Fatalf("lone leader leaves: %v", err)
 	}
-	wantGone(t, e, "solo")
+	wantSpace(t, e, "solo", false)
 }
 
 func TestLastLeaderStillRefusedWhileOthersRemain(t *testing.T) {
@@ -95,9 +81,9 @@ func TestLastLeaderStillRefusedWhileOthersRemain(t *testing.T) {
 	mustCreate(t, e, lead, "demo")
 	mustJoin(t, e, ops, "demo")
 	apperrtest.WantKind(t, e.svc.Leave(ctx, lead, "demo"), apperr.Conflict, "last leader cannot leave; delete the space instead")
-	wantExists(t, e, "demo")
+	wantSpace(t, e, "demo", true)
 	if err := e.svc.Leave(ctx, ops, "demo"); err != nil {
 		t.Fatalf("admin leaves while the leader remains: %v", err)
 	}
-	wantExists(t, e, "demo")
+	wantSpace(t, e, "demo", true)
 }

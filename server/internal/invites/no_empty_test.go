@@ -18,14 +18,14 @@ func TestPendingInviteDoesNotKeepSpace(t *testing.T) {
 	if err := e.spaces.Create(ctx, ops, "gamma"); err != nil {
 		t.Fatalf("creating gamma: %v", err)
 	}
-	if _, err := e.svc.Create(ctx, ops, "gamma", "late", nil); err != nil {
+	inv, err := e.svc.Create(ctx, ops, "gamma", "late", nil)
+	if err != nil {
 		t.Fatalf("inviting late: %v", err)
 	}
 	if err := e.spaces.Leave(ctx, ops, "gamma"); err != nil {
 		t.Fatalf("admin leaves: %v", err)
 	}
-	_, err := e.spaces.Participants(ctx, ops, "gamma")
+	_, err = e.spaces.Participants(ctx, ops, "gamma")
 	apperrtest.WantKind(t, err, apperr.NotFound, "space gamma not found")
-	_, err = e.svc.ListPending(ctx, ops, "gamma")
-	apperrtest.WantKind(t, err, apperr.NotFound, "space gamma not found")
+	refused(t, e, inv.Code)
 }

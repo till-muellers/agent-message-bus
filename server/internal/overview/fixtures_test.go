@@ -77,11 +77,9 @@ func (w *world) seed(t *testing.T) {
 
 func (w *world) spaceID(t *testing.T, name string) int64 {
 	t.Helper()
-	var id int64
-	if err := w.conn.QueryRowContext(t.Context(), `SELECT id FROM spaces WHERE name = ?`, name).Scan(&id); err != nil {
-		t.Fatalf("space %s: %v", name, err)
-	}
-	return id
+	m, err := spaces.NewResolver(w.conn).Resolve(t.Context(), w.lead, name)
+	w.must(t, err)
+	return m.SpaceID
 }
 
 func (w *world) must(t *testing.T, err error) {

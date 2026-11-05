@@ -251,12 +251,13 @@ type seen struct {
 	threads      []blackboards.RecentThread
 }
 
-// visibleState reads, through the feature services, what worker, lead and ops see: their
-// waiting inbox entries, the participants, their topic and thread subscriptions and the boards.
+// visibleState reads, through the feature services, what worker, peer, lead and ops see:
+// their waiting inbox entries, the participants, their topic and thread subscriptions and
+// the boards.
 func visibleState(t *testing.T, w *world) map[string]seen {
 	t.Helper()
 	state := map[string]seen{}
-	for _, p := range []auth.Principal{w.wkr, w.lead, w.ops} {
+	for _, p := range []auth.Principal{w.wkr, w.peer, w.lead, w.ops} {
 		var s seen
 		var err error
 		s.waiting, err = w.ib.Count(t.Context(), p)

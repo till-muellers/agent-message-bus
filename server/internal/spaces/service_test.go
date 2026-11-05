@@ -414,11 +414,7 @@ func TestCreationHook(t *testing.T) {
 			if hook.calls[0] != wantM || wantM.SpaceID == 0 {
 				t.Fatalf("membership = %+v, want %+v", hook.calls[0], wantM)
 			}
-			if tc.want {
-				wantExists(t, e, "alpha")
-			} else {
-				wantGone(t, e, "alpha")
-			}
+			wantSpace(t, e, "alpha", tc.want)
 		})
 	}
 }
