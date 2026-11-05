@@ -232,7 +232,7 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 | `views/*.ts` | assert the VNode tree (`h()` output): texts, order, keys, links (`hrefOf`), buttons per kind (no admin nav for a member) |
 | `view/plan-patch.ts` | `planPatch` and `samePlace` are pure and tested: reuse in place, insert, remove, keyed moves, tag change, nodes the patcher never rendered |
 | `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage). `mount.ts` only applies `planPatch`. |
-| `scripts/build.ts` | builds into a temp `--out` (in-process and through the command line); asserts `index.html` references an existing `assets/main-*.js` and `assets/style-*.css` |
+| `scripts/build.ts` | builds into a temp `--out` (in-process and through the command line); asserts `index.html` references an existing `assets/main-*.js` and `assets/style-*.css`; each build test has a 60 s limit (the command-line child 30 s) instead of bun's 5 s default, so a busy machine slows them down instead of failing them |
 | fitness | `tests/no-raw-html.test.ts`: no `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` in `gui/src`; `tests/layout.test.ts` (R4): browser globals only in the four DOM-edge modules (§1), no `state/*` → `views/*` import, every relative import resolves, no import cycle |
 
 Server behaviour (cookie flags, 401/403/405, CSRF binding, loopback rule) is tested in Go by Arch-server's W slices; the GUI tests only the client's side of each contract.
