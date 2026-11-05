@@ -1,6 +1,6 @@
 /**
- * The gate that keeps the extension off a server that is too old: it probes `GET /healthz` once per url
- * and refuses the server when its protocol is below the minimum this plugin needs
+ * The gate that keeps the extension off a server that is too old: it probes `GET /healthz` once per url and
+ * connection start and refuses the server when its protocol is below the minimum this plugin needs
  * (`docs/design/arch/client.md` §8.1).
  *
  * A probe that fails (no answer, a network error) is not a refusal: the normal path fails and retries
@@ -15,13 +15,15 @@ import { tooOld } from "../version/server-protocol.ts";
 export type ServerVerdict = "ok" | { refused: string };
 
 export interface ServerGate {
-	/** Checks the server's protocol; the probe of a url is cached. */
+	/** Checks the server's protocol; the probe of a url is cached until the next connection start. */
 	check(url: string): Promise<ServerVerdict>;
 	/** The last answered probe; undefined when none answered. */
 	last(): { url: string; protocol: number | undefined } | undefined;
+	/** A new connection start: the next check of every url probes again. */
+	startOver(): void;
 }
 
-/** The gate of one session: it probes a url once and remembers what it answered. */
+/** The gate of one session: it probes a url once per connection start and remembers what it answered. */
 export function createServerGate(fetchFn: FetchLike): ServerGate {
 	const probes = new Map<string, Promise<{ protocol: number | undefined } | undefined>>();
 	let last: { url: string; protocol: number | undefined } | undefined;
@@ -42,5 +44,5 @@ export function createServerGate(fetchFn: FetchLike): ServerGate {
 		const refusal = tooOld(answered.protocol, base);
 		return refusal ? { refused: refusal } : "ok";
 	};
-	return { check, last: () => last };
+	return { check, last: () => last, startOver: () => probes.clear() };
 }

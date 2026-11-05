@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { acceptInvite } from "../../extension/lib/commands/accept.ts";
+import { type AcceptDeps, acceptInvite } from "../../extension/lib/commands/accept.ts";
 import { createClient } from "../../extension/lib/bus/client.ts";
 import { createSessionCredentials } from "../../extension/lib/session/session-credentials.ts";
 import type { ActiveCredentials } from "../../extension/lib/bus/credentials.ts";
 import { CODE, fakeBus, URL_ } from "../fakes.ts";
-import type { ServerGate } from "../../extension/lib/connection/server-gate.ts";
 
 /** A gate that refuses the server the way a too old one does. */
-const refusingGate: ServerGate = { check: async () => ({ refused: "too old" }), last: () => undefined };
+const refusingGate: AcceptDeps["gate"] = { check: async () => ({ refused: "too old" }) };
 
 function setup(options: { persisted?: boolean } = {}) {
 	const bus = fakeBus();
@@ -20,7 +19,7 @@ function setup(options: { persisted?: boolean } = {}) {
 			return options.persisted ?? true;
 		},
 	};
-	const gate: ServerGate = { check: async () => "ok", last: () => undefined };
+	const gate: AcceptDeps["gate"] = { check: async () => "ok" };
 	return { bus, saved, session, gate, deps: { client: createClient(bus.fetchFn), session, identity, gate } };
 }
 

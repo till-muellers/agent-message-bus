@@ -68,7 +68,7 @@ There are **two** numbers, and they must not be confused.
 
 ### 3.1 Plugin version
 
-- `extension/lib/version/plugin-version.ts` reads `package.json` next to the package root (`new URL("../../../package.json", import.meta.url)` from `extension/lib/version/`) once at load. No second constant (findings R2).
+- `extension/lib/version/plugin-version.ts` reads `package.json` next to the package root (`new URL("../../../package.json", import.meta.url)` from `extension/lib/version/`) once at load: `createBusExtension` starts the read in its closure, which every session of the process shares. No second constant (findings R2).
 - The root `package.json` is always present in a git-dependency install (it is the manifest omp reads: `pkg.omp ?? pkg.pi`, `CA/extensibility/plugins/installer.ts:70`).
 
 ### 3.2 Server protocol

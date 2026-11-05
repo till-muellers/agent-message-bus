@@ -57,12 +57,12 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 |---|---|---|
 | `lib/bus/` | HTTP wire to the server: client, SSE parser, JSON-schema→zod, error wording, the `Entry` wire type, the `ActiveCredentials` wire shape (`credentials.ts`, with `trimUrl`), `/healthz` probe | `shared/` |
 | `lib/session/` | Who this session is: credential store, env, the single credential owner, accepted identity + its file, root-identity registry, `createSession` | `bus/`, `shared/` |
-| `lib/connection/` | Connect/disconnect: restart, tool on/off, server-protocol gate | `session/`, `tools/`, `delivery/`, `bus/`, `version/` |
+| `lib/connection/` | Connect/disconnect: restart, the session's identity and its root publication, the inbox of a connection start, tool on/off, server-protocol gate | `session/`, `tools/`, `delivery/`, `bus/`, `version/`, `render/` (status line) |
 | `lib/tools/` | Mirroring server tools: the tool policy table (selection, presentation, attribution, membership refresh, send kind), remote tool definition, local `bus_wait`, subagent attribution, tool-result shape | `bus/`, `delivery/` (wait only), `render/` (tool renderers) |
 | `lib/delivery/` | Inbox → omp: stream loop, runner, 409 warning, inbox ledger (delivery state and ack watermark of one start), entry routing, delivery policy, acker, consumption observer, post-notice coalescing, `pi.events` publishing | `bus/`, `render/` |
 | `lib/render/` | What the model and the user see: envelope text, escaping, message details, card renderer, tool call/result renderers, status line | `bus/` (types only) |
 | `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `delivery/` (consumption observer is composed here) |
-| `lib/commands/` | `/bus` command logic and its sub-actions (accept, invite flag, status) | `session/`, `connection/`, `local-server/`, `spawn/`, `version/` |
+| `lib/commands/` | `/bus` command logic and its sub-actions (accept, invite flag, status); builds its deps from the session | `session/`, `connection/`, `local-server/`, `spawn/`, `version/` |
 | `lib/local-server/` | `/bus server start|stop|status`, binary resolution, release download | `process/`, `bus/` |
 | `lib/spawn/` | Worker start: invite + launch, `bus_spawn_worker` tool, forwarded plugin flags, worker plugin-version check (S1) | `launch/`, `bus/`, `version/`, `process/`, `render/` (outgoing card) |
 | `lib/launch/` | Terminal launchers (unchanged) | `process/` |
@@ -105,7 +105,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a), `bus/credentials.ts` (R5); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b), `tools/tool-policy.ts` (R7: replaces `tool-selection.ts`, `presentation.ts` and `membership-refresh.ts`); `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/inbox-ledger.ts`, `delivery/entry-routing.ts`, `delivery/hand-over-progress.ts` (R6; they replace `dispatcher.ts` (E1), `ack-watermark.ts`, `consumer.ts` (E2) and `delivery-start.ts` (bug 0de.23)); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a), `bus/credentials.ts` (R5); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a), `connection/root-publication.ts` (R8, out of `session/root-identities.ts`), `connection/session-view.ts`, `connection/connection-identity.ts`, `connection/connection-inbox.ts`, `connection/connection-tools.ts` (R8, split out of `connection.ts`); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b), `tools/tool-policy.ts` (R7: replaces `tool-selection.ts`, `presentation.ts` and `membership-refresh.ts`); `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/inbox-ledger.ts`, `delivery/entry-routing.ts`, `delivery/hand-over-progress.ts` (R6; they replace `dispatcher.ts` (E1), `ack-watermark.ts`, `consumer.ts` (E2) and `delivery-start.ts` (bug 0de.23)); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -562,8 +562,8 @@ export function probeProtocol(fetchFn: FetchLike, url: string): Promise<number |
 // lib/version/server-protocol.ts
 export const MIN_SERVER_PROTOCOL = 2;   // raised in the PR that starts depending on a newer server
 export function tooOld(found: number | undefined): string | undefined; // the refusal text of the spec, or undefined
-// lib/connection/server-gate.ts — caches one probe per url per connection start
-export interface ServerGate { check(url: string): Promise<"ok" | { refused: string }>; last(): { url: string; protocol: number | undefined } | undefined; }
+// lib/connection/server-gate.ts — caches one probe per url per connection start: `connection.restart()` calls startOver()
+export interface ServerGate { check(url: string): Promise<"ok" | { refused: string }>; last(): { url: string; protocol: number | undefined } | undefined; startOver(): void; }
 ```
 
 - Checked **before** `/v1/invites/accept` (accept path in `commands/accept.ts`) and **before** registering/activating tools in `connection.restart()`. Refusal: no tools activated, no stream, notify `agent-bus: the server at <url> is too old (protocol none, this plugin needs 2); upgrade the agent-message-bus server`.
@@ -604,13 +604,17 @@ export function skewError(worker: string | undefined, own: string): string | und
 ```ts
 // index.ts — wiring only
 export function createBusExtension(options?: BusExtensionOptions): (pi: ExtensionAPI) => Promise<void>;
-//   closure (shared by root + subagents): roots = createRootIdentities(), pluginVersion promise
-//   per session: createSession, registerBusCommand, registerSessionEvents, registerContextHandler, registerEntryCard
+//   closure (shared by root + subagents): roots = createRootIdentities(), the pluginVersion promise (package.json read once at load)
+//   per session: createSession (with its own ServerGate), registerBusCommand(pi, session, tools), registerSessionEvents, the context handler, registerEntryCard
 
-// lib/connection/connection.ts
+// lib/commands/command.ts — builds the deps of one /bus call from the session and the command tools (no bag in index.ts)
+export function commandDeps(session: CommandSession, tools: CommandTools, cwd: string): CommandDeps;
+
+// lib/connection/connection.ts — composes connection-identity.ts (credentials + root-publication.ts), connection-inbox.ts
+// (ledger per start, stream, status line, bus_wait deps) and connection-tools.ts (gate, registration, activation)
 export interface Connection {
 	getActive(): ActiveCredentials | undefined;
-	restart(): Promise<void>;   // new inbox ledger → resolve → publish/withdraw root identity → gate → register selected tools → stream → activate
+	restart(): Promise<void>;   // new inbox ledger → gate.startOver → resolve → publish/withdraw root identity → gate → register selected tools → stream → activate
 	logout(): Promise<void>;
 	stop(): void;
 	ledger(): InboxLedger;      // the current start's

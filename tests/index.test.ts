@@ -632,6 +632,15 @@ describe("accepted identity", () => {
 		expect(callsTo(bus, "/v1/inbox/stream")).toEqual([]);
 	});
 
+	test("every connection start probes the server protocol again", async () => {
+		const bus = fakeBus({ list: [listSpaces] });
+		const app = await boot({ fetchFn: bus.fetchFn, env: { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" } });
+		await app.emit("session_start");
+		await app.emit("session_switch", { type: "session_switch", reason: "new" });
+		await app.emit("session_shutdown");
+		expect(callsTo(bus, "/healthz")).toHaveLength(2);
+	});
+
 	test("session_switch to a new session drops the accepted token and deactivates exactly the extension's bus tools", async () => {
 		const session: BootSession = {};
 		const { app, dir } = await worker(session);

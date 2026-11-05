@@ -15,7 +15,7 @@ export interface AcceptDeps {
 	session: Pick<SessionCredentials, "inviteAccepted">;
 	identity: Pick<SessionIdentity, "save">;
 	/** Keeps the extension off a server that is too old; checked before the code is posted. */
-	gate: ServerGate;
+	gate: Pick<ServerGate, "check">;
 }
 
 /** A redeemed invite: the reply to show. The first prompt of the inviting leader arrives as a direct message. */

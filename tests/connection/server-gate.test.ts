@@ -59,6 +59,20 @@ describe("the server gate", () => {
 		expect(calls).toBe(1);
 	});
 
+	test("a new connection start probes the url again", async () => {
+		const { fetchFn } = fakeHealth(2);
+		let calls = 0;
+		const counting: FetchLike = async (url, init) => {
+			calls++;
+			return fetchFn(url, init);
+		};
+		const gate = createServerGate(counting);
+		await gate.check("http://bus.test");
+		gate.startOver();
+		await gate.check("http://bus.test");
+		expect(calls).toBe(2);
+	});
+
 	test("remembers the last answered probe for the status line", async () => {
 		const { fetchFn } = fakeHealth(2);
 		const gate = createServerGate(fetchFn);

@@ -28,17 +28,17 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { agentConfigDir } from "./lib/shared/credential-store.ts";
 import { createClient, type FetchLike } from "./lib/bus/client.ts";
-import { COMMAND_DESCRIPTION, runCommand } from "./lib/commands/command.ts";
-import { createServerGate, type ServerGate } from "./lib/connection/server-gate.ts";
+import { COMMAND_DESCRIPTION, type CommandTools, commandDeps, runCommand } from "./lib/commands/command.ts";
+import { createServerGate } from "./lib/connection/server-gate.ts";
 import { createContextHandler } from "./lib/context/context-handler.ts";
 import { registerEntryCard } from "./lib/render/entry-card.ts";
 import { createInviteFlag } from "./lib/commands/invite-flag.ts";
 import { findOnPath, resolveBinary } from "./lib/local-server/binary.ts";
 import { createServerCli, type ServerCli } from "./lib/local-server/server-cli.ts";
 import { consumeEnv, type BusEnv } from "./lib/session/env.ts";
-import { configDir, createCredentialStore, type CredentialStore } from "./lib/session/stored-credentials.ts";
+import { configDir, createCredentialStore } from "./lib/session/stored-credentials.ts";
 import { type Session, type SessionContext, createSession } from "./lib/session/session.ts";
-import { createRootIdentities } from "./lib/session/root-identities.ts";
+import { createRootIdentities, type RootIdentities } from "./lib/session/root-identities.ts";
 import type { SessionChange } from "./lib/session/session-identity.ts";
 import { errorMessage } from "./lib/bus/errors.ts";
 import { announceInstance } from "./lib/delivery/bus-events.ts";
@@ -104,51 +104,26 @@ function workerSpawner(launchContext: LaunchContext, options: BusExtensionOption
 	return (req, signal) => spawnWorker(deps, req, signal);
 }
 
-function registerBusCommand(
-	pi: ExtensionAPI,
-	store: CredentialStore,
-	session: Session,
-	server: ServerCli,
-	spawn: Spawn,
-	ownVersion: string,
-	installed: () => Promise<string | undefined>,
-	gate: ServerGate,
-): void {
+/** `/bus`: each call runs in the session's current omp context. */
+function registerBusCommand(pi: ExtensionAPI, session: Session, tools: CommandTools): void {
 	pi.registerCommand("bus", {
 		description: COMMAND_DESCRIPTION,
 		handler: async (args: string | string[] | undefined, ctx) => {
 			await session.setContext(ctx);
-			const { client, credentials, restart, logout, clearAccepted } = session;
-			const accept = async (url: string, code: string) => session.join(await session.accept(url, code));
-			const spawnHere = (req: { space: string; name: string; task?: string }) => spawn({ ...req, cwd: ctx.cwd });
-			const deps = {
-				store,
-				client,
-				session: credentials,
-				server,
-				restart,
-				stop: logout,
-				accept,
-				clearAccepted,
-				spawn: spawnHere,
-				pluginVersion: ownVersion,
-				installedPluginVersion: installed,
-				gate,
-			};
-			const { message, level } = await runCommand(args, deps);
+			const { message, level } = await runCommand(args, commandDeps(session, tools, ctx.cwd));
 			ctx.ui.notify(message, level);
 		},
 	});
 }
 
 /** Session start redeems `--bus-accept` once; start, switch and branch re-key the accepted token and reconnect. */
-function registerSessionEvents(pi: ExtensionAPI, store: CredentialStore, session: Session, spawn: Spawn): void {
+function registerSessionEvents(pi: ExtensionAPI, session: Session, spawn: Spawn): void {
 	// The local tools never reach a subagent: they are registered with the first main session.
 	let localToolsRegistered = false;
 	const redeemFlag = createInviteFlag({
 		flag: name => pi.getFlag(name),
 		isSub: session.isSub,
-		storedUrl: async () => (await store.load())?.url,
+		storedUrl: async () => (await session.store.load())?.url,
 		accept: session.accept,
 		warn: session.warn,
 	});
@@ -178,10 +153,28 @@ function registerSessionEvents(pi: ExtensionAPI, store: CredentialStore, session
 	pi.on("session_shutdown", () => session.shutdown());
 }
 
+/** The session of one omp session: its credentials, store, client and protocol gate. */
+function sessionOf(pi: ExtensionAPI, options: BusExtensionOptions, env: NodeJS.ProcessEnv, busEnv: BusEnv, roots: RootIdentities): Session {
+	return createSession({
+		pi,
+		store: createCredentialStore(env),
+		busEnv,
+		dir: configDir(env),
+		client: createClient(options.fetchFn),
+		localTools: [SPAWN_TOOL],
+		sleep: options.sleep,
+		gate: createServerGate(options.fetchFn ?? fetch),
+		backlogTimeoutMs: options.backlogTimeoutMs,
+		roots,
+	});
+}
+
 export function createBusExtension(options: BusExtensionOptions = {}): (pi: ExtensionAPI) => Promise<void> {
 	// omp binds one instance per session but loads the module once: the main session and its
 	// subagents share this closure, and with it the identities the main sessions publish.
 	const roots = createRootIdentities();
+	// This plugin's version is the protocol the workers must understand; it is read once at load.
+	const ownVersion = pluginVersion().catch(() => "unknown");
 	return async pi => {
 		// An installed plugin and a working-tree copy can both load into one session: only the first one runs.
 		if (announceInstance(pi.events).deferred()) {
@@ -190,33 +183,19 @@ export function createBusExtension(options: BusExtensionOptions = {}): (pi: Exte
 		}
 		const env = options.env ?? process.env;
 		const busEnv = consumeEnv(env);
-		const store = createCredentialStore(env);
-		const client = createClient(options.fetchFn);
-		const gate = createServerGate(options.fetchFn ?? fetch);
-		const session = createSession({
-			pi,
-			store,
-			busEnv,
-			dir: configDir(env),
-			client,
-			localTools: [SPAWN_TOOL],
-			sleep: options.sleep,
-			gate,
-			backlogTimeoutMs: options.backlogTimeoutMs,
-			roots,
-		});
+		const session = sessionOf(pi, options, env, busEnv, roots);
 		// Every model request acks the entries it carried.
 		pi.on("context", createContextHandler({ consume: session.consume, block: session.contextBlock }));
 		registerEntryCard(pi);
 		const which = options.which ?? ((name: string) => findOnPath(name, env.PATH));
-		// This plugin's version is the protocol the workers must understand; it is read once at load.
-		const ownVersion = await pluginVersion().catch(() => "unknown");
-		const installed = () => installedPluginVersion(options.runner ?? spawnRunner);
-		const spawn = workerSpawner({ env, platform: options.platform ?? process.platform, which }, options, session, ownVersion);
+		const version = await ownVersion;
+		const spawn = workerSpawner({ env, platform: options.platform ?? process.platform, which }, options, session, version);
 		pi.registerFlag("bus-url", { type: "string", description: "Bus url for --bus-accept" });
 		pi.registerFlag("bus-accept", { type: "string", description: "Invite code to redeem when the session starts" });
-		registerBusCommand(pi, store, session, localServerCli(busEnv, options, which, env), spawn, ownVersion, installed, gate);
-		registerSessionEvents(pi, store, session, spawn);
+		const server = localServerCli(busEnv, options, which, env);
+		const installed = () => installedPluginVersion(options.runner ?? spawnRunner);
+		registerBusCommand(pi, session, { server, spawn, pluginVersion: version, installedPluginVersion: installed });
+		registerSessionEvents(pi, session, spawn);
 	};
 }
 
