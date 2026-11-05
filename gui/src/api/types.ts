@@ -113,13 +113,15 @@ export interface Thread {
 	posts: Post[];
 }
 
-/** One inbox entry (contracts.md §4); type stays text so a newer server's kinds still show. */
+/** One inbox entry (contracts.md §4); type and class stay text so a newer server's values still show. */
 export interface Entry {
 	id: number;
 	space: string;
 	type: string;
 	from: string;
 	critical: boolean;
+	/** The delivery class (contracts.md §4.1): interrupt, queue or deferred. */
+	class: string;
 	topic?: string;
 	blackboard?: string;
 	threadId?: number;

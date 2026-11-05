@@ -58,13 +58,14 @@ export const thread: Thread = {
 };
 
 export const entries: Entry[] = [
-	{ id: 4, space: "demo", type: "direct_message", from: "worker", critical: false, body: "need a decision", createdAt: "2026-11-04T20:00:00Z" },
+	{ id: 4, space: "demo", type: "direct_message", from: "worker", critical: false, class: "queue", body: "need a decision", createdAt: "2026-11-04T20:00:00Z" },
 	{
 		id: 9,
 		space: "demo",
 		type: "thread_post",
 		from: "lead",
 		critical: true,
+		class: "interrupt",
 		blackboard: "b",
 		threadId: 1,
 		threadTitle: "plan",

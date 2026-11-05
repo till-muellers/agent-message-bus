@@ -1,0 +1,21 @@
+{
+	"blackboard": "b",
+	"createdBy": "worker",
+	"id": 1,
+	"posts": [
+		{
+			"author": "worker",
+			"body": "first",
+			"createdAt": "2026-11-04T20:00:00Z",
+			"id": 1
+		},
+		{
+			"author": "lead",
+			"body": "reply",
+			"createdAt": "2026-11-04T20:00:00Z",
+			"id": 2
+		}
+	],
+	"subscribed": true,
+	"title": "plan"
+}

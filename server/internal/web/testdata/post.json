@@ -1,0 +1,9 @@
+{
+	"postId": 3,
+	"receipts": [
+		{
+			"delivery": "queued",
+			"to": "worker"
+		}
+	]
+}

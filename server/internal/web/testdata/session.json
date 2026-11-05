@@ -1,0 +1,6 @@
+{
+	"csrf": "csrf-of-the-session",
+	"kind": "member",
+	"name": "worker",
+	"space": "demo"
+}

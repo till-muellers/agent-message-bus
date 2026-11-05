@@ -1,0 +1,65 @@
+{
+	"inbox": {
+		"waiting": 2
+	},
+	"overview": {
+		"blackboards": [
+			{
+				"name": "b",
+				"owner": "worker",
+				"threads": 1
+			}
+		],
+		"participants": [
+			{
+				"connected": false,
+				"name": "lead",
+				"role": "leader"
+			},
+			{
+				"connected": false,
+				"name": "worker",
+				"role": "member"
+			}
+		],
+		"recentThreads": [
+			{
+				"blackboard": "b",
+				"createdBy": "worker",
+				"id": 1,
+				"lastPostAt": "2026-11-04T20:00:00Z",
+				"posts": 2,
+				"subscribed": true,
+				"title": "plan"
+			}
+		],
+		"space": "demo",
+		"topics": [
+			{
+				"createdBy": "lead",
+				"name": "all",
+				"subscribed": true
+			},
+			{
+				"createdBy": "lead",
+				"name": "notes",
+				"subscribed": false
+			}
+		],
+		"you": {
+			"name": "worker",
+			"role": "member"
+		}
+	},
+	"you": {
+		"kind": "member",
+		"name": "worker",
+		"space": "demo",
+		"spaces": [
+			{
+				"name": "demo",
+				"role": "member"
+			}
+		]
+	}
+}

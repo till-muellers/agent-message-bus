@@ -1,0 +1,14 @@
+[
+	{
+		"bootstrap": true,
+		"name": "admin",
+		"spaces": [],
+		"tokens": 0
+	},
+	{
+		"bootstrap": false,
+		"name": "ops",
+		"spaces": [],
+		"tokens": 1
+	}
+]

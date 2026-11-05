@@ -1,0 +1,41 @@
+{
+	"inbox": {
+		"waiting": 1
+	},
+	"spaces": [
+		{
+			"admins": [],
+			"invites": 1,
+			"joined": true,
+			"leaders": [
+				"lead"
+			],
+			"members": 1,
+			"name": "demo"
+		},
+		{
+			"admins": [],
+			"invites": 0,
+			"joined": true,
+			"leaders": [
+				"lead"
+			],
+			"members": 0,
+			"name": "scratch"
+		}
+	],
+	"you": {
+		"kind": "leader",
+		"name": "lead",
+		"spaces": [
+			{
+				"name": "demo",
+				"role": "leader"
+			},
+			{
+				"name": "scratch",
+				"role": "leader"
+			}
+		]
+	}
+}

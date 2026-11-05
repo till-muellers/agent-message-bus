@@ -1,0 +1,76 @@
+{
+	"inbox": {
+		"waiting": 1
+	},
+	"invites": [
+		{
+			"expiresAt": "2026-11-04T20:10:00Z",
+			"id": "0123456789abcdef",
+			"invitedBy": "lead",
+			"name": "new"
+		}
+	],
+	"overview": {
+		"blackboards": [
+			{
+				"name": "b",
+				"owner": "worker",
+				"threads": 1
+			}
+		],
+		"participants": [
+			{
+				"connected": false,
+				"name": "lead",
+				"role": "leader"
+			},
+			{
+				"connected": false,
+				"name": "worker",
+				"role": "member"
+			}
+		],
+		"recentThreads": [
+			{
+				"blackboard": "b",
+				"createdBy": "worker",
+				"id": 1,
+				"lastPostAt": "2026-11-04T20:00:00Z",
+				"posts": 2,
+				"subscribed": false,
+				"title": "plan"
+			}
+		],
+		"space": "demo",
+		"topics": [
+			{
+				"createdBy": "lead",
+				"name": "all",
+				"subscribed": true
+			},
+			{
+				"createdBy": "lead",
+				"name": "notes",
+				"subscribed": true
+			}
+		],
+		"you": {
+			"name": "lead",
+			"role": "leader"
+		}
+	},
+	"you": {
+		"kind": "leader",
+		"name": "lead",
+		"spaces": [
+			{
+				"name": "demo",
+				"role": "leader"
+			},
+			{
+				"name": "scratch",
+				"role": "leader"
+			}
+		]
+	}
+}
