@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { VNode } from "../../src/view/h.ts";
-import { type SpaceViewIntents, spaceView } from "../../src/views/space.ts";
+import type { Intents } from "../../src/views/intents.ts";
+import { spaceView } from "../../src/views/space.ts";
 import { spaceDetail } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
@@ -14,7 +15,7 @@ function rows(view: VNode, title: string): string[][] {
 }
 
 const calls: string[] = [];
-const intents: SpaceViewIntents = {
+const intents: Pick<Intents, "invite" | "send" | "ask" | "cancelInvite"> = {
 	invite: () => {},
 	send: () => {},
 	ask: (c) => void calls.push(`ask ${JSON.stringify(c)}`),

@@ -1,11 +1,6 @@
 import { takeForm } from "../view/form-field.ts";
 import { h, type Handler, type VNode } from "../view/h.ts";
-
-export interface FormIntents {
-	invite(space: string, name: string, task: string): void;
-	post(space: string, threadId: number, body: string): void;
-	send(space: string, topic: string, body: string, critical: boolean): void;
-}
+import type { Intents } from "./intents.ts";
 
 /** A submit handler that reads and resets the form, then hands its fields to act. */
 function onSubmit(act: (fields: ReadonlyMap<string, string>) => void): Handler {
@@ -23,7 +18,7 @@ function labelled(id: string, label: string, control: VNode): VNode[] {
 	return [h("label", { for: id }, label), control];
 }
 
-export function inviteForm(space: string, intents: Pick<FormIntents, "invite">): VNode {
+export function inviteForm(space: string, intents: Pick<Intents, "invite">): VNode {
 	const submit = onSubmit((f) => intents.invite(space, field(f, "name"), field(f, "task")));
 	return h(
 		"form",
@@ -35,7 +30,7 @@ export function inviteForm(space: string, intents: Pick<FormIntents, "invite">):
 }
 
 /** Only leaders and admins may send critical messages; the caller leaves out topics it may not send to. */
-export function sendForm(space: string, topics: readonly string[], lead: boolean, intents: Pick<FormIntents, "send">): VNode {
+export function sendForm(space: string, topics: readonly string[], lead: boolean, intents: Pick<Intents, "send">): VNode {
 	const submit = onSubmit((f) => intents.send(space, field(f, "topic"), field(f, "body"), f.has("critical")));
 	const options = topics.map((topic) => h("option", { key: topic, value: topic }, topic));
 	return h(
@@ -48,7 +43,7 @@ export function sendForm(space: string, topics: readonly string[], lead: boolean
 	);
 }
 
-export function postForm(space: string, threadId: number, intents: Pick<FormIntents, "post">): VNode {
+export function postForm(space: string, threadId: number, intents: Pick<Intents, "post">): VNode {
 	const submit = onSubmit((f) => intents.post(space, threadId, field(f, "body")));
 	return h(
 		"form",

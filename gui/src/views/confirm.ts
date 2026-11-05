@@ -1,10 +1,8 @@
 import type { PendingConfirm } from "../state/app-state.ts";
 import { h, type VNode } from "../view/h.ts";
+import type { Intents } from "./intents.ts";
 
-export interface ConfirmIntents {
-	confirmed(confirm: PendingConfirm): void;
-	dismiss(): void;
-}
+type ConfirmIntents = Pick<Intents, "confirmed" | "dismiss">;
 
 function question(confirm: PendingConfirm): { text: string; action: string } {
 	if (confirm.kind === "delete-space") {

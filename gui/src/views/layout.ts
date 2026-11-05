@@ -3,21 +3,16 @@ import { hrefOf } from "../router/routes.ts";
 import type { AppState, Route } from "../state/app-state.ts";
 import type { ViewData } from "../state/view-data.ts";
 import { type ChildArg, h, type VNode } from "../view/h.ts";
-import { type AdminAreaIntents, adminsView } from "./admins.ts";
+import { adminsView } from "./admins.ts";
 import { boardView } from "./board.ts";
-import { type ConfirmIntents, confirmView } from "./confirm.ts";
-import type { FormIntents } from "./forms.ts";
+import { confirmView } from "./confirm.ts";
 import { inboxView } from "./inbox.ts";
+import type { Intents } from "./intents.ts";
 import { loginView } from "./login.ts";
 import { shownOnceView } from "./shown-once.ts";
-import { type SpaceViewIntents, spaceView } from "./space.ts";
+import { spaceView } from "./space.ts";
 import { spacesView } from "./spaces.ts";
 import { threadView } from "./thread.ts";
-
-export interface Intents extends AdminAreaIntents, SpaceViewIntents, FormIntents, ConfirmIntents {
-	signIn(token: string): void;
-	signOut(): void;
-}
 
 const NAV: readonly { route: Route; label: string; adminOnly: boolean }[] = [
 	{ route: { name: "spaces" }, label: "Spaces", adminOnly: false },

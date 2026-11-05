@@ -1,15 +1,12 @@
 import type { Overview, Participant, PendingInvite, SpaceDetail } from "../api/types.ts";
 import { hrefOf } from "../router/routes.ts";
-import type { PendingConfirm } from "../state/app-state.ts";
 import { type ChildArg, h, type VNode } from "../view/h.ts";
-import { type FormIntents, inviteForm, sendForm } from "./forms.ts";
+import { inviteForm, sendForm } from "./forms.ts";
+import type { Intents } from "./intents.ts";
 import { type Row, table } from "./table.ts";
 import { time } from "./time.ts";
 
-export interface SpaceViewIntents extends Pick<FormIntents, "invite" | "send"> {
-	ask(confirm: PendingConfirm): void;
-	cancelInvite(space: string, invite: PendingInvite): void;
-}
+type SpaceViewIntents = Pick<Intents, "invite" | "send" | "ask" | "cancelInvite">;
 
 /** What the page offers: lead is true with leader rights in the space (leader of it or admin). */
 interface Page {
