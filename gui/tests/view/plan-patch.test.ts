@@ -54,7 +54,8 @@ describe("planPatch", () => {
 		expect(planPatch([undefined, "x"], ["y"])).toStrictEqual({ reuse: [1], remove: [0] });
 	});
 
-	test("unkeyed children of one tag are reused in order", () => {
+	test("unkeyed children of one tag are reused in order, each at most once", () => {
 		expect(planPatch([h("li", null, "1"), h("li", null, "2")], [h("li", null, "3")])).toStrictEqual({ reuse: [0], remove: [1] });
+		expect(planPatch(["a", "b"], ["c", "d", "e"])).toStrictEqual({ reuse: [0, 1, undefined], remove: [] });
 	});
 });
