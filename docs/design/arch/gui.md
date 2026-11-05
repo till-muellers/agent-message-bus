@@ -35,7 +35,7 @@ gui/
       decode.ts         narrowing decoder primitives (fields, text, count, flag, oneOf, list) + session; no `as` casts on wire data
       decode-state.ts   decoders of GET /web/api/state (space list, space detail); later reads get their own decode-<read>.ts
       decode-threads.ts decoders of the blackboard reads (thread list, thread with posts)
-      decode-inbox.ts   decoder of GET /web/api/inbox (entries; the type stays text so newer kinds still show)
+      decode-inbox.ts   decoder of GET /web/api/inbox (entries; the type and the delivery class stay text so newer values still show)
       types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadInfo, Thread, Post, Entry, AdminInfo, MintedAdmin)
       session.ts        signIn(token), restore(), signOut()
       reads.ts          admins() (GUI-5); spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox() (GUI-4: limit=500, oldest first; the view says when the list is cut)
@@ -223,7 +223,8 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 | `router/routes.ts` | table-driven: hash → route → hash round trip; invalid names → not-found |
 | `state/reducer.ts` | table-driven per action; secret cleared on navigate; 401 → signed-out |
 | `api/http.ts`, `api/*.ts` | fake `fetchFn` recording method, path, headers (CSRF present on non-GET, absent on GET), body; error envelope → `ApiError` |
-| `api/decode.ts` | valid shapes pass, every missing/wrong field throws `invalid_response` |
+| `api/decode*.ts` | valid shapes pass, every missing/wrong field throws `invalid_response`; the state and inbox cases are variants of the wire fixtures below |
+| contract (R1) | `tests/api/contract.test.ts` decodes every fixture in `server/internal/web/testdata/` with the production decoder, writes the result back in wire shape and compares it with the fixture, so a renamed, added or dropped field fails (only `you` and the post/send `receipts` are left out on purpose); a fixture without a decoder fails too. The fixtures are marshalled from the real `/web` handlers by `server/internal/server/web_contract_test.go` (times, secrets and invite ids normalized); after a wire change run `cd server && go test ./internal/server -run TestWebContractFixtures -update`, and the Go test fails while they are stale |
 | `poll/poller.ts` | fake `Clock`: interval, pause when hidden, backoff, refresh after mutation |
 | `views/*.ts` | assert the VNode tree (`h()` output): texts, order, keys, links (`hrefOf`), buttons per kind (no admin nav for a member) |
 | `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage). The patch decision function (`samePlace(a, b)`) is pure and tested. |

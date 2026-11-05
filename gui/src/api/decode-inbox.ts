@@ -23,6 +23,7 @@ function entry(json: unknown, what: string): Entry {
 		type: text(o, "type", what),
 		from: text(o, "from", what),
 		critical: flag(o, "critical", what),
+		class: text(o, "class", what),
 		...details(o, what),
 		createdAt: text(o, "createdAt", what),
 	};

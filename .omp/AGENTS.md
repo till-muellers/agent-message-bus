@@ -148,6 +148,12 @@ Facts that are not obvious from the code and that cost time to find out:
 cd server && go run ./cmd/tooldoc > TOOLS.md
 ```
 
+The `/web` wire fixtures in `server/internal/web/testdata/` are marshalled from the real handlers; `gui/tests/api/contract.test.ts` decodes them with the GUI's decoders. Never edit them by hand; after a `/web` response changes, regenerate them (the Go test fails while they are stale):
+
+```sh
+cd server && go test ./internal/server -run TestWebContractFixtures -update
+```
+
 ## Definition of ready
 A slice is ready when (`docs/design/arch/definition-of-ready.md` §1):
 - **Described**: goal, files, size, risks and dependencies in `docs/design/arch/slices.md` or the bead.

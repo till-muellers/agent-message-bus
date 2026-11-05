@@ -14,7 +14,7 @@ function rowsOf(list: Entry[]): string[][] {
 	return findAll(inboxView({ kind: "admin", name: "ops" }, list), byTag("tr")).map((tr) => tr.children.map(shown));
 }
 
-const base: Entry = { id: 1, space: "demo", type: "topic_closed", from: "lead", critical: false, createdAt: "2026-11-04T20:00:00Z" };
+const base: Entry = { id: 1, space: "demo", type: "topic_closed", from: "lead", critical: false, class: "deferred", createdAt: "2026-11-04T20:00:00Z" };
 
 describe("the inbox page", () => {
 	const ops = { kind: "admin", name: "ops" } as const;

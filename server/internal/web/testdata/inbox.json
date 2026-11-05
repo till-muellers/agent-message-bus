@@ -1,0 +1,36 @@
+[
+	{
+		"blackboard": "b",
+		"body": "reply",
+		"class": "queue",
+		"createdAt": "2026-11-04T20:00:00Z",
+		"critical": false,
+		"from": "lead",
+		"id": 2,
+		"space": "demo",
+		"threadId": 1,
+		"threadTitle": "plan",
+		"type": "thread_post"
+	},
+	{
+		"body": "stop",
+		"class": "interrupt",
+		"createdAt": "2026-11-04T20:00:00Z",
+		"critical": true,
+		"from": "lead",
+		"id": 3,
+		"space": "demo",
+		"type": "direct_message"
+	},
+	{
+		"body": "heads up",
+		"class": "queue",
+		"createdAt": "2026-11-04T20:00:00Z",
+		"critical": false,
+		"from": "lead",
+		"id": 4,
+		"space": "demo",
+		"topic": "all",
+		"type": "topic_message"
+	}
+]
