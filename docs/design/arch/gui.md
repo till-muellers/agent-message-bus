@@ -52,7 +52,7 @@ gui/
       store.ts          getState / dispatch / subscribe (~30 lines)
       session-intents.ts signIn / restore / signOut: run the session calls, dispatch the outcome (never rejects)
       mutate.ts         mutate(deps, call, done): awaits a mutation, dispatches done(result) and refreshes; 401 → signed-out, else the server's message as an alert notice (never rejects)
-      admin-intents.ts  (W2) mint → secret/shown, revoke → notice/shown
+      admin-intents.ts  (W2) mintAdmin → secret/shown, revokeAdmin → notice/shown
       space-intents.ts  (W3) invite → secret/shown; cancel, post, send → notice; ask/dismiss open and close the confirmation, confirmed closes it and runs the revoke or delete; a successful delete navigates to the space list (store, then hash) before its notice, so the notice stays and the deleted space is not polled
     router/
       routes.ts         parseRoute(hash) → Route; hrefOf(route) → "#/…" (pure)
@@ -62,9 +62,11 @@ gui/
       poller.ts         polls the current route's resource every 5 s while visible; backoff on errors; injected clock
     view/
       h.ts              h(tag, props, ...children) → VNode (plain objects)
-      mount.ts          VNode → DOM with a keyed patch (reuses nodes; keeps focus and input values)
+      plan-patch.ts     planPatch(previous, next) (pure): which old child each new child patches in place (tag + key, keyed moves), which old ones go
+      mount.ts          VNode → DOM: applies planPatch per parent (reuses nodes; keeps focus and input values)
       form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state); takeForm(event): all fields, then resets the form
     views/
+      intents.ts        Intents: the one contract of what the operator can do; each view takes the Pick it needs. The state/*-intents.ts modules implement it structurally (state never imports views); main.ts only spreads them into one object
       layout.ts         header (signed-in name/kind, nav, sign out), confirm/outcome section, error banner
       login.ts          token form
       table.ts          table(head, rows): a header row and keyed rows
@@ -111,7 +113,7 @@ Hash routing means the server serves only `/web/` (index.html) and `/web/assets/
 
 ```ts
 // state/app-state.ts
-export type Resource<T> = { status: "idle" } | { status: "loading"; last?: T } | { status: "ready"; data: T; at: number } | { status: "error"; error: ApiError; last?: T };
+export type Resource<T> = { status: "idle" } | { status: "loading" } | { status: "ready"; data: T; at: number } | { status: "error"; error: ApiError; last?: T };
 export type SessionState = { status: "unknown" } | { status: "signed-out"; error?: string } | { status: "signed-in"; identity: Identity; csrf: string };
 export interface AppState {
 	session: SessionState;
@@ -125,7 +127,7 @@ export interface AppState {
 export type Action =
 	| { type: "session/restored"; identity: Identity; csrf: string } | { type: "session/signed-out"; error?: string }
 	| { type: "navigate"; route: Route }
-	| { type: "view/loading" } | { type: "view/loaded"; route: Route; data: ViewData; at: number } | { type: "view/failed"; route: Route; error: ApiError }   // route: answers for a route already left are dropped
+	| { type: "view/loading" } | { type: "view/loaded"; route: Route; data: ViewData; at: number } | { type: "view/failed"; route: Route; error: ApiError }   // loading only from idle; route: answers for a route already left are dropped
 	| { type: "secret/shown"; label: string; secret: string } | { type: "notice/shown"; message: string; alert: boolean } | { type: "confirm/open"; confirm: PendingConfirm } | { type: "confirm/close" };
 // state/store.ts
 export interface Store { getState(): AppState; dispatch(action: Action): void; subscribe(listener: (s: AppState) => void): () => void; }
@@ -145,6 +147,7 @@ export function createPoller(deps: { load(route: Route): Promise<ViewData> | und
 ```
 
 - Interval 5 s (`web/analysis.md` §3.5), paused while `document.hidden` (`main.ts` calls `refreshNow` on `visibilitychange` to visible), immediate refresh on sign-in, on navigation and after a successful mutation; on errors back off 5 → 10 → 30 s. A background refresh keeps the shown data (no "Loading…"); only the first load of a route shows it. No SSE in milestone 1 (`live-updates.feature` header); `GET /web/api/events` would replace the poller later without touching views.
+- Stale loads have one owner each (R16): the poller drops the answer of a superseded request (navigation, `refreshNow`, `stop`: a generation counter) and dispatches `view/loading` on every load without reading the view; the reducer alone decides whether an answer still fits the route (`sameRoute`) and whether a load shows "Loading…" (only from `idle`).
 - The GUI never opens `GET /v1/inbox/stream` and never calls `bus_inbox_ack` (`gui-inbox.feature`, `live-updates.feature:63-76`); the inbox view is a read of `GET /web/api/inbox`.
 
 ---
@@ -227,7 +230,8 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 | contract (R1) | `tests/api/contract.test.ts` decodes every fixture in `server/internal/web/testdata/` with the production decoder, writes the result back in wire shape and compares it with the fixture, so a renamed, added or dropped field fails (only `you` and the post/send `receipts` are left out on purpose); a fixture without a decoder fails too. The fixtures are marshalled from the real `/web` handlers by `server/internal/server/web_contract_test.go` (times, secrets and invite ids normalized); after a wire change run `cd server && go test ./internal/server -run TestWebContractFixtures -update`, and the Go test fails while they are stale |
 | `poll/poller.ts` | fake `Clock`: interval, pause when hidden, backoff, refresh after mutation |
 | `views/*.ts` | assert the VNode tree (`h()` output): texts, order, keys, links (`hrefOf`), buttons per kind (no admin nav for a member) |
-| `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage). The patch decision function (`samePlace(a, b)`) is pure and tested. |
+| `view/plan-patch.ts` | `planPatch` and `samePlace` are pure and tested: reuse in place, insert, remove, keyed moves, tag change, nodes the patcher never rendered |
+| `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage). `mount.ts` only applies `planPatch`. |
 | `scripts/build.ts` | builds into a temp `--out` (in-process and through the command line); asserts `index.html` references an existing `assets/main-*.js` and `assets/style-*.css` |
 | fitness | `tests/no-raw-html.test.ts`: no `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` in `gui/src`; `tests/layout.test.ts` (R4): browser globals only in the four DOM-edge modules (§1), no `state/*` → `views/*` import, every relative import resolves, no import cycle |
 

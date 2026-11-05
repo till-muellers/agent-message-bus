@@ -16,10 +16,10 @@ export type SessionState =
 	| { status: "signed-out"; error?: string }
 	| { status: "signed-in"; identity: Identity; csrf: string };
 
-/** A loaded resource; loading and error keep the last data to show meanwhile. */
+/** A loaded resource: loading only before a route's first answer; an error keeps the last data to show meanwhile. */
 export type Resource<T> =
 	| { status: "idle" }
-	| { status: "loading"; last?: T }
+	| { status: "loading" }
 	| { status: "ready"; data: T; at: number }
 	| { status: "error"; error: ApiError; last?: T };
 

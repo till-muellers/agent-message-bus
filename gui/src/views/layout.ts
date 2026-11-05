@@ -89,7 +89,7 @@ function content({ route, view }: AppState, identity: Identity, intents: Intents
 		case "idle":
 			return [];
 		case "loading":
-			return [view.last ? page(view.last) : h("p", { key: "loading" }, "Loading…")];
+			return [h("p", { key: "loading" }, "Loading…")];
 		case "ready":
 			return [page(view.data)];
 		case "error":

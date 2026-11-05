@@ -13,9 +13,9 @@ function lastData(view: Resource<ViewData>): ViewData | undefined {
 	switch (view.status) {
 		case "ready":
 			return view.data;
-		case "loading":
 		case "error":
 			return view.last;
+		case "loading":
 		case "idle":
 			return undefined;
 	}
@@ -53,7 +53,7 @@ export function reducer(state: AppState, action: Action): AppState {
 		case "navigate":
 			return sameRoute(state.route, action.route) ? state : { session: state.session, route: action.route, view: { status: "idle" } };
 		case "view/loading":
-			return { ...state, view: { status: "loading", last: lastData(state.view) } };
+			return state.view.status === "idle" ? { ...state, view: { status: "loading" } } : state;
 		case "view/loaded":
 			return sameRoute(state.route, action.route) ? loaded(state, action.data, action.at) : state;
 		case "view/failed":

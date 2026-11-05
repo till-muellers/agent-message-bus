@@ -54,13 +54,13 @@ class RoutePoller implements Poller {
 
 	refreshNow(): void {
 		this.halt();
-		const { session, route, view } = this.deps.store.getState();
+		const { session, route } = this.deps.store.getState();
 		if (session.status !== "signed-in") return;
 		if (!this.deps.visible()) return this.schedule();
 		const request = this.deps.load(route);
 		if (!request) return;
 		const mine = this.generation;
-		if (view.status === "idle") this.deps.store.dispatch({ type: "view/loading" });
+		this.deps.store.dispatch({ type: "view/loading" });
 		request.then(
 			(data) => this.settled(route, mine, { data }),
 			(error: unknown) => this.settled(route, mine, { error }),
@@ -77,7 +77,7 @@ class RoutePoller implements Poller {
 		else this.halt();
 	}
 
-	/** Answers of a superseded load (navigation, refreshNow, stop) are dropped. */
+	/** Drops the answer of a superseded load (navigation, refreshNow, stop); whether it still fits the route is the reducer's call. */
 	private settled(route: Route, mine: number, outcome: Outcome): void {
 		if (mine !== this.generation) return;
 		const { store, clock } = this.deps;

@@ -48,8 +48,15 @@ describe("the reducer: session and route", () => {
 });
 
 describe("the reducer: view data", () => {
-	test("loading keeps the last data to show meanwhile", () => {
-		expect(reducer(ready(), { type: "view/loading" }).view).toEqual({ status: "loading", last: listData });
+	test("the first load of a route shows loading", () => {
+		expect(reducer(signedIn(), { type: "view/loading" }).view).toEqual({ status: "loading" });
+	});
+
+	test("a load while data or an error is shown returns the same state, so the page stays", () => {
+		const state = ready();
+		expect(reducer(state, { type: "view/loading" })).toBe(state);
+		const failed = reducer(state, { type: "view/failed", route: { name: "spaces" }, error: new ApiError(404, "not_found", "gone") });
+		expect(reducer(failed, { type: "view/loading" })).toBe(failed);
 	});
 
 	test("loaded data of the current route is ready", () => {
