@@ -73,7 +73,7 @@ There are **two** numbers, and they must not be confused.
 
 ### 3.2 Server protocol
 
-- The extension declares `MIN_SERVER_PROTOCOL` in `extension/lib/version/server-protocol.ts`. It is raised in the **same PR** that makes the extension depend on a newer server contract (E9a sets 2; the release with E6/E8b sets 3, per contracts.md).
+- The extension declares `MIN_SERVER_PROTOCOL` in `extension/lib/version/server-protocol.ts`. It is raised in the **same PR** that makes the extension depend on a newer server contract (E9a set 2; E6/E8b needed no bump, because their server slices shipped under protocol 2, `contracts.md` §6).
 - The server constant is bumped by Arch-server's slices (≤ once per release; history comment per value).
 
 ### 3.3 Fitness checks
@@ -133,10 +133,10 @@ The two checks run first, so a bad tag fails in seconds and publishes nothing:
 
 ### 4.2 Release procedure (documented in the root `README.md` "Release" section)
 
-1. Branch `release/vX.Y.Z`: bump `package.json` `version` (R1); if a server contract the extension needs changed in this release, check `protocol.go` and `MIN_SERVER_PROTOCOL` agree (the fitness test enforces ≤). PR → green CI → merge (`main` is protected).
+1. Branch `release/vX.Y.Z`: bump `package.json` `version` (R1); if a server contract the extension needs changed in this release, check `protocol.go` is at least `MIN_SERVER_PROTOCOL` (the fitness test enforces `MIN_SERVER_PROTOCOL` ≤ `Protocol`). PR → green CI → merge (`main` is protected).
 2. Wait until the `ci` run of the merge commit on `main` is green, then tag the merge commit `vX.Y.Z` and push the tag → `release.yml` checks ci and the version, builds GUI + 6 server binaries + `SHA256SUMS`, publishes the GitHub Release.
 3. Users: `omp plugin upgrade @till-muellers/omp-agent-message-bus` (the targeted form; findings R4) and replace the server binary. README states both.
-4. Plugin and server of one tag always match (`protocol-sync` test). Mixed pairs are caught at runtime by the extension's protocol gate (`client.md` §8.1) and the spawn skew check (§8.2).
+4. Plugin and server of one tag are compatible: the `protocol-sync` test (`tests/version/protocol-sync.test.ts`) checks that the server's `Protocol` at HEAD is at least the extension's `MIN_SERVER_PROTOCOL` (≥, not equal). Mixed pairs are caught at runtime by the extension's protocol gate (`client.md` §8.1) and the spawn skew check (§8.2).
 
 No npm publish, no registry token. The plugin needs no build step (Bun loads `.ts` directly).
 

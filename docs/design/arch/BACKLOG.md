@@ -78,7 +78,7 @@ Input for issue-tracker grooming: one row per slice, ids exactly as in `slices.m
 - **Critical path:** 0 → 1 → 4a → 6a → 4c → 4d → 5 → 6b → W1a → W1b → W3 → GUI-6. The extension path to the protocol-2 release is 0 → P1a → E9a (needs 7, D1) → E1 → E2 → E9b → P2b.
 - **The web track** (W1a and the 11 slices behind it) is gated only by its dependencies 4a and 6b; the GUI listens on its own address `AMB_WEB_ADDR` (PO ruling on Q-A1).
 - **Migration numbers are assigned at merge time** (`schema.md` §2): 7, 13a and 10 each add a named migration and take the next free number when they merge, so they may merge in any order; there is no ordering edge between them.
-- **Same-release pairs:** 7 with E9a + E9b; E1 with E2 (an aside dropped between them is lost); D1 before E1. No tag was cut after slice 7, so 8, 9, 12, 13a, 13b (and 11 if it merges before the tag) ship under protocol 2: `MIN_SERVER_PROTOCOL` stays 2 and E6/E8b need no protocol-3 bump (`contracts.md` §6). Only an extension-facing change merged after the tag bumps to 3.
+- **Same-release pairs:** 7 with E9a + E9b; E1 with E2 (an aside dropped between them is lost); D1 before E1. No tag was cut after slice 7, so 8, 9, 11, 12, 13a and 13b shipped under protocol 2 (`v0.2.0`): `MIN_SERVER_PROTOCOL` stays 2 and E6/E8b need no protocol-3 bump (`contracts.md` §6). Only an extension-facing change merged after the tag bumps to 3.
 - **P2b** is built once (first run closes M1) and then runs at every release; its later runs are not new slices.
 - **Merge early:** 3 touches every tool file; open 6a/8/9/10 branches after it merges (`slices.md` slice 3).
 - **Slice 0** is the one R11 size exception (a verbatim copy of reviewed files).
@@ -96,6 +96,7 @@ Added 2026-11-05 from [`review-2026-11.md`](review-2026-11.md) (snapshot `668f73
 | 5 | R5 | lpa.5 | Move ActiveCredentials to bus/, conflict.ts to delivery/ | X3, X4 | ext-structure | S | — |
 | 6 | R6 | lpa.6 | Inbox ledger: one owner for delivery state | X1, X2, X10 | ext-delivery | M | R5 |
 | 7 | R7 | lpa.7 | One tool policy table in the extension | X5 | ext-delivery | S | — |
+| 7b | R7b | lpa.24 | Remaining tool-name lists outside the policy table | X5 | ext-delivery | S | R7 |
 | 8 | R9 | lpa.9 | Server tests assert through interfaces | S7 | server | S | — |
 | 9 | R10 | lpa.10 | Transaction seam out of inbox | S1, S4, S5 | server | M | R9 |
 | 10 | R14 | lpa.14 | Tool registry call path and uniform error kinds | T3, T4, T6, T8 | server | M | R2 |
@@ -105,12 +106,14 @@ Added 2026-11-05 from [`review-2026-11.md`](review-2026-11.md) (snapshot `668f73
 | 14 | R11 | lpa.11 | spaces hooks and auth surface | S8, S9 | server | M | R10 |
 | 15 | R12 | lpa.12 | inbox read policy and shared mail-notice helper | S10, T5 | server | S | R10 |
 | 16 | R16 | lpa.16 | GUI internals: patch planner, one Intents interface, stale-load owner | G2, G5, G7 | gui | M | R4 |
-| 17 | R20 | lpa.22 | Decide the consumer-side interface rule (owner decision) | S3 | decision | — | — |
-| 18 | R21 | lpa.20 | Drop single-adapter consumer interfaces (per R20) | S3 | server | M | R20, R10, R13 |
+| 17 | R20 | lpa.22 | Decide the consumer-side interface rule (owner decision): **decided, keep the rule** (`.omp/AGENTS.md` "define them at the consumer") | S3 | decision | — | — |
+| 18 | R21 | lpa.20 | Drop single-adapter consumer interfaces (per R20): **won't do**, R20 keeps the rule | S3 | server | M | R20, R10, R13 |
 | 19 | R17 | lpa.17 | main.go listener lifecycle into internal/server | T9 | server | S | — |
-| 20 | R18 | lpa.18 | Tests for the git index reader | P4 | ext-structure | S | — |
+| 20 | R18 | lpa.18 | Package test reads the file list with `git ls-files` in `beforeAll`; git index parser deleted | P4 | ext-structure | S | — |
 | 21 | R19 | lpa.19 | Entry label in one render module | X9 | ext-delivery | S | R6 |
 | 22 | R22 | lpa.21 | Refresh design docs after the follow-ups | doc drift, P2 | docs | S | R5, R6, R8, R10, R13, R14 |
-| — | R23 | lpa.23 | Neutral message type instead of inbox.Entry (deferred) | S6 | server | M | R10 |
+| — | R23 | lpa.23 | Neutral message type instead of inbox.Entry: **not needed** (after R10 only the inbox seam carries `inbox.Entry`) | S6 | server | M | R10 |
+
+**Status (2026-11-05):** every M4 slice is closed: merged, or R20 decided (keep the rule), R21 won't do and R23 not needed. R22 (this docs refresh) closes with its merge, and with it the epic.
 
 **Parallel tracks:** server (R9 → R10 → R11, R12, R13 → R15), extension (R5 → R6, R8 → R19; R7 independent), GUI (R4 → R16; R1 → R15), pipeline (R3). Fitness slices R1–R4 go first: they lock the contracts before the refactors move code. R10 and R6 are the two M-sized refactors with the most leverage; R10 and R13 touch the same server files, so they run in sequence on one worker.

@@ -4,8 +4,8 @@
  * Every module file under `extension/lib/` must live in one of the feature folders, the import graph must stay
  * acyclic, `bus/` and `process/` must stay leaves, `render/` must not reach into `delivery/`, only
  * `render/entry-label.ts` interprets the entry types (§4.2) and only the wiring root may see the whole graph. The
- * allowed edges are the ones `client.md` §1.3 lists plus the edges the not-yet-refactored code still has; each of
- * those disappears with the slice that moves the module holding it.
+ * allowed edges between folders are exactly the ones `client.md` §1.3 lists; the wiring roots (`index.ts`,
+ * `session/session.ts`) are exempt.
  * Test files mirror those folders, and only `fakes.ts` (`useTempDirs`, which removes them) makes temp dirs.
  */
 import { describe, expect, test } from "bun:test";
@@ -38,6 +38,8 @@ const FOLDERS: Record<string, true> = {
 /** The import edges between two feature folders that `client.md` §1.3 allows. */
 const GRAPH_EDGES: Record<string, true> = {
 	"commands>session": true,
+	"commands>bus": true,
+	"commands>shared": true,
 	"commands>connection": true,
 	"commands>local-server": true,
 	"commands>spawn": true,
@@ -67,21 +69,11 @@ const GRAPH_EDGES: Record<string, true> = {
 	"launch>process": true,
 	"local-server>process": true,
 	"local-server>bus": true,
-	"version>process": true,
-	"bus>shared": true,
-};
-
-/**
- * The edges the code still has and `client.md` §1.3 does not list yet: the `BusClient`, `trimUrl` and error wording
- * that `/bus` takes from `bus/`, the `CommandResult` in `shared/` that `/bus` and the local server return, the
- * credential store the local server writes and the tool helpers behind `spawn/`.
- */
-const TRANSITIONAL_EDGES: Record<string, true> = {
-	"commands>bus": true,
-	"commands>shared": true,
 	"local-server>session": true,
 	"local-server>shared": true,
 	"spawn>tools": true,
+	"version>process": true,
+	"bus>shared": true,
 };
 
 /** The test files that live in `tests/` itself: the shared doubles and the suites of the wiring root and the repo. */
@@ -238,8 +230,7 @@ describe("extension layout", () => {
 			if (!from || !to || from.folder === to.folder) return false;
 			// The wiring roots wire the folders together; the allowed set describes the edges between the folders.
 			if (ROOTS[from.rel]) return false;
-			const key = `${from.folder}>${to.folder}`;
-			return !GRAPH_EDGES[key] && !TRANSITIONAL_EDGES[key];
+			return !GRAPH_EDGES[`${from.folder}>${to.folder}`];
 		}).map(edge => {
 			const from = BY_PATH.get(edge.from);
 			const to = BY_PATH.get(edge.to);

@@ -14,7 +14,7 @@ Conventions and working method for contributors and coding agents in this repo.
 |Path|Contents|
 |---|---|
 |`server/`|Go server. `main.go`, `cmd/tooldoc/`, `internal/`, `migrations/`, `spec/`.|
-|`extension/`|omp extension (TypeScript). `index.ts` wires `lib/<feature>/`; `lib/shared/` holds helpers that are not tied to the bus.|
+|`extension/`|omp extension (TypeScript). `index.ts` wires `lib/<feature>/`; `lib/shared/` holds generic helpers no feature owns (command argument parsing and the `CommandResult` shape, the owner-only credential file store).|
 |`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_*.py` (pytest) for `scripts/`.|
 |`gui/`|Web GUI: `src/` (browser code), `tests/` (bun), `scripts/build.ts` (bundles into `server/internal/web/dist/`), `index.html` (shell template).|
 |`scripts/build.py`|Release build: builds the GUI (`--skip-gui` to skip), cross-compiles the server and writes `SHA256SUMS`.|
@@ -35,13 +35,13 @@ Conventions and working method for contributors and coding agents in this repo.
 - `server/main.go`: wiring and CLI dispatch only, no logic: config, CLI dispatch, DB, migrations, `server.Serve`.
 - `server/internal/<feature>/`: one folder per feature (`auth`, `inbox`, `spaces`, `invites`, `messaging`, `blackboards`, `overview`). `internal/guide` is not a feature: it holds only the embedded guide text (below).
   - `service.go`: business logic
-  - `repository.go`: all SQL of the feature (interfaces defined where they are used)
+  - `repository.go`: all SQL of the feature, as package functions over `db.DBTX` (no repository interfaces)
   - `*_test.go`: table-driven tests next to the code, real SQLite via `internal/platform/db/dbtest`
 - **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`, `spaces.RevocationHook`, passed together in the `spaces.Hooks` parameter object) and service methods, inside the caller's transaction: the feature that runs the operation opens it (`db.InTx`, or `inbox.InTx` when it produces inbox entries) and passes it on as `db.DBTX`. `internal/overview` is a read composition (the space overview and the web GUI state): it owns no table, resolves the caller once and reads only through the spaces, messaging, blackboards, invites and inbox services; only `internal/tools`, `internal/web` and the `internal/server` wiring import it. Rights rules live in `spaces.Membership` (`Leads`, `Joined`, `MaySeeInvites`); transports ask them, never re-implement them.
 - Transports are thin: `internal/tools` (the handler layer: one registry of `bus_*` tools), `internal/rpc`, `internal/mcpserver`, `internal/admin`, `internal/web` (the web GUI backend: embedded app, cookie sessions re-validated per request; served only on its own listener `AMB_WEB_ADDR`, never on the API listener); `internal/server` composes everything (`Build` returns the API and GUI handlers, `Routes`/`WebRoutes`, `Run` serves both listeners, `Serve` builds, opens the listeners, publishes the instance and runs).
 - `internal/guide`: the agent guide (`guide.md`, embedded, ≤ 4000 characters, the same for every token). It is served as the MCP `instructions`, as `GET /v1/guide` and as the TOOLS.md section "Working on the bus"; edit `guide.md`, then regenerate TOOLS.md.
 - `internal/domain/`: business rules shared by features (names, body and title limits).
-- `internal/platform/`: shared infra (apperr, db, broker, httpx, httpserver, config, instance, detach); only for things used by 2+ packages.
+- `internal/platform/`: infrastructure that is not business logic (apperr, db, broker, httpx, httpserver, config, instance, detach). Some packages have a single consumer (`broker`, `httpserver`, `detach`): they live here because they are infrastructure, not because they are shared.
 - `server/migrations/`: numbered SQL files; schema never inline in Go code.
 - Dependencies point inward: transport → service → repository/platform. Never the reverse.
 - Behaviour is specified in `server/spec/*.feature`; keep it in sync.
@@ -115,13 +115,13 @@ Facts that are not obvious from the code and that cost time to find out:
 
 **Server**
 - `agent-message-bus start` detaches the server and returns at once; `stop` ends it.
-- For a throwaway instance, set `AMB_ADDR=127.0.0.1:<port>`, `AMB_DB_PATH=<temp>/x.db` and `AMB_ADMIN_TOKEN=<32+ chars>`. The web GUI listens on `AMB_WEB_ADDR` (default `127.0.0.1:8081`): set `AMB_WEB_ADDR=127.0.0.1:<port2>` or `off`, or a second instance fails to bind it. The log is written next to the db.
+- For a throwaway instance, always set all four: `AMB_ADDR=127.0.0.1:<port>`, `AMB_DB_PATH=<temp>/x.db`, `AMB_ADMIN_TOKEN=<32+ chars>` and `AMB_WEB_ADDR=127.0.0.1:<port2>` or `off`. Without them the server uses the default data dir and ports: it touches your real DB, and a second instance fails to bind the web GUI's default `127.0.0.1:8081`. The log is written next to the db.
 - The instance admin token authenticates as the bootstrap admin agent `admin` (kind admin), created on the first start; `bus_whoami` with it returns name `admin`. A dev DB that holds a leader or member named `admin` refuses to start: delete it.
 - The HTTP API is `POST /v1/tools/<name>` with the JSON args as the body and `Authorization: Bearer <token>`. The result comes back as `{"result": …}`. RPC results may carry `"mail": {"waiting", "critical", "spaces"}`: once, on the first result after new mail reached an empty mailbox (or a critical entry arrived); `bus_inbox_read`, `bus_wait` or the SSE stream returning the entry counts as told, and a full `bus_inbox_ack` lets the next mail notify again. Strict parsers must allow the extra key.
 
 **Loading the working-tree extension**
 - Use `omp -e <repo>/extension/index.ts`. In omp 18.12, `--plugin-dir <repo>` did not register the extension's flags.
-- A plugin installed with `omp plugin install` loads as well. Copies with the `agent-bus:instance` handshake (E10c) let only the first one to load run; an older installed copy without it still registers its `bus_*` tools and `/bus` next to the working tree.
+- A plugin installed with `omp plugin install` loads as well. Copies with the `agent-bus:instance` handshake (E10c) let only the first one to load run; an older installed copy without it (for example plugin 0.1.0) still registers its `bus_*` tools and `/bus` and opens its own inbox stream next to the working tree. Then smoke-test with `omp --no-extensions -e <repo>/extension/index.ts`, so only the working-tree copy loads.
 
 **Env credentials**
 - `AGENT_BUS_URL`/`AGENT_BUS_TOKEN` are read once at load and then deleted from `process.env`.
