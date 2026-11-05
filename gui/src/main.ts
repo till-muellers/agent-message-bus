@@ -6,9 +6,9 @@ import { createSessionApi } from "./api/session.ts";
 import { loadView } from "./poll/load-view.ts";
 import { createPoller, type Poller } from "./poll/poller.ts";
 import { listenToHash } from "./router/hash-source.ts";
-import { parseRoute } from "./router/routes.ts";
+import { hrefOf, parseRoute } from "./router/routes.ts";
 import { createAdminIntents } from "./state/admin-intents.ts";
-import type { AppState } from "./state/app-state.ts";
+import type { AppState, Route } from "./state/app-state.ts";
 import { initialState, reducer } from "./state/reducer.ts";
 import { createSessionIntents } from "./state/session-intents.ts";
 import { createSpaceIntents } from "./state/space-intents.ts";
@@ -32,11 +32,17 @@ function startPolling(store: Store, http: Http): Poller {
 	return poller;
 }
 
+/** Navigates the store first, so the hash change it causes is a no-op that keeps the notice that follows; replaces the history entry. */
+function goTo(store: Store, route: Route): void {
+	store.dispatch({ type: "navigate", route });
+	location.replace(hrefOf(route));
+}
+
 function intentsOf(store: Store, http: Http, poller: Poller): { intents: Intents; restore(): Promise<void> } {
 	const deps = { dispatch: store.dispatch, refresh: () => poller.refreshNow() };
 	const session = createSessionIntents(createSessionApi(http), store.dispatch);
 	const admins = createAdminIntents(createAdminsApi(http), deps);
-	const space = createSpaceIntents(createMutations(http), deps);
+	const space = createSpaceIntents(createMutations(http), deps, (route) => goTo(store, route));
 	const intents: Intents = {
 		signIn: (token) => void session.signIn(token),
 		signOut: () => void session.signOut(),
