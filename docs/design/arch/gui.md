@@ -32,13 +32,13 @@ gui/
     api/
       api-error.ts      ApiError(status, code, message); errorMessage(unknown); toApiError(unknown)
       http.ts           fetch wrapper: same-origin credentials, JSON, X-CSRF-Token on non-GET, error envelope → ApiError
-      decode.ts         narrowing decoder primitives (fields, text, count, flag, oneOf, list) + session; no `as` casts on wire data
-      decode-state.ts   decoders of GET /web/api/state (space list, space detail); later reads get their own decode-<read>.ts
+      decode.ts         narrowing decoder primitives (fields, text, count, flag, list) + session (the kind stays text); no `as` casts on wire data
+      decode-state.ts   decoders of GET /web/api/state (space list with mayManage per row and maxInboxLimit, space detail with mayManage; roles stay text); later reads get their own decode-<read>.ts
       decode-threads.ts decoders of the blackboard reads (thread list, thread with posts)
       decode-inbox.ts   decoder of GET /web/api/inbox (entries; the type and the delivery class stay text so newer values still show)
       types.ts          wire types from contracts.md (Identity, SpaceSummary, Overview, PendingInvite, ThreadInfo, Thread, Post, Entry, AdminInfo, MintedAdmin)
       session.ts        signIn(token), restore(), signOut()
-      reads.ts          admins() (GUI-5); spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox() (GUI-4: limit=500, oldest first; the view says when the list is cut)
+      reads.ts          admins() (GUI-5); spaces(), space(name) (GET /web/api/state[?space=]); threads(space, board), thread(space, id), inbox() (GUI-4: reads the state's maxInboxLimit, then that many entries, oldest first; the view says when the list is cut)
       decode-admins.ts  (W2) decoders of the admin list, the minted token and {deleted}
       admins.ts         (W2) mint(name), revoke(name); the list is the polled read reads.admins()
       decode-mutations.ts (W3) decoders of the invite code, {cancelled} and {postId}
@@ -71,8 +71,8 @@ gui/
       login.ts          token form
       table.ts          table(head, rows): a header row and keyed rows
       time.ts           time(iso): a <time> element with the local formatted text
-      spaces.ts         space list: leader and member counts, admin names, open invites with leader rights
-      space.ts          participants, topics + send form (no `all` or critical without leader rights), blackboards, recent threads; with leader rights revoke per member (and per leader for admin sessions), open invites with a cancel button by id, the invite form and delete space
+      spaces.ts         space list: leader and member counts, admin names, open invites where the session may manage a space (mayManage)
+      space.ts          participants, topics + send form (no `all` or critical without leader rights), blackboards, recent threads; with leader rights (the state's mayManage, never the presence of invites) revoke per member (and per leader for admin sessions; no revoke for a role the GUI does not know), open invites with a cancel button by id, the invite form and delete space
       board.ts          threads of a blackboard (most recently active first)
       thread.ts         a thread: title, posts with author and time, reply form (W3)
       inbox.ts          the signed-in agent's own inbox, read-only ("Inbox of <kind> <name>", no acknowledge)
@@ -161,12 +161,12 @@ As in `contracts.md` §10 (checked, every call present). Sign-in errors the logi
 | Sign in | `POST /web/session`, header `Authorization: Bearer <token>`, no body | `{kind, name, space?, csrf}` + `Set-Cookie amb_session` (`Path=/web`) → `session/restored` |
 | Restore after reload | `GET /web/session` (§10.1) | same body incl. the same `csrf`; 401 → login view |
 | Sign out | `DELETE /web/session` (CSRF-exempt) | `{ok: true}` |
-| Space list | `GET /web/api/state` | `{you, spaces: [SpaceSummary + invites], inbox: {waiting}}` → `views/spaces.ts` |
-| Space | `GET /web/api/state?space=<s>` | `{you, overview, invites?, inbox}` → `views/space.ts`; `invites` present only for leader-rights sessions (leader of the space or admin) |
+| Space list | `GET /web/api/state` | `{you, spaces: [SpaceSummary + mayManage + invites?], inbox: {waiting}, maxInboxLimit}` → `views/spaces.ts`; `maxInboxLimit` → the inbox read |
+| Space | `GET /web/api/state?space=<s>` | `{you, overview, mayManage, invites?, inbox}` → `views/space.ts`; `mayManage` decides the leader controls; `invites` present only for leader-rights sessions (leader of the space or admin) |
 | Pending invites (slice 10) | `GET /web/api/spaces/<s>/invites` | `[{id, name, expiresAt, invitedBy}]` → invite rows with a cancel button; member session 403 `only leaders may list or cancel invites` (section hidden for members) |
 | Threads | `GET /web/api/spaces/<s>/blackboards/<b>/threads` | `bus_list_threads` result → `views/board.ts` |
 | Thread | `GET /web/api/spaces/<s>/threads/<id>` | `bus_read_thread` result → `views/thread.ts` |
-| Inbox | `GET /web/api/inbox?after=&limit=` | `[Entry]` → `views/inbox.ts` |
+| Inbox | `GET /web/api/inbox?after=&limit=` | `[Entry]` → `views/inbox.ts`; `limit` = the state's `maxInboxLimit` |
 | Admins (W2) | `GET /web/api/admins`, `POST /web/api/admins {name}`, `POST /web/api/admins/<n>/revoke` | list; `{name, token}` shown once; `{deleted}` |
 | Mutations (W3) | `POST …/invites {name, task?}`, `DELETE …/invites/<id>` + `X-CSRF-Token` (→ `{cancelled}`; slice 10, PO-3, `web/gui-invite-cancel.feature:17-19`), `POST …/revoke {name, confirm: "<space>/<name>"}`, `POST …/threads/<id>/posts {body}`, `POST …/topics/<t>/messages {body, critical?}`, `DELETE /web/api/spaces/<s> {confirm: "<s>"}` | per contract; invite code shown once; a `cancelled: false` result shows "the invite was already used, expired or cancelled" and refreshes |
 

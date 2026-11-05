@@ -2,13 +2,15 @@ import type { AdminInfo, Entry, SpaceDetail, SpaceList, Thread, ThreadInfo } fro
 
 export const spaceList: SpaceList = {
 	spaces: [
-		{ name: "demo", leaders: ["lead", "lead2"], admins: ["ops"], members: 1, joined: false, invites: 1 },
-		{ name: "other", leaders: ["lead"], admins: [], members: 0, joined: false, invites: 0 },
+		{ name: "demo", leaders: ["lead", "lead2"], admins: ["ops"], members: 1, joined: false, mayManage: true, invites: 1 },
+		{ name: "other", leaders: ["lead"], admins: [], members: 0, joined: false, mayManage: true, invites: 0 },
 	],
 	inboxWaiting: 2,
+	maxInboxLimit: 500,
 };
 
 export const spaceDetail: SpaceDetail = {
+	mayManage: true,
 	overview: {
 		space: "demo",
 		participants: [

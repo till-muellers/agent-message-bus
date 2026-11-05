@@ -8,7 +8,7 @@ const reads: Reads = {
 	space: async (name) => ({ ...spaceDetail, overview: { ...spaceDetail.overview, space: name } }),
 	threads: async () => threadInfos,
 	thread: async () => thread,
-	inbox: async () => entries,
+	inbox: async () => ({ entries, limit: 250 }),
 	admins: async () => admins,
 };
 
@@ -31,8 +31,8 @@ describe("loading the data of a route", () => {
 		expect(await loadView(reads, { name: "thread", space: "demo", threadId: 1 })).toEqual({ kind: "thread", space: "demo", thread });
 	});
 
-	test("the inbox loads the entries", async () => {
-		expect(await loadView(reads, { name: "inbox" })).toEqual({ kind: "inbox", entries });
+	test("the inbox loads the entries with the server's read limit", async () => {
+		expect(await loadView(reads, { name: "inbox" })).toEqual({ kind: "inbox", entries, limit: 250 });
 	});
 
 	test("the admin area loads the admin list", async () => {

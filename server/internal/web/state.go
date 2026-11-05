@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/invites"
 	"github.com/till-muellers/agent-message-bus/server/internal/overview"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
@@ -28,19 +29,23 @@ type waiting struct {
 	Waiting int `json:"waiting"`
 }
 
-// listState is GET /web/api/state; a row's invites only where the caller has leader rights.
+// listState is GET /web/api/state; a row's invites only where the caller has leader rights,
+// and the most entries one GET /web/api/inbox returns.
 type listState struct {
-	You    spaces.WhoamiResult `json:"you"`
-	Spaces []overview.SpaceRow `json:"spaces"`
-	Inbox  waiting             `json:"inbox"`
+	You           spaces.WhoamiResult `json:"you"`
+	Spaces        []overview.SpaceRow `json:"spaces"`
+	Inbox         waiting             `json:"inbox"`
+	MaxInboxLimit int                 `json:"maxInboxLimit"`
 }
 
-// spaceState is GET /web/api/state?space=; Invites only for leader-rights sessions.
+// spaceState is GET /web/api/state?space=; MayManage is the caller's leader rights in the
+// space, Invites only for leader-rights sessions.
 type spaceState struct {
-	You      spaces.WhoamiResult `json:"you"`
-	Overview overview.Overview   `json:"overview"`
-	Invites  *[]invites.Pending  `json:"invites,omitempty"`
-	Inbox    waiting             `json:"inbox"`
+	You       spaces.WhoamiResult `json:"you"`
+	Overview  overview.Overview   `json:"overview"`
+	MayManage bool                `json:"mayManage"`
+	Invites   *[]invites.Pending  `json:"invites,omitempty"`
+	Inbox     waiting             `json:"inbox"`
 }
 
 // state answers GET /web/api/state: the space list, or one space's view with ?space=.
@@ -51,11 +56,12 @@ func (g *Web) state(r *http.Request, p auth.Principal) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return spaceState{You: st.You, Overview: st.Overview, Invites: st.Invites, Inbox: waiting{st.Waiting}}, nil
+		return spaceState{You: st.You, Overview: st.Overview, MayManage: st.MayManage, Invites: st.Invites,
+			Inbox: waiting{st.Waiting}}, nil
 	}
 	st, err := g.overview.ListState(r.Context(), p)
 	if err != nil {
 		return nil, err
 	}
-	return listState{You: st.You, Spaces: st.Spaces, Inbox: waiting{st.Waiting}}, nil
+	return listState{You: st.You, Spaces: st.Spaces, Inbox: waiting{st.Waiting}, MaxInboxLimit: inbox.MaxLimit}, nil
 }

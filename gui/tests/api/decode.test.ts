@@ -17,11 +17,15 @@ describe("decoding the session", () => {
 		});
 	});
 
+	test("a kind the GUI does not know decodes as text", () => {
+		expect(decodeSession({ kind: "root", name: "ops", csrf: "c1" }).identity).toEqual({ kind: "root", name: "ops" });
+	});
+
 	const broken: [string, unknown][] = [
 		["no object", "admin"],
 		["an array", []],
 		["no kind", { name: "ops", csrf: "c1" }],
-		["an unknown kind", { kind: "root", name: "ops", csrf: "c1" }],
+		["a kind that is not text", { kind: 1, name: "ops", csrf: "c1" }],
 		["no name", { kind: "admin", csrf: "c1" }],
 		["a name that is not text", { kind: "admin", name: 7, csrf: "c1" }],
 		["no CSRF token", { kind: "admin", name: "ops" }],

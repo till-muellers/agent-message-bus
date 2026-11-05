@@ -20,8 +20,8 @@ func guiSetup(t *testing.T, w *world) {
 	w.must(t, err)
 }
 
-// TestListState: the GUI space list counts open invites only where the caller may see
-// them, and carries the caller and its waiting entries.
+// TestListState: the GUI space list says per space whether the caller may manage it,
+// counts open invites only there, and carries the caller and its waiting entries.
 func TestListState(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
@@ -31,42 +31,52 @@ func TestListState(t *testing.T) {
 		name    string
 		p       auth.Principal
 		invites map[string]*int
+		managed []string
 		waiting int
 	}{
-		{"leader: counts where it leads", w.lead, map[string]*int{"beta": n(0), "demo": n(1), "gamma": nil}, 1},
-		{"admin: counts everywhere", w.ops, map[string]*int{"beta": n(0), "demo": n(1), "gamma": n(0)}, 0},
-		{"member: its space, no count", w.wkr, map[string]*int{"demo": nil}, 0},
+		{"leader: manages and counts where it leads", w.lead, map[string]*int{"beta": n(0), "demo": n(1), "gamma": nil},
+			[]string{"beta", "demo"}, 1},
+		{"admin: manages and counts everywhere", w.ops, map[string]*int{"beta": n(0), "demo": n(1), "gamma": n(0)},
+			[]string{"beta", "demo", "gamma"}, 0},
+		{"member: its space, no count, manages nothing", w.wkr, map[string]*int{"demo": nil}, []string{}, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			st, err := w.ov.ListState(t.Context(), tc.p)
 			w.must(t, err)
-			got := map[string]*int{}
+			got, managed := map[string]*int{}, []string{}
 			for _, row := range st.Spaces {
 				got[row.Name] = row.Invites
+				if row.MayManage {
+					managed = append(managed, row.Name)
+				}
 			}
-			if !reflect.DeepEqual(got, tc.invites) || st.Waiting != tc.waiting || st.You.Name != tc.p.AgentName {
-				t.Fatalf("ListState = %+v (invites %v), want invites %v, waiting %d", st, got, tc.invites, tc.waiting)
+			if !reflect.DeepEqual(got, tc.invites) || !reflect.DeepEqual(managed, tc.managed) || st.Waiting != tc.waiting ||
+				st.You.Name != tc.p.AgentName {
+				t.Fatalf("ListState = %+v (invites %v, managed %v), want invites %v, managed %v, waiting %d",
+					st, got, managed, tc.invites, tc.managed, tc.waiting)
 			}
 		})
 	}
 }
 
-// TestSpaceState: the GUI space view carries the overview, the open invites only for
-// callers that may see them, and the waiting entries; the overview gate still applies.
+// TestSpaceState: the GUI space view carries the overview, whether the caller may manage
+// the space, the open invites only for callers that may see them, and the waiting
+// entries; the overview gate still applies.
 func TestSpaceState(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	guiSetup(t, w)
 	tests := []struct {
-		name    string
-		p       auth.Principal
-		invites []string // nil: no invites
-		waiting int
+		name      string
+		p         auth.Principal
+		mayManage bool
+		invites   []string // nil: no invites
+		waiting   int
 	}{
-		{"leader of the space", w.lead, []string{"pending"}, 1},
-		{"unjoined admin", w.ops, []string{"pending"}, 0},
-		{"member", w.wkr, nil, 0},
+		{"leader of the space", w.lead, true, []string{"pending"}, 1},
+		{"unjoined admin", w.ops, true, []string{"pending"}, 0},
+		{"member", w.wkr, false, nil, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,9 +89,10 @@ func TestSpaceState(t *testing.T) {
 					got = append(got, inv.Name)
 				}
 			}
-			if !reflect.DeepEqual(got, tc.invites) || st.Waiting != tc.waiting || st.Overview.Space != "demo" ||
-				st.You.Name != tc.p.AgentName {
-				t.Fatalf("SpaceState = %+v (invites %v), want invites %v, waiting %d", st, got, tc.invites, tc.waiting)
+			if !reflect.DeepEqual(got, tc.invites) || st.MayManage != tc.mayManage || st.Waiting != tc.waiting ||
+				st.Overview.Space != "demo" || st.You.Name != tc.p.AgentName {
+				t.Fatalf("SpaceState = %+v (invites %v), want mayManage %v, invites %v, waiting %d",
+					st, got, tc.mayManage, tc.invites, tc.waiting)
 			}
 		})
 	}

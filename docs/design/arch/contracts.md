@@ -279,25 +279,29 @@ Leader and member tokens may sign in with their normal reach. Sessions are in me
 `GET /web/api/state`:
 ```json
 {"you": <bus_whoami result>,
- "spaces": [{"name": "demo", "leaders": ["lead"], "admins": [], "members": 1, "joined": false, "invites": 1}],
- "inbox": {"waiting": 3}}
+ "spaces": [{"name": "demo", "leaders": ["lead"], "admins": [], "members": 1, "joined": false, "mayManage": true, "invites": 1}],
+ "inbox": {"waiting": 3},
+ "maxInboxLimit": 500}
 ```
-`invites` (count of pending codes) present only for spaces where the caller has leader rights (leader of the space or admin).
+`mayManage` (always present) is whether the caller has leader rights in that space (leader of the space or admin: invite, revoke, cancel invites, delete). `invites` (count of pending codes) present only where `mayManage` is true. `maxInboxLimit` is the most entries one `GET /web/api/inbox` returns (the server's own limit; a larger `limit` is 400). [R15]
 
 `GET /web/api/state?space=demo`:
 ```json
 {"you": <bus_whoami result>,
  "overview": <bus_space_overview result>,
+ "mayManage": true,
  "invites": [{"id": "3f9a0c1d2e4b5a67", "name": "worker", "invitedBy": "lead", "expiresAt": "2026-…Z"}],
  "inbox": {"waiting": 3}}
 ```
-No message bodies, never an invite code. `invites` only for leader-rights sessions (absent for members and non-leading participants); `id` from slice 10. Errors: unknown space 404; non-participant leader 403; no session 401.
+No message bodies, never an invite code. `mayManage` as on the list row, for this space. `invites` only for leader-rights sessions (absent for members and non-leading participants); `id` from slice 10. Errors: unknown space 404; non-participant leader 403; no session 401.
+
+Clients decide on leader controls from `mayManage`, never from whether `invites` is present, and treat roles and agent kinds as open text (a newer server may send a role they do not know) [R15]. Web API only, not extension-facing: `Agent-Bus-Protocol` stays 2.
 
 | Read | Response |
 |---|---|
 | `GET /web/api/spaces/{space}/blackboards/{board}/threads` | `bus_list_threads` result |
 | `GET /web/api/spaces/{space}/threads/{id}` | `bus_read_thread` result (404 for an id of another space) |
-| `GET /web/api/inbox?after=&limit=` | `[Entry]` of the signed-in agent's own scope, exactly like `bus_inbox_read` (CR-G4: member sessions one space, leader/admin sessions all their spaces); `limit` 1..500, default 100; never acks, never marks noticed; mutating methods 405 |
+| `GET /web/api/inbox?after=&limit=` | `[Entry]` of the signed-in agent's own scope, exactly like `bus_inbox_read` (CR-G4: member sessions one space, leader/admin sessions all their spaces); `limit` 1..`maxInboxLimit` (500), default 100; never acks, never marks noticed; mutating methods 405 |
 
 ### 10.3 Admin area [W2] (`web/gui-admins.feature`) — admin sessions only, else 403 `forbidden "admin token required"`
 

@@ -70,6 +70,13 @@ describe("the layout", () => {
 		expect(navHrefs(signedIn({ kind: "member", name: "worker", space: "demo" }))).toEqual(["#/", "#/inbox"]);
 	});
 
+	test("a kind the GUI does not know is named verbatim and gets no admin area", () => {
+		const state = signedIn({ kind: "auditor", name: "eve" });
+		const [header] = findAll(render(state, intents), byTag("header"));
+		expect(header && textOf(header)).toContain("Signed in as auditor eve");
+		expect(navHrefs(state)).toEqual(["#/", "#/inbox"]);
+	});
+
 	const currentCases: [Route, string[]][] = [
 		[{ name: "inbox" }, ["#/inbox"]],
 		[{ name: "spaces" }, ["#/"]],
@@ -113,7 +120,7 @@ describe("the layout", () => {
 	const pageCases: [Route, ViewData, string][] = [
 		[{ name: "board", space: "demo", board: "b" }, { kind: "board", space: "demo", board: "b", threads: threadInfos }, "b"],
 		[{ name: "thread", space: "demo", threadId: 1 }, { kind: "thread", space: "demo", thread }, "plan"],
-		[{ name: "inbox" }, { kind: "inbox", entries }, "Inbox of admin admin"],
+		[{ name: "inbox" }, { kind: "inbox", entries, limit: 500 }, "Inbox of admin admin"],
 		[{ name: "admins" }, { kind: "admins", admins }, "Admins"],
 	];
 	for (const [route, data, title] of pageCases) {

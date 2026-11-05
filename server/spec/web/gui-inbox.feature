@@ -59,6 +59,13 @@ Feature: The signed-in admin's inbox in the web GUI
       When the operator opens the inbox page
       Then the page shows the inbox of admin "ops"
 
+    Scenario: The inbox page reads as many entries as the server allows
+      Given the operator signed in with the token of admin "ops"
+      When the operator requests GET /web/api/state
+      Then the response names the inbox read limit 500
+      And the inbox page reads GET /web/api/inbox with limit 500
+      And GET /web/api/inbox with limit 501 is rejected with invalid "limit must be 1..500"
+
   Rule: The web GUI only reads the inbox
 
     Scenario: The inbox page never acknowledges an entry

@@ -26,6 +26,13 @@ function click(view: VNode, key: string): void {
 	findAll(view, (n) => n.key === key)[0]?.on.click?.(new Event("click"));
 }
 
+const member = { ...spaceDetail, mayManage: false, invites: undefined };
+
+/** The keys of the page's keyed buttons (the form submit buttons have none). */
+function buttonKeys(view: VNode): string[] {
+	return findAll(view, (n) => n.tag === "button").flatMap((b) => (b.key === undefined ? [] : [b.key]));
+}
+
 describe("the space page", () => {
 	const view = spaceView(spaceDetail, intents, true);
 
@@ -79,7 +86,21 @@ describe("the space page", () => {
 	});
 
 	test("a session without leader rights sees no invites section", () => {
-		expect(section(spaceView({ ...spaceDetail, invites: undefined }, intents, false), "invites")).toBeUndefined();
+		expect(section(spaceView(member, intents, false), "invites")).toBeUndefined();
+	});
+
+	test("a leader session without invites still gets the manage UI from mayManage", () => {
+		const leader = spaceView({ ...spaceDetail, invites: undefined }, intents, false);
+		expect(buttonKeys(leader)).toEqual(["revoke-worker", "delete-space"]);
+		expect(findAll(leader, (n) => n.key === "invite-form")).toHaveLength(1);
+		expect(textOf(section(leader, "invites") ?? leader)).toContain("No open invites");
+	});
+
+	test("an unknown role is shown verbatim and gets no revoke button", () => {
+		const participants = [{ name: "eve", role: "observer", connected: false }];
+		const page = spaceView({ ...spaceDetail, overview: { ...spaceDetail.overview, participants } }, intents, true);
+		expect(rows(page, "participants").map((r) => r.slice(0, 2))).toEqual([["Name", "Role"], ["eve", "observer"]]);
+		expect(buttonKeys(page)).not.toContain("revoke-eve");
 	});
 
 	test("empty lists say so", () => {
@@ -109,10 +130,10 @@ describe("the space page", () => {
 		expect(calls).toEqual([`ask ${JSON.stringify({ kind: "delete-space", space: "demo" })}`]);
 	});
 
-	test("without leader rights there is no revoke, invite or delete", () => {
-		const member = spaceView({ ...spaceDetail, invites: undefined }, intents, false);
-		expect(findAll(member, (n) => n.tag === "button").map((b) => b.key).filter((k) => k !== undefined)).toEqual([]);
-		expect(findAll(member, (n) => n.key === "invite-form")).toEqual([]);
+	test("without leader rights there is no revoke, invite or delete, even with invites in the state", () => {
+		const page = spaceView({ ...spaceDetail, mayManage: false }, intents, false);
+		expect(buttonKeys(page)).toEqual([]);
+		expect(findAll(page, (n) => n.key === "invite-form")).toEqual([]);
 	});
 
 	test("everyone gets the send form for the space's topics", () => {
@@ -125,8 +146,8 @@ describe("the space page", () => {
 	});
 
 	test("without leader rights the send form offers neither all nor critical", () => {
-		const member = spaceView({ ...spaceDetail, invites: undefined }, intents, false);
-		expect(findAll(member, byTag("option")).map(textOf)).toEqual(["notes"]);
-		expect(findAll(member, (n) => n.attrs.name === "critical")).toEqual([]);
+		const page = spaceView(member, intents, false);
+		expect(findAll(page, byTag("option")).map(textOf)).toEqual(["notes"]);
+		expect(findAll(page, (n) => n.attrs.name === "critical")).toEqual([]);
 	});
 });

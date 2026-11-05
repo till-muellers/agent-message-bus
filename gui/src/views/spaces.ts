@@ -9,10 +9,10 @@ function row(space: SpaceSummary, withInvites: boolean): Row {
 	return { key: space.name, cells: withInvites ? [...cells, space.invites ?? ""] : cells };
 }
 
-/** Every space the session may see, in the server's order; open invites only with leader rights. */
+/** Every space the session may see, in the server's order; open invites where it may manage the space. */
 export function spacesView(list: SpaceList): VNode {
 	if (list.spaces.length === 0) return h("p", null, "No spaces yet.");
-	const withInvites = list.spaces.some((space) => space.invites !== undefined);
+	const withInvites = list.spaces.some((space) => space.mayManage);
 	const head = ["Space", "Leaders", "Admins", "Members", ...(withInvites ? ["Open invites"] : [])];
 	const rows = list.spaces.map((space) => row(space, withInvites));
 	return h("section", { key: "spaces" }, h("h1", null, "Spaces"), table(head, rows));

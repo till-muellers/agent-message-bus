@@ -43,14 +43,24 @@ type stateRow struct {
 	Leaders, Admins []string
 	Members         int
 	Joined          bool
+	MayManage       bool
 	Invites         *int
 }
 
 type stateList struct {
-	You    struct{ Kind, Name string }
-	Spaces []stateRow
-	Inbox  struct{ Waiting int }
+	You           struct{ Kind, Name string }
+	Spaces        []stateRow
+	Inbox         struct{ Waiting int }
+	MaxInboxLimit int
 }
+
+// managed marks r as a space the caller may manage, with invites open invites.
+func managed(r stateRow, invites int) stateRow {
+	r.MayManage, r.Invites = true, &invites
+	return r
+}
+
+func joined(r stateRow) stateRow { r.Joined = true; return r }
 
 func TestStateList(t *testing.T) {
 	t.Parallel()
@@ -59,18 +69,17 @@ func TestStateList(t *testing.T) {
 	demo := stateRow{Name: "demo", Leaders: []string{"lead"}, Admins: []string{}, Members: 1}
 	other := stateRow{Name: "other", Leaders: []string{"lead2"}, Admins: []string{}}
 	quiet := stateRow{Name: "quiet", Leaders: []string{"lead2"}, Admins: []string{}}
-	with := func(r stateRow, invites *int, joined bool) stateRow { r.Invites, r.Joined = invites, joined; return r }
 	tests := []struct {
 		name, token, kind, you string
 		spaces                 []stateRow
 		waiting                int
 	}{
-		{"bootstrap admin sees all spaces with invite counts", adminToken, "admin", "admin",
-			[]stateRow{with(demo, new(1), false), with(other, new(1), false), with(quiet, new(0), false)}, 0},
-		{"leader sees all spaces, invite counts only where it leads", w.lead, "leader", "lead",
-			[]stateRow{with(demo, new(1), true), with(other, nil, false), with(quiet, nil, false)}, 1},
-		{"member sees its own space without invite counts", w.worker, "member", "worker",
-			[]stateRow{with(demo, nil, true)}, 0},
+		{"bootstrap admin manages all spaces, with invite counts", adminToken, "admin", "admin",
+			[]stateRow{managed(demo, 1), managed(other, 1), managed(quiet, 0)}, 0},
+		{"leader sees all spaces, manages and counts invites only where it leads", w.lead, "leader", "lead",
+			[]stateRow{joined(managed(demo, 1)), other, quiet}, 1},
+		{"member sees its own space, manages nothing", w.worker, "member", "worker",
+			[]stateRow{joined(demo)}, 0},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,10 +88,11 @@ func TestStateList(t *testing.T) {
 			if err := json.Unmarshal([]byte(body), &got); status != http.StatusOK || err != nil {
 				t.Fatalf("GET /web/api/state = %d %s (%v)", status, body, err)
 			}
-			if got.You.Kind != tc.kind || got.You.Name != tc.you || got.Inbox.Waiting != tc.waiting {
-				t.Fatalf("you/inbox = %+v %+v, want %s %s waiting %d", got.You, got.Inbox, tc.kind, tc.you, tc.waiting)
+			if got.You.Kind != tc.kind || got.You.Name != tc.you || got.Inbox.Waiting != tc.waiting || got.MaxInboxLimit != 500 {
+				t.Fatalf("you/inbox/limit = %+v %+v %d, want %s %s waiting %d limit 500",
+					got.You, got.Inbox, got.MaxInboxLimit, tc.kind, tc.you, tc.waiting)
 			}
-			if !reflect.DeepEqual(got.Spaces, tc.spaces) {
+			if !reflect.DeepEqual(got.Spaces, tc.spaces) || strings.Count(body, `"mayManage"`) != len(tc.spaces) {
 				t.Fatalf("spaces = %s, want %+v", body, tc.spaces)
 			}
 		})
@@ -95,10 +105,11 @@ func TestStateList(t *testing.T) {
 type pendingInvite struct{ Name, InvitedBy, ExpiresAt string }
 
 type stateSpace struct {
-	You      struct{ Kind, Name string }
-	Overview map[string]json.RawMessage
-	Invites  *[]pendingInvite
-	Inbox    struct{ Waiting int }
+	You       struct{ Kind, Name string }
+	Overview  map[string]json.RawMessage
+	MayManage *bool
+	Invites   *[]pendingInvite
+	Inbox     struct{ Waiting int }
 }
 
 func TestStateSpace(t *testing.T) {
@@ -110,12 +121,13 @@ func TestStateSpace(t *testing.T) {
 	pending := []pendingInvite{{Name: "pending", InvitedBy: "lead"}}
 	tests := []struct {
 		name, token, space string
+		mayManage          bool
 		invites            *[]pendingInvite
 	}{
-		{"admin gets the open invites", adminToken, "demo", &pending},
-		{"leader of the space gets the open invites", w.lead, "demo", &pending},
-		{"member gets no invites key", w.worker, "demo", nil},
-		{"leader with no open invite gets an empty list", w.lead2, "quiet", &[]pendingInvite{}},
+		{"admin manages and gets the open invites", adminToken, "demo", true, &pending},
+		{"leader of the space manages and gets the open invites", w.lead, "demo", true, &pending},
+		{"member manages nothing and gets no invites key", w.worker, "demo", false, nil},
+		{"leader with no open invite manages and gets an empty list", w.lead2, "quiet", true, &[]pendingInvite{}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,6 +145,9 @@ func TestStateSpace(t *testing.T) {
 				if strings.Contains(body, secret) {
 					t.Fatalf("state carries %q: %s", secret, body)
 				}
+			}
+			if got.MayManage == nil || *got.MayManage != tc.mayManage {
+				t.Fatalf("mayManage = %v, want %v: %s", got.MayManage, tc.mayManage, body)
 			}
 			if strings.Contains(body, `"invites"`) != (tc.invites != nil) {
 				t.Fatalf("invites key presence: %s", body)

@@ -1,11 +1,8 @@
 // Wire types of the /web routes (docs/design/arch/contracts.md §10).
 
-export const AGENT_KINDS = ["admin", "leader", "member"] as const;
-export type AgentKind = (typeof AGENT_KINDS)[number];
-
-/** The signed-in agent; a member names its one space. */
+/** The signed-in agent; a member names its one space. kind stays text ("admin", "leader", "member") so a newer server's kinds still show. */
 export interface Identity {
-	kind: AgentKind;
+	kind: string;
 	name: string;
 	space?: string;
 }
@@ -16,28 +13,28 @@ export interface SessionInfo {
 	csrf: string;
 }
 
-/** A participant's role in one space. */
-export const ROLES = ["admin", "leader", "member"] as const;
-export type Role = (typeof ROLES)[number];
-
-/** One row of GET /web/api/state; invites (pending codes) only with leader rights in that space. */
+/** One row of GET /web/api/state; mayManage is leader rights in that space, invites (pending codes) only with them. */
 export interface SpaceSummary {
 	name: string;
 	leaders: string[];
 	admins: string[];
 	members: number;
 	joined: boolean;
+	mayManage: boolean;
 	invites?: number;
 }
 
+/** GET /web/api/state; maxInboxLimit is the most entries one inbox read returns. */
 export interface SpaceList {
 	spaces: SpaceSummary[];
 	inboxWaiting: number;
+	maxInboxLimit: number;
 }
 
+/** A participant of a space; role stays text ("admin", "leader", "member") so a newer server's roles still show. */
 export interface Participant {
 	name: string;
-	role: Role;
+	role: string;
 	connected: boolean;
 }
 
@@ -80,9 +77,10 @@ export interface Overview {
 	recentThreads: RecentThread[];
 }
 
-/** GET /web/api/state?space=; invites only for leader-rights sessions. */
+/** GET /web/api/state?space=; mayManage is leader rights in the space, invites only with them. */
 export interface SpaceDetail {
 	overview: Overview;
+	mayManage: boolean;
 	invites?: PendingInvite[];
 	inboxWaiting: number;
 }

@@ -2,6 +2,7 @@
 	"inbox": {
 		"waiting": 1
 	},
+	"maxInboxLimit": 500,
 	"spaces": [
 		{
 			"admins": [],
@@ -10,6 +11,7 @@
 			"leaders": [
 				"lead"
 			],
+			"mayManage": true,
 			"members": 1,
 			"name": "demo"
 		},
@@ -20,6 +22,7 @@
 			"leaders": [
 				"lead"
 			],
+			"mayManage": true,
 			"members": 0,
 			"name": "scratch"
 		}

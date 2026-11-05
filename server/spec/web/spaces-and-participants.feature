@@ -148,3 +148,32 @@ Feature: Spaces and participants in the web GUI
       When the operator opens the space "ghost"
       Then the response status is 404
       And the page says the space does not exist
+
+  Rule: The state names what the session may manage
+
+    # "May manage" is leader rights in a space (leader of it or admin): invite,
+    # revoke, cancel invites and delete. The GUI offers those controls from it,
+    # never from whether the state carries invites.
+
+    Scenario: An admin session may manage every space
+      Given the operator signed in with the instance admin token
+      When the operator opens the space list
+      Then the state says the session may manage space "demo"
+      And the state says the session may manage space "other"
+
+    Scenario: A leader session may manage only the spaces it leads
+      Given the operator signed in with the token of leader "lead2"
+      When the operator opens the space list
+      Then the state says the session may manage space "demo"
+      And the state says the session may not manage space "other"
+
+    Scenario: A member session may not manage its space
+      Given the operator signed in with the token of member "worker"
+      When the operator opens the space "demo"
+      Then the state says the session may not manage space "demo"
+
+    Scenario: The space page offers the leader controls from the state
+      Given the operator signed in with the token of leader "lead2"
+      When the operator opens the space "demo"
+      Then the state says the session may manage space "demo"
+      And the page offers the invite form, a revoke button for "worker" and the delete button

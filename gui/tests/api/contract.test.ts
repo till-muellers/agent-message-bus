@@ -5,7 +5,7 @@ import { decodeCancelled, decodeInviteCode, decodePostId } from "../../src/api/d
 import { decodeSpaceDetail, decodeSpaceList } from "../../src/api/decode-state.ts";
 import { decodeThread, decodeThreadInfos } from "../../src/api/decode-threads.ts";
 import { type Decoder, decodeDeleted, decodeOk, decodeSession } from "../../src/api/decode.ts";
-import type { SpaceDetail } from "../../src/api/types.ts";
+import type { SpaceDetail, SpaceList } from "../../src/api/types.ts";
 import { at, without, wire, wireNames } from "./wire.ts";
 
 // Every fixture the Go handlers wrote decodes with the production decoder, and the decoded
@@ -24,12 +24,18 @@ const asSent = <T>(value: T): T => value;
 
 const detail = check(
 	decodeSpaceDetail,
-	(d: SpaceDetail) => ({ overview: d.overview, invites: d.invites, inbox: { waiting: d.inboxWaiting } }),
+	(d: SpaceDetail) => ({ overview: d.overview, mayManage: d.mayManage, invites: d.invites, inbox: { waiting: d.inboxWaiting } }),
 	(json) => ({ ...without(json, "you"), overview: without(at(json, "overview"), "you") }),
 );
 
+const list = check(
+	decodeSpaceList,
+	(l: SpaceList) => ({ spaces: l.spaces, inbox: { waiting: l.inboxWaiting }, maxInboxLimit: l.maxInboxLimit }),
+	(json) => without(json, "you"),
+);
+
 const cases: Record<string, Check> = {
-	"state-list.json": check(decodeSpaceList, (l) => ({ spaces: l.spaces, inbox: { waiting: l.inboxWaiting } }), (json) => without(json, "you")),
+	"state-list.json": list,
 	"state-space-leader.json": detail,
 	"state-space-member.json": detail,
 	"threads.json": check(decodeThreadInfos, asSent),
@@ -60,7 +66,12 @@ describe("the /web wire fixtures of the Go handlers", () => {
 		});
 	}
 
-	test("a space detail without leader rights carries no invites", () => {
-		expect(decodeSpaceDetail(wire("state-space-member.json")).invites).toBeUndefined();
+	test("a member may not manage its space and gets no invites", () => {
+		const member = decodeSpaceDetail(wire("state-space-member.json"));
+		expect([member.mayManage, member.invites]).toEqual([false, undefined]);
+	});
+
+	test("a leader may manage its space", () => {
+		expect(decodeSpaceDetail(wire("state-space-leader.json")).mayManage).toBe(true);
 	});
 });
