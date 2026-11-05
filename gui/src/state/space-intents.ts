@@ -1,7 +1,7 @@
 import type { Mutations } from "../api/mutations.ts";
 import type { PendingInvite } from "../api/types.ts";
 import type { Action } from "./actions.ts";
-import type { PendingConfirm } from "./app-state.ts";
+import type { PendingConfirm, Route } from "./app-state.ts";
 import { type MutationDeps, mutate } from "./mutate.ts";
 
 export interface SpaceIntents {
@@ -24,10 +24,17 @@ function capitalized(word: string): string {
 	return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-/** Runs the mutations of a space (invite code shown once, outcome as a notice); never rejects. */
-export function createSpaceIntents(api: Mutations, deps: MutationDeps): SpaceIntents {
+/**
+ * Runs the mutations of a space (invite code shown once, outcome as a notice); never rejects.
+ * A deleted space goes to the space list first, so its notice stays there and the dead route is no longer polled.
+ */
+export function createSpaceIntents(api: Mutations, deps: MutationDeps, go: (route: Route) => void): SpaceIntents {
+	const spaceDeleted = (space: string): Action => {
+		go({ name: "spaces" });
+		return told(`Space ${space} deleted.`);
+	};
 	const run = (confirm: PendingConfirm): Promise<void> => {
-		if (confirm.kind === "delete-space") return mutate(deps, api.deleteSpace(confirm.space), () => told(`Space ${confirm.space} deleted.`));
+		if (confirm.kind === "delete-space") return mutate(deps, api.deleteSpace(confirm.space), () => spaceDeleted(confirm.space));
 		const { space, name, role } = confirm;
 		const removed = `${capitalized(role)} ${name} revoked from space ${space}.`;
 		return mutate(deps, api.revoke(space, name), (deleted) => told(deleted ? removed : `Nothing was removed: ${name} is not in space ${space}.`));

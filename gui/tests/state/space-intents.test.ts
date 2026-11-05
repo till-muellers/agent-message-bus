@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Mutations } from "../../src/api/mutations.ts";
 import type { Action } from "../../src/state/actions.ts";
+import type { Route } from "../../src/state/app-state.ts";
 import { createSpaceIntents, type SpaceIntents } from "../../src/state/space-intents.ts";
 
 const invite = { id: "3f9a0c1d2e4b5a67", name: "new", invitedBy: "lead", expiresAt: "x" };
@@ -20,7 +21,9 @@ function intents(over: Partial<Mutations> = {}): { actions: Action[]; calls: str
 		},
 		...over,
 	};
-	return { actions, calls, space: createSpaceIntents(api, { dispatch: (a) => void actions.push(a), refresh: () => {} }) };
+	const deps = { dispatch: (a: Action) => void actions.push(a), refresh: () => {} };
+	const go = (route: Route): void => void actions.push({ type: "navigate", route });
+	return { actions, calls, space: createSpaceIntents(api, deps, go) };
 }
 
 describe("the space intents", () => {
@@ -55,11 +58,21 @@ describe("the space intents", () => {
 		expect(actions).toEqual([{ type: "confirm/close" }, { type: "notice/shown", message: "Member worker revoked from space demo.", alert: false }]);
 	});
 
-	test("a confirmed delete deletes the space", async () => {
+	test("a confirmed delete deletes the space, goes to the space list and says so there", async () => {
 		const { actions, calls, space } = intents();
 		await space.confirmed({ kind: "delete-space", space: "demo" });
 		expect(calls).toEqual(["delete demo"]);
-		expect(actions.at(-1)).toEqual({ type: "notice/shown", message: "Space demo deleted.", alert: false });
+		expect(actions).toEqual([
+			{ type: "confirm/close" },
+			{ type: "navigate", route: { name: "spaces" } },
+			{ type: "notice/shown", message: "Space demo deleted.", alert: false },
+		]);
+	});
+
+	test("a refused delete stays on the space", async () => {
+		const { actions, space } = intents({ deleteSpace: async () => Promise.reject(new Error("no")) });
+		await space.confirmed({ kind: "delete-space", space: "demo" });
+		expect(actions).toEqual([{ type: "confirm/close" }, { type: "notice/shown", message: "no", alert: true }]);
 	});
 
 	test("a post and a topic message report their success", async () => {
