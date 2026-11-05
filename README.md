@@ -144,7 +144,7 @@ Contributor conventions, working method and the definition of done are in [`.omp
 3. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
 
 ```sh
-git tag v0.2.0 && git push origin v0.2.0
+git tag vX.Y.Z && git push origin vX.Y.Z
 ```
 
 ## License
