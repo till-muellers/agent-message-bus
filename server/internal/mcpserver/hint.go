@@ -3,7 +3,6 @@ package mcpserver
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -12,21 +11,10 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 )
 
-// Noticer takes the caller's pending "You have mail" notice (inbox.Service).
-type Noticer interface {
-	TakeNotice(ctx context.Context, p auth.Principal) (inbox.Notice, bool, error)
-}
-
 // addHint appends the "You have mail" text block to res when p's mailbox scope holds an
-// unnoticed edge. The tool already ran, so a failed notice query is logged, not returned:
-// the edge stays unnoticed and a later result carries the hint.
-func addHint(ctx context.Context, notices Noticer, p auth.Principal, res *mcp.CallToolResult) {
-	n, due, err := notices.TakeNotice(ctx, p)
-	if err != nil {
-		slog.ErrorContext(ctx, "taking mail notice failed", "agent_id", p.AgentID, "err", err)
-		return
-	}
-	if due {
+// unnoticed edge (inbox.NoticeAfter).
+func addHint(ctx context.Context, notices inbox.Noticer, p auth.Principal, res *mcp.CallToolResult) {
+	if n, due := inbox.NoticeAfter(ctx, notices, p); due {
 		res.Content = append(res.Content, &mcp.TextContent{Text: hintText(n)})
 	}
 }

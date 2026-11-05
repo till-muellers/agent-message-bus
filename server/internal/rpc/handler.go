@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/httpx"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
@@ -28,7 +29,7 @@ func ListTools(reg *tools.Registry) http.Handler {
 // CallTool serves POST /v1/tools/{name} behind auth.Middleware, which has already rejected
 // a request without a principal. A successful call result gains the "mail" sibling when
 // notices has one for the caller.
-func CallTool(reg *tools.Registry, notices Noticer) http.Handler {
+func CallTool(reg *tools.Registry, notices inbox.Noticer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { callTool(w, r, reg, notices) })
 }
 
@@ -41,7 +42,7 @@ func listTools(w http.ResponseWriter, reg *tools.Registry) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-func callTool(w http.ResponseWriter, r *http.Request, reg *tools.Registry, notices Noticer) {
+func callTool(w http.ResponseWriter, r *http.Request, reg *tools.Registry, notices inbox.Noticer) {
 	p, _ := auth.FromContext(r.Context())
 	args, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
 	if err != nil {
