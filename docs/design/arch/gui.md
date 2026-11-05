@@ -11,7 +11,7 @@ Owner: Arch-client. Specs: `docs/design/specs/web/*.feature`, `docs/design/specs
 - **No runtime dependency.** Browser APIs only (`fetch`, `URL`, `history`/`hashchange`, DOM). Toolchain = the repo's existing one: bun (build, test), TypeScript (`tsc --noEmit`).
 - **The browser never holds a token.** The admin/agent token is typed once into a password field, sent in `Authorization: Bearer` to `POST /web/session`, and the field is cleared. The session is an HttpOnly cookie; the CSRF token lives in memory only (web analysis §3.7, §4.3).
 - **No HTML from data.** Every text node is created with `textContent`/`createTextNode`; `innerHTML`, `outerHTML`, `insertAdjacentHTML` and `document.write` are banned (fitness test, §7). Message bodies and post bodies are user-controlled.
-- **Pure core, thin DOM edge.** Routing, state, API decoding, polling schedule and views are pure TypeScript and unit-tested with `bun test` without a DOM. Only `view/mount.ts`, `view/form-field.ts`, `router/hash-source.ts` and `main.ts` touch browser globals.
+- **Pure core, thin DOM edge.** Routing, state, API decoding, polling schedule and views are pure TypeScript and unit-tested with `bun test` without a DOM. Only `view/mount.ts`, `view/form-field.ts`, `router/hash-source.ts` and `main.ts` touch browser globals (`document`, `window`, `location`, `history`, `navigator`, the storages, `fetch`, `FormData`, the `HTML…Element` classes); `state/*` never imports `views/*`, and the import graph of `gui/src` has no cycle (every relative import resolves to a module). `gui/tests/layout.test.ts` enforces all three.
 - **One responsibility per file, small functions** (`.omp/RULES.md`).
 
 ---
@@ -229,7 +229,7 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 | `views/*.ts` | assert the VNode tree (`h()` output): texts, order, keys, links (`hrefOf`), buttons per kind (no admin nav for a member) |
 | `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage). The patch decision function (`samePlace(a, b)`) is pure and tested. |
 | `scripts/build.ts` | builds into a temp `--out` (in-process and through the command line); asserts `index.html` references an existing `assets/main-*.js` and `assets/style-*.css` |
-| fitness | `tests/no-raw-html.test.ts`: no `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` in `gui/src` |
+| fitness | `tests/no-raw-html.test.ts`: no `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` in `gui/src`; `tests/layout.test.ts` (R4): browser globals only in the four DOM-edge modules (§1), no `state/*` → `views/*` import, every relative import resolves, no import cycle |
 
 Server behaviour (cookie flags, 401/403/405, CSRF binding, loopback rule) is tested in Go by Arch-server's W slices; the GUI tests only the client's side of each contract.
 
