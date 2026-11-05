@@ -25,36 +25,40 @@ const serverWait: RemoteTool = {
 const pi = { zod: z } as unknown as ExtensionAPI;
 
 /**
- * A wait tool over a live stream whose dispatcher holds `held` and answers `entries`, recording waits, forwards and
- * consumption; the forwarded call answers `answer`, or what `answer` returns per call when it is a function, and the
+ * A wait tool over a live stream whose ledger holds `held` and answers `entries`, recording waits, forwards and
+ * claims; the forwarded call answers `answer`, or what `answer` returns per call when it is a function, and the
  * stream already delivered the ids in `delivered`.
  */
 function setup(live: boolean, entries: Entry[] = [], held: Entry[] = [], answer: unknown = [entry(9)], delivered: number[] = []) {
 	const waits: { filter: WaitFilter; ms: number; signal?: AbortSignal }[] = [];
 	const forwards: { args: unknown; ms: number }[] = [];
-	const consumed: number[][] = [];
+	const claims: number[][] = [];
 	const takes: WaitFilter[] = [];
 	const stream = { live };
 	const deps: WaitToolDeps = {
-		dispatcher: () =>
+		source: () =>
 			stream.live
 				? {
 						takeHeld: filter => {
 							takes.push(filter);
 							return held.splice(0);
 						},
-						waitNext: async (filter, ms, signal) => {
+						awaitEntry: async (filter, ms, signal) => {
 							waits.push({ filter, ms, signal });
 							return entries;
 						},
 					}
 				: undefined,
+		claims: {
+			claimFromServer: answered => {
+				claims.push(answered.map(e => e.id));
+				return answered.filter(e => !delivered.includes(e.id));
+			},
+		},
 		forward: async (args, ms) => {
 			forwards.push({ args, ms });
 			return typeof answer === "function" ? (answer as () => unknown)() : answer;
 		},
-		claim: claimed => claimed.filter(e => !delivered.includes(e.id)),
-		consumed: ids => void consumed.push([...ids]),
 	};
 	const tool = waitToolDefinition(pi, serverWait, deps);
 	const run = async (params: Record<string, unknown>, signal?: AbortSignal) => {
@@ -62,7 +66,7 @@ function setup(live: boolean, entries: Entry[] = [], held: Entry[] = [], answer:
 		if (first?.type !== "text") throw new Error("bus_wait returned no text");
 		return JSON.parse(first.text) as unknown;
 	};
-	return { tool, run, waits, forwards, consumed, takes, stream };
+	return { tool, run, waits, forwards, claims, takes, stream };
 }
 
 describe("the local bus_wait", () => {
@@ -78,28 +82,26 @@ describe("the local bus_wait", () => {
 		expect([tool.loadMode, tool.approval]).toEqual(["essential", "read"]);
 	});
 
-	test("with a live stream it waits in the dispatcher and the entries it returns are consumed", async () => {
-		const { run, waits, forwards, consumed } = setup(true, [entry(4, { from: "lead" })]);
+	test("with a live stream it waits in the ledger and claims nothing", async () => {
+		const { run, waits, forwards, claims } = setup(true, [entry(4, { from: "lead" })]);
 		expect(await run({ from: "lead", threadId: 7, after: 3, timeoutSeconds: 5 })).toEqual([entry(4, { from: "lead" })]);
 		expect(waits.map(w => [w.filter, w.ms])).toEqual([[{ from: "lead", threadId: 7, after: 3 }, 5000]]);
 		expect(forwards).toEqual([]);
-		expect(consumed).toEqual([[4]]);
+		expect(claims).toEqual([]);
 	});
 
-	test("entries the dispatcher still holds are returned at once, consumed, without waiting", async () => {
+	test("entries the ledger still holds are returned at once, without waiting", async () => {
 		const held = [entry(1, { type: "thread_post", threadId: 7 }), entry(2, { type: "thread_post", threadId: 7 })];
-		const { run, waits, takes, consumed } = setup(true, [], held);
+		const { run, waits, takes } = setup(true, [], held);
 		expect(await run({ threadId: 7, timeoutSeconds: 5 })).toEqual([entry(1, { type: "thread_post", threadId: 7 }), entry(2, { type: "thread_post", threadId: 7 })]);
 		expect(takes).toEqual([{ from: undefined, threadId: 7, after: undefined }]);
 		expect(waits).toEqual([]);
-		expect(consumed).toEqual([[1, 2]]);
 	});
 
 	test("it waits 30 seconds by default and returns [] when nothing came", async () => {
-		const { run, waits, consumed } = setup(true);
+		const { run, waits } = setup(true);
 		expect(await run({})).toEqual([]);
 		expect(waits.map(w => w.ms)).toEqual([30_000]);
-		expect(consumed).toEqual([]);
 	});
 
 	test("the turn's signal cancels the wait", async () => {
@@ -109,24 +111,24 @@ describe("the local bus_wait", () => {
 		expect(waits[0].signal).toBe(controller.signal);
 	});
 
-	test("without a live stream it forwards to the server's bus_wait with timeoutSeconds + 10 s; what it returns is claimed and consumed", async () => {
-		const { run, forwards, consumed } = setup(false);
+	test("without a live stream it forwards to the server's bus_wait with timeoutSeconds + 10 s; what it returns is claimed", async () => {
+		const { run, forwards, claims } = setup(false);
 		expect(await run({ from: "lead", timeoutSeconds: 10 })).toEqual([entry(9)]);
 		await run({});
 		expect(forwards).toEqual([
 			{ args: { from: "lead", timeoutSeconds: 10 }, ms: 20_000 },
 			{ args: {}, ms: 40_000 },
 		]);
-		expect(consumed).toEqual([[9], [9]]);
+		expect(claims).toEqual([[9], [9]]);
 	});
 
 	test("a forwarded entry the session's stream already delivered is left out; a result that is no entry list passes through", async () => {
 		const delivered = setup(false, [], [], [entry(8), entry(9)], [8]);
 		expect(await delivered.run({})).toEqual([entry(9)]);
-		expect(delivered.consumed).toEqual([[9]]);
+		expect(delivered.claims).toEqual([[8, 9]]);
 		const odd = setup(false, [], [], { unexpected: true });
 		expect(await odd.run({})).toEqual({ unexpected: true });
-		expect(odd.consumed).toEqual([]);
+		expect(odd.claims).toEqual([]);
 	});
 
 	describe("when every forwarded entry was delivered by the session's stream", () => {
@@ -142,13 +144,13 @@ describe("the local bus_wait", () => {
 		}
 
 		test("it forwards again after the newest of them for the time left and returns the next new entry", async () => {
-			const { run, forwards, consumed } = setup(false, [], [], answers(4000, [entry(5), entry(6)], [entry(7)]), [5, 6]);
+			const { run, forwards, claims } = setup(false, [], [], answers(4000, [entry(5), entry(6)], [entry(7)]), [5, 6]);
 			expect(await run({ from: "lead", after: 2, timeoutSeconds: 10 })).toEqual([entry(7)]);
 			expect(forwards.map(f => f.args)).toEqual([
 				{ from: "lead", after: 2, timeoutSeconds: 10 },
 				{ from: "lead", after: 6, timeoutSeconds: 6 },
 			]);
-			expect(consumed).toEqual([[7]]);
+			expect(claims).toEqual([[5, 6], [7]]);
 		});
 
 		test("it returns [] once the server answers [] or the deadline passed", async () => {
@@ -173,7 +175,7 @@ describe("the local bus_wait", () => {
 			expect(it.forwards.map(f => f.args)).toEqual([{ from: "lead", timeoutSeconds: 10 }]);
 			expect(it.takes).toEqual([{ from: "lead", threadId: undefined, after: 5 }]);
 			expect(it.waits.map(w => [w.filter, w.ms])).toEqual([[{ from: "lead", threadId: undefined, after: 5 }, 7000]]);
-			expect(it.consumed).toEqual([[7]]);
+			expect(it.claims).toEqual([[5]]);
 		});
 	});
 

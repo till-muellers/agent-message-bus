@@ -1,7 +1,7 @@
 /**
  * The agent-bus session message (`docs/design/arch/client.md` §4.1): the envelope is the
  * model-facing content; the details keep the entries themselves, for the ack (`entryIds`) and for
- * the renderers. A post notice carries every post of one thread the dispatcher held (§3.5).
+ * the renderers. A post notice carries every post of one thread the inbox ledger held (§3.5).
  */
 import type { Entry } from "../bus/entry.ts";
 import { envelope, postNotice } from "./envelope.ts";

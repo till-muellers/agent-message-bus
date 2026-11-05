@@ -12,12 +12,10 @@ import type { SessionCredentials } from "../session/session-credentials.ts";
 import type { ActiveCredentials } from "../bus/credentials.ts";
 import type { CredentialStore } from "../session/stored-credentials.ts";
 import { createAcker } from "../delivery/acker.ts";
-import type { Consume } from "../delivery/consumer.ts";
 import { NOT_LOGGED_IN } from "../bus/errors.ts";
 import type { BusEvents } from "../delivery/bus-events.ts";
 import { phaseOf } from "../delivery/delivery-class.ts";
-import { createDeliveryStart } from "../delivery/delivery-start.ts";
-import type { Dispatcher } from "../delivery/dispatcher.ts";
+import { createInboxLedger, type InboxLedger } from "../delivery/inbox-ledger.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
@@ -67,10 +65,10 @@ export interface ConnectionDeps {
 
 export interface Connection {
 	getActive(): ActiveCredentials | undefined;
-	/** The dispatcher of the current connection start; it knows what this start handed over. */
-	dispatcher(): Dispatcher;
-	/** Marks entries consumed; the ack follows the current start's watermark. */
-	consume: Consume;
+	/** The inbox ledger of the current connection start; it knows what this start handed over. */
+	ledger(): InboxLedger;
+	/** Marks entries consumed in the current start's ledger; the ack follows it. */
+	consume(ids: readonly number[]): void;
 	/** Re-resolves the credentials, registers the server tools once, restarts the inbox loop and switches the tools on or off to match. */
 	restart(): Promise<void>;
 	/** Stops the loop, drops the credentials and deactivates every bus tool; registered tools stay and fail until the next login. */
@@ -99,8 +97,8 @@ export function createConnection(deps: ConnectionDeps): Connection {
 	let toldNoIdentity = false;
 	const ack = createAcker({ client, getActive, warn });
 	const unread = createUnreadPosts((key, text) => view.setStatus(key, text));
-	const startDelivery = () =>
-		createDeliveryStart({
+	const startLedger = () =>
+		createInboxLedger({
 			phase: () => phaseOf(view.mode, view.isIdle()),
 			handOver: (message, mechanism) => {
 				pi.sendMessage(message, mechanism);
@@ -111,15 +109,14 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			ack,
 		});
 	// Each restart starts over (client.md §3.3): what the last start handed over or left pending is forgotten.
-	let delivery = startDelivery();
-	const consume: Consume = ids => delivery.consume(ids);
+	let ledger = startLedger();
+	const consume = (ids: readonly number[]) => ledger.consumed(ids);
 	const onState = deps.events?.connection;
 	const inbox = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, onState });
 	const wait: WaitToolDeps = {
-		dispatcher: () => (inbox.isOpen() ? delivery.dispatcher : undefined),
+		source: () => (inbox.isOpen() ? ledger : undefined),
+		claims: { claimFromServer: entries => ledger.claimFromServer(entries) },
 		forward: serverWait(client, getActive),
-		claim: entries => delivery.dispatcher.claim(entries),
-		consumed: consume,
 	};
 	const ours = () => [...tools.names, ...localTools];
 
@@ -154,7 +151,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 
 	return {
 		getActive,
-		dispatcher: () => delivery.dispatcher,
+		ledger: () => ledger,
 		consume,
 		stop() {
 			inbox.stop();
@@ -162,7 +159,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 		},
 		async restart() {
 			inbox.stop();
-			delivery = startDelivery();
+			ledger = startLedger();
 			// The posts were handed to the session or identity that is going away.
 			unread.clear();
 			const creds = await resolve();
@@ -171,7 +168,7 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			// The context block must be ready before a streamed entry can start a turn.
 			await deps.connected?.(connected);
 			if (!connected) return deactivateTools(pi, ours());
-			if (!view.sub) inbox.start(delivery.dispatcher);
+			if (!view.sub) inbox.start(ledger);
 			await activateBusTools(pi, ours());
 		},
 		async logout() {

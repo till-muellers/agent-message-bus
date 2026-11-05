@@ -18,8 +18,8 @@ Companion files: `gui.md` (web GUI), `pipeline.md` (CI/release/build), `slices-c
 | Credentials | One owner: `lib/session/session-credentials.ts` (findings item 1, option A); `session-identity.ts` keeps *persisting* `accepted` and calls the owner | §2 |
 | Subagent identity (S15) | A root-identity registry created in the **closure of `createBusExtension`** (not module state), keyed by the root session key; injected into each session | §2.3 (PO-8 approved) |
 | Delivery | Every entry carries a server **delivery class** (`interrupt` / `queue` / `deferred`); **one module** (`delivery/delivery-class.ts`) maps class × session phase → `steer` / `aside` / `nextTurn`, with no per-type cases; omp only, no upstream-pi fallback | §3.2 (PO-5, PO-6) |
-| Ack | Contiguous **watermark** fed by the `context` event (an entry is consumed when a model request contains its message) and by local `bus_wait` | §3.3 |
-| `bus_wait` | Local tool with the server schema; takes held entries from the dispatcher; falls back to the server tool without a stream | §3.4 |
+| Ack | Contiguous **watermark** in the start's inbox ledger, fed by the `context` event (an entry is consumed when a model request contains its message) and by local `bus_wait` | §3.3 |
+| `bus_wait` | Local tool with the server schema; takes held entries from the inbox ledger; falls back to the server tool without a stream | §3.4 |
 | Envelope | Fenced `<agent-bus-entry …>` text with escaped body and a reply hint; structured `details` on every message | §4 |
 | Renderer | `registerMessageRenderer("agent-bus")` built from `pi.pi.Text/Container/Markdown` (no deep import) | §4.3 |
 | Context block | One `context` handler prepends a non-stored `agent-bus-context` custom message; identity cached, guide fetched once | §5 |
@@ -59,7 +59,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/session/` | Who this session is: credential store, env, the single credential owner, accepted identity + its file, root-identity registry, `createSession` | `bus/`, `shared/` |
 | `lib/connection/` | Connect/disconnect: restart, tool on/off, server-protocol gate | `session/`, `tools/`, `delivery/`, `bus/`, `version/` |
 | `lib/tools/` | Mirroring server tools: the tool policy table (selection, presentation, attribution, membership refresh, send kind), remote tool definition, local `bus_wait`, subagent attribution, tool-result shape | `bus/`, `delivery/` (wait only), `render/` (tool renderers) |
-| `lib/delivery/` | Inbox → omp: stream loop, runner, 409 warning, dispatcher, delivery policy, ack watermark, acker, consumption observer, post-notice coalescing, `pi.events` publishing | `bus/`, `render/` |
+| `lib/delivery/` | Inbox → omp: stream loop, runner, 409 warning, inbox ledger (delivery state and ack watermark of one start), entry routing, delivery policy, acker, consumption observer, post-notice coalescing, `pi.events` publishing | `bus/`, `render/` |
 | `lib/render/` | What the model and the user see: envelope text, escaping, message details, card renderer, tool call/result renderers, status line | `bus/` (types only) |
 | `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `delivery/` (consumption observer is composed here) |
 | `lib/commands/` | `/bus` command logic and its sub-actions (accept, invite flag, status) | `session/`, `connection/`, `local-server/`, `spawn/`, `version/` |
@@ -105,7 +105,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a), `bus/credentials.ts` (R5); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b), `tools/tool-policy.ts` (R7: replaces `tool-selection.ts`, `presentation.ts` and `membership-refresh.ts`); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/delivery-start.ts` (bug 0de.23); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a), `bus/credentials.ts` (R5); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b), `tools/tool-policy.ts` (R7: replaces `tool-selection.ts`, `presentation.ts` and `membership-refresh.ts`); `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/inbox-ledger.ts`, `delivery/entry-routing.ts`, `delivery/hand-over-progress.ts` (R6; they replace `dispatcher.ts` (E1), `ack-watermark.ts`, `consumer.ts` (E2) and `delivery-start.ts` (bug 0de.23)); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -254,30 +254,29 @@ export function rootKeyOf(sessionFile: string | undefined): string | undefined; 
 sequenceDiagram
   participant S as server SSE /v1/inbox/stream
   participant L as delivery/inbox-loop
-  participant D as delivery/dispatcher
+  participant D as delivery/inbox-ledger
   participant W as tools/wait-tool (bus_wait)
   participant O as omp (pi.sendMessage)
   participant C as context/context-handler (pi.on "context")
   participant A as delivery/acker
   S->>L: event inbox {Entry}
-  L->>D: receive(entry)
-  D->>A: watermark.received(id)
+  L->>D: deliver(entry)
   alt a bus_wait is pending and matches
-    D->>W: resolve([entry])
-    W->>A: consumed([id])
+    D->>W: resolve([entry]), consumed
   else queue-class entry with a threadId while busy (E10a)
     D->>D: hold (bus_wait may take it)
   else
     D->>O: sendMessage(agent-bus message, deliverAs)
   end
   O->>C: context event (per model request)
-  C->>A: consumed(entryIds found in messages)
-  A->>S: bus_inbox_ack {upTo: watermark}
+  C->>D: consumed(entryIds found in messages)
+  D->>A: ack(upTo) when the watermark moved
+  A->>S: bus_inbox_ack {upTo}
 ```
 
 ### 3.2 Delivery class mapping (E1; PO-5, PO-6; `omp-parity/omp-delivery.feature`)
 
-The server stamps every entry with a **delivery class**: required field `class: "interrupt" | "queue" | "deferred"` on the one Entry shape (SSE, `bus_inbox_read`, `bus_wait`, `/web/api/inbox`; `docs/design/specs/mail/delivery-class.feature:12,43`; named `class` so it does not clash with the receipts' `delivery: live|queued`), derived by `inbox.ClassOf(type, critical)` in `server/internal/inbox/class.go`, server slice **D1**, shipped in the protocol-2 release (contracts.md §4.1). Server mapping: `critical` → `interrupt`; `topic_closed`, `thread_removed`, `blackboard_removed` → `deferred`; everything else → `queue`; unknown → `queue` on the client. The extension **never looks at `type` or `critical` to choose a mechanism**: one module maps class × session phase to an omp mechanism, and every other module (dispatcher, `bus_wait`, notices, events) asks it.
+The server stamps every entry with a **delivery class**: required field `class: "interrupt" | "queue" | "deferred"` on the one Entry shape (SSE, `bus_inbox_read`, `bus_wait`, `/web/api/inbox`; `docs/design/specs/mail/delivery-class.feature:12,43`; named `class` so it does not clash with the receipts' `delivery: live|queued`), derived by `inbox.ClassOf(type, critical)` in `server/internal/inbox/class.go`, server slice **D1**, shipped in the protocol-2 release (contracts.md §4.1). Server mapping: `critical` → `interrupt`; `topic_closed`, `thread_removed`, `blackboard_removed` → `deferred`; everything else → `queue`; unknown → `queue` on the client. The extension **never looks at `type` or `critical` to choose a mechanism**: one module maps class × session phase to an omp mechanism, and every other module (entry routing, `bus_wait`, notices, events) asks it.
 
 ```ts
 // lib/bus/entry.ts — wire type (bus/ is a leaf, so the class value lives here)
@@ -291,7 +290,7 @@ export interface Mechanism { deliverAs: "steer" | "aside" | "nextTurn"; triggerT
 /** tui and rpc are interactive; print, json and an unknown mode are one-shot (`ExtensionMode`, types.ts:512). */
 export function phaseOf(mode: string | undefined, idle: boolean): SessionPhase;
 export function mechanismFor(cls: DeliveryClass, phase: SessionPhase): Mechanism;   // a lookup in MECHANISMS
-/** May the dispatcher hold an entry of this class for coalescing (E10a)? */
+/** May the inbox ledger hold an entry of this class for coalescing (E10a)? */
 export function holdable(cls: DeliveryClass): boolean;                               // queue only
 ```
 
@@ -323,40 +322,45 @@ Ack per class (watermark rule of §3.3, identical for all classes; the class onl
 
 No upstream-pi fallback (PO-6): `followUp` is gone from the extension, and there is no host detection. Server dependency: D1; `MIN_SERVER_PROTOCOL = 2` (E9a) guarantees the field (D1 is in the protocol-2 release), so "unknown → queue" only protects against a *future* class value.
 
-### 3.3 Dispatcher and ack watermark (E2; `mail/omp-mail-delivery.feature`, `omp-delivery.feature` ack rule)
+### 3.3 Inbox ledger and ack watermark (E2, R6; `mail/omp-mail-delivery.feature`, `omp-delivery.feature` ack rule)
 
 ```ts
-// lib/delivery/dispatcher.ts — one per connection start (lib/delivery/delivery-start.ts, with its ack watermark); a restart makes a new pair (session switch drops asides, R2)
-export interface Dispatcher {
-	receive(entry: Entry): void;
-	/** bus_wait (E10a): held entries matching `filter`, removed from the hold (never handed to omp afterwards). */
+// lib/delivery/inbox-ledger.ts — the one owner of the delivery state of one connection start (review 2026-11 X1):
+// delivered, handed-over, claimed and consumed ids, the contiguous upTo, held notices and waiters
+export interface InboxLedger {
+	deliver(entry: Entry): void;
+	/** bus_wait (E10a): held entries matching `filter`, removed from the hold (never handed to omp afterwards); consumed. */
 	takeHeld(filter: WaitFilter): Entry[];
-	/** bus_wait (E6): the next matching entry, routed to the waiter instead of omp; [] on timeout/abort. */
-	waitNext(filter: WaitFilter, timeoutMs: number, signal?: AbortSignal): Promise<Entry[]>;
-	/** bus_wait forwarded to the server (0de.24): the entries not handed over yet, which then count as handed over; the stream consumes them on arrival (0de.25). */
-	claim(entries: readonly Entry[]): Entry[];
-	/** The start's stream stopped (E10a, 0de.23): held entries are dropped unhanded; waiting bus_wait calls return []. */
-	stop(): void;
+	/** bus_wait (E6): the next matching entry, routed to the waiter instead of omp; consumed; [] on timeout/abort. */
+	awaitEntry(filter: WaitFilter, ms: number, signal?: AbortSignal): Promise<Entry[]>;
+	/** bus_wait forwarded to the server (0de.24): the entries not handed over yet, which then count as handed over and consumed; acked when the stream delivers them (0de.25). */
+	claimFromServer(entries: readonly Entry[]): Entry[];
+	/** A model request carried these ids; acks when the watermark moves. */
+	consumed(ids: readonly number[]): void;
+	/** The watermark: the highest id acked so far, 0 before the first ack. */
+	upTo(): number;
 	/** First-prompt bounded wait (E9b): resolves when every id <= `id` was handed over, or after `ms`. */
 	handedUpTo(id: number, ms: number): Promise<boolean>;
+	/** The start's stream stopped (E10a, 0de.23): held entries are dropped unhanded; waiting bus_wait calls return []. */
+	stop(): void;
 }
-// lib/delivery/waiters.ts — the pending bus_wait calls of a dispatcher (E6)
+export function createInboxLedger(deps: { phase(): SessionPhase; handOver(message: BusMessage, mechanism: Mechanism): void; ack(upTo: number): Promise<void>; warn(message: string): void }): InboxLedger;
+// lib/delivery/entry-routing.ts — where a new entry goes: a waiting bus_wait, the held notice of its thread, or omp
+// lib/delivery/hand-over-progress.ts — the handedUpTo calls
+// lib/delivery/waiters.ts — the pending bus_wait calls of a ledger (E6)
 export interface WaitFilter { from?: string; threadId?: number; after?: number; }
-export function createDispatcher(deps: { handOver(message: BusMessage, mechanism: Mechanism): void; watermark: AckWatermark; consume: Consume; phase: () => SessionPhase; warn(message: string): void; }): Dispatcher;
 ```
 
-- **Replay dedupe:** the dispatcher keeps the ids it handed over in this connection start; a stream reconnect within the start replays unacked ids (`server/spec/inbox.feature:249-257`) and those are skipped. A connection restart (session switch/branch, login, promote, accept) creates a new dispatcher and a new watermark (`delivery/delivery-start.ts`, `createDeliveryStart`), so asides dropped by omp on a generation change (`agent-session.ts:9687`) are delivered again, and ids the last start received but never saw consumed (posts held at the switch, an old identity's entries) cannot hold the next acks. `Connection.dispatcher()` and `consume` always reach the current start.
+Consumers see narrow views: `inbox-loop.ts` an `EntrySink` (`deliver`), `inbox-runner.ts` a `StartSink` (`deliver`, `stop`), `tools/wait-tool.ts` a `WaitSource` (`takeHeld`, `awaitEntry`) and a `ClaimView` (`claimFromServer`), `context-handler.ts` a `consume(ids)`.
+
+The invariants, stated in `inbox-ledger.ts` and tested in `tests/delivery/inbox-ledger.test.ts` (bugs #65, #66, #67):
+- **One ledger per connection start.** A restart (session switch/branch, login, promote, accept) creates a new ledger, so asides dropped by omp on a generation change (`agent-session.ts:9687`) are delivered again when the stream replays them, and ids the last start received but never saw consumed (posts held at the switch, an old identity's entries) cannot hold the next acks. `Connection.ledger()` and `consume` always reach the current start.
+- **Ids arrive ascending; replays are skipped.** A stream reconnect within the start replays unacked ids (`server/spec/inbox.feature:249-257`); a replayed id is skipped and changes nothing.
+- **Claimed ids are acked on arrival.** An id a forwarded `bus_wait` claimed counts as handed over and consumed; the stream skips it and the watermark acks it as soon as this start's stream delivers it, never before.
 
 ```ts
-// lib/delivery/ack-watermark.ts — pure
-export interface AckWatermark {
-	received(id: number): void;                  // ids arrive in ascending order on the stream
-	consumed(ids: readonly number[]): number | undefined; // new upTo when it advanced, else undefined
-}
 // lib/delivery/acker.ts — calls bus_inbox_ack {upTo}; failures only warned (as today, lib/inbox.ts:58-66)
 export function createAcker(deps: { client: BusClient; getActive(): ActiveCredentials | undefined; warn(m: string): void }): (upTo: number) => Promise<void>;
-// lib/delivery/consumer.ts (E6) — consumed ids → watermark → acker; fed by the context handler, by bus_wait and by the dispatcher (claimed entries on arrival)
-export function createConsumer(deps: { watermark: AckWatermark; ack(upTo: number): Promise<void> }): (ids: readonly number[]) => void;
 // lib/delivery/consumption.ts — pure: entry ids of agent-bus messages present in a model request
 export function consumedEntryIds(messages: readonly AgentMessage[]): number[];
 ```
@@ -372,26 +376,25 @@ export function consumedEntryIds(messages: readonly AgentMessage[]): number[];
 ```ts
 // lib/tools/wait-tool.ts
 export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the server's bus_wait from GET /v1/tools */, deps: {
-	dispatcher(): Pick<Dispatcher, "takeHeld" | "waitNext"> | undefined; // undefined while this session holds no open stream
+	source(): WaitSource | undefined;   // the ledger of this session's open stream; undefined while it holds none
+	claims: ClaimView;                  // claimFromServer of the current start's ledger (0de.24)
 	forward(args: WaitArgs, timeoutMs: number, signal?: AbortSignal): Promise<unknown>; // server bus_wait, no ack
-	claim(entries: readonly Entry[]): Entry[];   // Dispatcher.claim of the current start (0de.24)
-	consumed(ids: readonly number[]): void;
 }): ToolDefinition;
 ```
 
 - Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, description and `inputSchema` from `GET /v1/tools`); its `shadowed` row in `tool-policy.ts` excludes the server tool from mirroring. Subagents never register it.
-- Order: `takeHeld(filter)` → non-empty returns at once (E10a); else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`).
+- Order: `takeHeld(filter)` → non-empty returns at once (E10a); else `awaitEntry(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`) and consumed.
 - Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`); the server acks nothing (claimed entries are acked when this start's stream delivers them, below). The same value goes into Bun's `fetch` `timeout` (its socket idle timer, 5 min by default): the server sends nothing until the wait ends, so a 300 s wait would otherwise be cut.
-- Race with the session's own stream (0de.24): what a forwarded call returns goes through `Dispatcher.claim`. An entry the stream already handed over is left out of the result. The rest count as handed over, so the stream skips them when it delivers them (and `handedUpTo` passes them). They are also marked consumed: the watermark acks them only after this start's stream received them, so an entry another session streams is never acked here. When the stream delivers a claimed entry, the dispatcher consumes it again (`deps.consume`, the start's `createConsumer`), so the ack follows at once instead of waiting for a model request (0de.25).
-- Claim leaves nothing (0de.25): the server returns every unacked matching entry at once, so when the stream delivered them all the call waits on with `after` = the highest returned id until a deadline taken before the first call. If the session's stream is open by then, it waits in the dispatcher (`takeHeld`, then `waitNext` for the time left), since the stream now hands new entries to omp; else it forwards again with `timeoutSeconds` = the time left (rounded up). It returns when the claim yields entries, the server returns `[]`, or the deadline passed. So `[]` still means timeout.
+- Race with the session's own stream (0de.24): what a forwarded call returns goes through `InboxLedger.claimFromServer`. An entry the stream already handed over is left out of the result. The rest count as handed over, so the stream skips them when it delivers them (and `handedUpTo` passes them). They are also consumed: the watermark acks them only after this start's stream delivered them, so an entry another session streams is never acked here. When the stream delivers a claimed entry, the ledger moves the watermark at once, so the ack follows without waiting for a model request (0de.25).
+- Claim leaves nothing (0de.25): the server returns every unacked matching entry at once, so when the stream delivered them all the call waits on with `after` = the highest returned id until a deadline taken before the first call. If the session's stream is open by then, it waits in the ledger (`takeHeld`, then `awaitEntry` for the time left), since the stream now hands new entries to omp; else it forwards again with `timeoutSeconds` = the time left (rounded up). It returns when the claim yields entries, the server returns `[]`, or the deadline passed. So `[]` still means timeout.
 - `timeoutSeconds` outside 1..300 is refused locally with the server's error (`invalid: timeoutSeconds must be 1..300`).
 - Cancellation: the `execute` `signal` (`CA/extensibility/extensions/types.ts:925-933`) aborts the wait; nothing is consumed.
 - Server dependency: slice 9 (server `bus_wait`, contract `{"result":[Entry…]}`) for the schema and the fallback; it ships under protocol 2 (contracts.md §6), so `MIN_SERVER_PROTOCOL` stays 2.
 
 ### 3.5 Blackboard notices (E10a; `omp-blackboards.feature`; PO-5)
 
-- Coalescing is a **rendering** concern, not a delivery decision: while the session is busy, the dispatcher holds entries for which `holdable(class)` is true (`queue` only) and that carry a `threadId`, per `(space, blackboard, threadId)`, for a short window (proposal 1.5 s), then hands them over as **one** message whose `details.entryIds` lists every merged id, with the mechanism `mechanismFor(class, phase)` gives. Held entries are what `bus_wait` can take. No `type` switch: the grouping key is the entry's thread fields.
-- Notice text (`postNotice`): one fenced envelope per post, the reply hint only on the last; a post is shown whole if ≤ 20 lines and ≤ 2 KiB (2048 characters), else its head (the first whole lines within both limits, or the first 2048 characters of a longer first line) + "N lines left out; read the full thread with bus_read_thread {space, threadId}." (omp-parity Q6 proposal). The hold lives in `delivery/post-notices.ts` (`isPostNotice`: a `threadId` and `holdable(class)`; the window starts with the first held entry of a thread, so a stream of posts cannot postpone the notice; a post to a thread whose notice is still held joins it in any phase; stopping the inbox (`dispatcher.stop`) drops the held entries unhanded, and the next start's fresh dispatcher delivers them when the stream replays them).
+- Coalescing is a **rendering** concern, not a delivery decision: while the session is busy, the inbox ledger holds entries for which `holdable(class)` is true (`queue` only) and that carry a `threadId`, per `(space, blackboard, threadId)`, for a short window (proposal 1.5 s), then hands them over as **one** message whose `details.entryIds` lists every merged id, with the mechanism `mechanismFor(class, phase)` gives. Held entries are what `bus_wait` can take. No `type` switch: the grouping key is the entry's thread fields.
+- Notice text (`postNotice`): one fenced envelope per post, the reply hint only on the last; a post is shown whole if ≤ 20 lines and ≤ 2 KiB (2048 characters), else its head (the first whole lines within both limits, or the first 2048 characters of a longer first line) + "N lines left out; read the full thread with bus_read_thread {space, threadId}." (omp-parity Q6 proposal). The hold lives in `delivery/post-notices.ts` (`isPostNotice`: a `threadId` and `holdable(class)`; the window starts with the first held entry of a thread, so a stream of posts cannot postpone the notice; a post to a thread whose notice is still held joins it in any phase; stopping the inbox (`InboxLedger.stop`) drops the held entries unhanded, and the next start's fresh ledger delivers them when the stream replays them).
 - `interrupt` entries are never held (the mapping says so), so a critical post steers in full; `deferred` entries are `nextTurn` by the mapping (the lifecycle-notice rule of `omp-blackboards.feature:52-70` holds without special code).
 - Status line (E10b): `ctx.ui.setStatus("agent-bus", "bus: 2 new posts in plan/7")` (`types.ts:346`); counts kept per thread from handed-over notices; cleared per thread by a successful `bus_read_thread` or a `thread_removed` entry (per board by `blackboard_removed`), all on logout and on every connection restart (`render/status-line.ts`; the thread view of `bus_read_thread` is `render/thread-view.ts`).
 - `[INFERENCE: omp has no "step boundary is near" event for extensions; the window is a debounce, not a boundary sync. Smoke step E10a-2 measures that 3 rapid posts to a busy agent arrive as one notice.]`
@@ -609,11 +612,11 @@ export function createBusExtension(options?: BusExtensionOptions): (pi: Extensio
 // lib/connection/connection.ts
 export interface Connection {
 	getActive(): ActiveCredentials | undefined;
-	restart(): Promise<void>;   // new dispatcher + watermark → resolve → publish/withdraw root identity → gate → register selected tools → stream → activate
+	restart(): Promise<void>;   // new inbox ledger → resolve → publish/withdraw root identity → gate → register selected tools → stream → activate
 	logout(): Promise<void>;
 	stop(): void;
-	dispatcher(): Dispatcher;   // the current start's
-	consume: Consume;           // into the current start's watermark
+	ledger(): InboxLedger;      // the current start's
+	consume(ids: readonly number[]): void; // into the current start's ledger
 }
 
 // lib/tools/remote-tools.ts

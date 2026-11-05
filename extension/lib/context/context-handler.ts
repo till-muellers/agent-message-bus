@@ -4,7 +4,6 @@
  * (`docs/design/arch/client.md` §3.3); then the agent-bus-context block goes in front of them (§5).
  * The handler reads only cached data, so it never waits for the network.
  */
-import type { Consume } from "../delivery/consumer.ts";
 import { consumedEntryIds, type RequestMessage } from "../delivery/consumption.ts";
 
 /** The custom type of the block; omp sends it to the model as a developer message and never stores it. */
@@ -19,7 +18,8 @@ export interface ContextMessage {
 }
 
 export interface ContextHandlerDeps {
-	consume: Consume;
+	/** Marks the entries the request carried consumed (the current start's inbox ledger). */
+	consume(ids: readonly number[]): void;
 	/** The block text right now; undefined when the session has no bus identity. */
 	block(): string | undefined;
 }
