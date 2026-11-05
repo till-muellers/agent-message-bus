@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"sort"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
@@ -32,6 +33,8 @@ type Tool struct {
 	Group  string
 	Schema map[string]any
 	Call   func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error)
+	// argsType is the struct Call decodes the arguments into; it must match Schema.
+	argsType reflect.Type
 }
 
 // inGroup sets group on every tool in ts and returns ts.
