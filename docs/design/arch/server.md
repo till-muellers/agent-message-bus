@@ -282,10 +282,12 @@ type Notice struct {
 //   scope = (agent) for leader/admin kind, (agent, space) for member kind;
 //   edge = scope had no row before this tx's first insert for it, or the entry is critical (PO-7 re-notify).
 func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, bool, error) // returns+marks unnoticed edges of p's scope [13a; consumed from 13b]
-func (s *Service) ReadMarking(ctx context.Context, p auth.Principal, after int64, limit int) ([]Entry, error) // Read + mark returned edges noticed [13b]
+func (s *Service) MarkNoticed(ctx context.Context, p auth.Principal, es []Entry) error // marks the returned edges noticed; replaces ReadMarking [13b, R12]
+type Noticer interface { TakeNotice(ctx context.Context, p auth.Principal) (Notice, bool, error) } // shared by rpc and mcpserver [R12]
+func NoticeAfter(ctx context.Context, n Noticer, p auth.Principal) (Notice, bool) // after a successful call; logs and swallows a failed query [R12]
 ```
 
-`bus_inbox_read` and `bus_wait` use the marking path (`ReadMarking`; `Wait` marks the entries it returns); the SSE stream marks the edge rows it sends (a channel told the agent, `mail/analysis.md:149`); the web GUI uses `Read` (never marks, `mail/mail-hint.feature:104-115`). The transports take the notice only after a successful tool call, so `bus_inbox_ack`'s removed entries are gone before the query, and a failed notice query is logged without failing the call. **[AD-6]**
+`bus_inbox_read` reads, then marks what it returns (`Read` + `MarkNoticed`); `Wait` marks the entries it returns; the SSE stream marks the edge rows it sends (a channel told the agent, `mail/analysis.md:149`); the web GUI uses `Read` alone (never marks, `mail/mail-hint.feature:104-115`). The transports take the notice through `inbox.NoticeAfter` only after a successful tool call, so `bus_inbox_ack`'s removed entries are gone before the query, and a failed notice query is logged without failing the call. **[AD-6]**
 
 ### 3.4 `internal/invites` [2, 7, 10, W1b]
 
@@ -497,7 +499,7 @@ Not shared code, explicitly kept out of `platform`/`domain`: the protocol consta
 | AD-3 | `Tool.Description` stays the full served text; `Tool.Access` is a separate exact sentence contained in it | `tool-descriptions.feature:15-19` needs both; avoids composing descriptions at runtime |
 | AD-4 | `AdmitMember` returns the agent id (no extra lookup) | the accept tx already has it from `MintMember` (`spaces/admission.go:27`) |
 | AD-5 | `inbox.NewService` takes the root ctx; `StreamHandler()` loses its parameter | `Wait` (a tool call) needs the same shutdown signal as streams |
-| AD-6 | `Read` never marks; `ReadMarking` marks; the SSE stream marks the edges it sends | keeps the GUI's read pure (`mail-hint.feature:104-115`) and the rule inside `inbox` |
+| AD-6 | `Read` never marks; `bus_inbox_read` and `bus_wait` mark what they return (`MarkNoticed`); the SSE stream marks the edges it sends | keeps the GUI's read pure (`mail-hint.feature:104-115`) and the rule inside `inbox` |
 | AD-7 | Receipts via `inbox.Publish` (formerly `DeliverReceipts`), presence sampled right after commit | "slot at commit time" (`presence.feature:53-57`) without leaking slots to other features |
 | AD-8 | Web sessions in memory, 8 h absolute, opaque 32-byte id, store token hash only | "short expiry" (`gui-access.feature:26-28`); restart = sign in again |
 | AD-9 | Web sign-in rate limit local to `web`, 429 `rate_limited` | avoids a new `apperr` kind (shared code) |
