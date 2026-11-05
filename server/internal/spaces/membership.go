@@ -33,6 +33,10 @@ func (m Membership) Leads() bool { return m.Admin || m.Role == RoleLeader }
 // Joined reports whether m holds a participant row in the space.
 func (m Membership) Joined() bool { return m.Role != "" }
 
+// MaySeeInvites reports whether m may list, count and cancel the space's pending invites:
+// leader rights, as Leads. It is the one rule the web GUI and invites ask.
+func (m Membership) MaySeeInvites() bool { return m.Leads() }
+
 // RequireJoined fails with Forbidden unless m holds a participant row; only participants
 // receive messages, so subscribing needs joining.
 func (m Membership) RequireJoined() error {

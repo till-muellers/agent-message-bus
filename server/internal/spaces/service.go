@@ -30,16 +30,6 @@ type inboxStore interface {
 	Connected(agentID int64) bool
 }
 
-// SpaceInfo summarises a space for listing. Admins are the joined admins; Members
-// counts role member only.
-type SpaceInfo struct {
-	Name    string   `json:"name"`
-	Leaders []string `json:"leaders"`
-	Admins  []string `json:"admins"`
-	Members int      `json:"members"`
-	Joined  bool     `json:"joined"`
-}
-
 // Participant is one agent in a space; Connected means it holds its inbox stream or
 // is blocked in bus_wait, in any space.
 type Participant struct {
@@ -67,41 +57,6 @@ func NewService(conn *sql.DB, r *Resolver, a accounts, ib inboxStore, now func()
 }
 
 func (s *Service) stamp() string { return db.Timestamp(s.now()) }
-
-// List returns the spaces visible to p: all for leaders and admins, its own for members.
-func (s *Service) List(ctx context.Context, p auth.Principal) ([]SpaceInfo, error) {
-	rows, err := listSpaces(ctx, s.db, p.SpaceID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]SpaceInfo, 0, len(rows))
-	for _, row := range rows {
-		ps, _, err := listParticipants(ctx, s.db, row.id)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, summarize(row.name, ps, p.AgentName))
-	}
-	return out, nil
-}
-
-func summarize(name string, ps []Participant, caller string) SpaceInfo {
-	info := SpaceInfo{Name: name, Leaders: []string{}, Admins: []string{}}
-	for _, pt := range ps {
-		switch pt.Role {
-		case RoleAdmin:
-			info.Admins = append(info.Admins, pt.Name)
-		case RoleLeader:
-			info.Leaders = append(info.Leaders, pt.Name)
-		default:
-			info.Members++
-		}
-		if pt.Name == caller {
-			info.Joined = true
-		}
-	}
-	return info
-}
 
 func requireLeaderRole(m Membership, action string) error {
 	if !m.Leads() {
@@ -286,6 +241,11 @@ func (s *Service) Participants(ctx context.Context, p auth.Principal, space stri
 	if err != nil {
 		return nil, err
 	}
+	return s.ParticipantsFor(ctx, m)
+}
+
+// ParticipantsFor is Participants for the already resolved membership m.
+func (s *Service) ParticipantsFor(ctx context.Context, m Membership) ([]Participant, error) {
 	ps, ids, err := listParticipants(ctx, s.db, m.SpaceID)
 	if err != nil {
 		return nil, err

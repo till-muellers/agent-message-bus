@@ -3,6 +3,7 @@ package invites
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -109,12 +110,33 @@ func selectPending(ctx context.Context, q db.DBTX, spaceID, now int64) ([]Pendin
 	return out, nil
 }
 
-// countPending counts the invites of spaceID still open at now (unix seconds).
-func countPending(ctx context.Context, q db.DBTX, spaceID, now int64) (int, error) {
-	var n int
-	err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM invites WHERE space_id = ? AND expires_at > ?`, spaceID, now).Scan(&n)
-	if err != nil {
-		return 0, fmt.Errorf("counting open invites of space %d: %w", spaceID, err)
+// countOpen counts, per space of spaceIDs, the invites still open at now (unix seconds) in
+// one query; spaces without open invites are absent.
+func countOpen(ctx context.Context, q db.DBTX, spaceIDs []int64, now int64) (map[int64]int, error) {
+	if len(spaceIDs) == 0 {
+		return map[int64]int{}, nil
 	}
-	return n, nil
+	list, err := json.Marshal(spaceIDs)
+	if err != nil {
+		return nil, fmt.Errorf("encoding space ids: %w", err)
+	}
+	rows, err := q.QueryContext(ctx, `SELECT space_id, COUNT(*) FROM invites
+		WHERE expires_at > ? AND space_id IN (SELECT value FROM json_each(?)) GROUP BY space_id`, now, string(list))
+	if err != nil {
+		return nil, fmt.Errorf("counting open invites: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, fmt.Errorf("scanning open invite count: %w", err)
+		}
+		out[id] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating open invite counts: %w", err)
+	}
+	return out, nil
 }

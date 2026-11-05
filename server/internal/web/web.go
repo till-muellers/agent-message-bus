@@ -24,10 +24,9 @@ type Authenticator interface {
 	AuthenticateHash(ctx context.Context, hash string) (auth.Principal, error)
 }
 
-// Spaces describes a principal and lists the spaces it sees (spaces.Service).
+// Spaces describes a principal (spaces.Service).
 type Spaces interface {
 	Whoami(ctx context.Context, p auth.Principal) (spaces.WhoamiResult, error)
-	List(ctx context.Context, p auth.Principal) ([]spaces.SpaceInfo, error)
 }
 
 // Deps are the services and inputs of the web GUI backend.

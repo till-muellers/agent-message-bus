@@ -268,7 +268,9 @@ func visibleState(t *testing.T, w *world) map[string]seen {
 		w.must(t, err)
 		s.boards, err = w.bb.List(t.Context(), p, "demo")
 		w.must(t, err)
-		s.threads, err = w.bb.RecentThreads(t.Context(), p, "demo", overview.RecentThreads)
+		m, err := spaces.NewResolver().Resolve(t.Context(), w.conn, p, "demo")
+		w.must(t, err)
+		s.threads, err = w.bb.RecentThreadsFor(t.Context(), m, overview.RecentThreads)
 		w.must(t, err)
 		state[p.AgentName] = s
 	}

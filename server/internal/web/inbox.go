@@ -14,7 +14,6 @@ import (
 // listing, never the marking read, never an ack and never the stream slot.
 type Inbox interface {
 	Read(ctx context.Context, p auth.Principal, after int64, limit int) ([]inbox.Entry, error)
-	Count(ctx context.Context, p auth.Principal) (int, error)
 }
 
 // readInbox answers GET /web/api/inbox?after=&limit= with the entries bus_inbox_read

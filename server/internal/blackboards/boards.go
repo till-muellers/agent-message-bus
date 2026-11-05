@@ -25,6 +25,11 @@ func (s *Service) List(ctx context.Context, p auth.Principal, space string) ([]B
 	if err != nil {
 		return nil, err
 	}
+	return s.BoardsFor(ctx, m)
+}
+
+// BoardsFor is List for the already resolved membership m.
+func (s *Service) BoardsFor(ctx context.Context, m spaces.Membership) ([]BoardInfo, error) {
 	return listBoards(ctx, s.db, m.SpaceID)
 }
 

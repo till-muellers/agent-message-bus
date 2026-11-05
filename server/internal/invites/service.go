@@ -157,16 +157,19 @@ func (s *Service) ListPending(ctx context.Context, p auth.Principal, space strin
 	if err != nil {
 		return nil, err
 	}
+	return s.ListOpen(ctx, spaceID)
+}
+
+// ListOpen is ListPending for spaceID without the gate: the caller has authorized it with
+// spaces.Membership.MaySeeInvites.
+func (s *Service) ListOpen(ctx context.Context, spaceID int64) ([]Pending, error) {
 	return selectPending(ctx, s.db, spaceID, s.now().Unix())
 }
 
-// CountPending returns how many invites of space are open; leaders of the space and admins.
-func (s *Service) CountPending(ctx context.Context, p auth.Principal, space string) (int, error) {
-	spaceID, err := s.admit.AuthorizeInvites(ctx, s.db, p, space)
-	if err != nil {
-		return 0, err
-	}
-	return countPending(ctx, s.db, spaceID, s.now().Unix())
+// CountOpen counts the open invites of each of spaceIDs in one read; a space without open
+// invites is absent. No gate: the caller asks spaces.Membership.MaySeeInvites per space.
+func (s *Service) CountOpen(ctx context.Context, spaceIDs []int64) (map[int64]int, error) {
+	return countOpen(ctx, s.db, spaceIDs, s.now().Unix())
 }
 
 // Cancel deletes the open invite id of space and returns its invited name; cancelled is

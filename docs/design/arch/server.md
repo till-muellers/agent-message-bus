@@ -81,7 +81,7 @@ server/
 | `messaging` | `topics`, `topic_subscriptions` | `agents` | `CreationHook`, `DepartureHook` | resolver, `inbox.InTx`, `inbox.Receipts` **[12, R10]** |
 | `blackboards` | `blackboards`, `threads`, `posts`, `thread_subscriptions` | `agents` | `DepartureHook` | resolver, `inbox.InTx`, `inbox.Receipts` **[12, R10]** |
 | `inbox` | `inbox` | `spaces` (name join), `agents` (kind for notice scope **[13a]**, names for receipts **[12]**) | — | broker |
-| `overview` | none | via services only | — | resolver, spaces, messaging, blackboards |
+| `overview` | none | via services only | — | resolver, spaces, messaging, blackboards, invites (`CountOpen`, `ListOpen`), inbox (`Count`) **[R13]** |
 | `guide` | none | — | — | — |
 | `web` | none (sessions in memory) | via services/registry only | — | auth, tools registry, overview, invites, inbox |
 
@@ -320,7 +320,8 @@ type Pending struct {
     ExpiresAt string `json:"expiresAt"` // RFC3339 UTC
 }
 func (s *Service) ListPending(ctx context.Context, p auth.Principal, space string) ([]Pending, error) // never the code [W1b]
-func (s *Service) CountPending(ctx context.Context, p auth.Principal, space string) (int, error) // open-invite count of the space list, same gate [W1b]
+func (s *Service) ListOpen(ctx context.Context, spaceID int64) ([]Pending, error)             // ListPending without the gate; caller asks Membership.MaySeeInvites [R13]
+func (s *Service) CountOpen(ctx context.Context, spaceIDs []int64) (map[int64]int, error)     // open-invite counts of many spaces in one query, no gate (overview's GUI list) [R13; replaces CountPending]
 ```
 
 `spaces.AuthorizeInvites`: resolve, `Leads()` else `forbidden "only leaders may list or cancel invites"` (`gui-invite-cancel.feature:106-116`). `Create` generates the invite id (8 random bytes, hex) from slice 10 on; `bus_invite_member`'s result does not expose it.
@@ -341,11 +342,14 @@ type You struct {
     Role *spaces.Role `json:"role"` // null for an unjoined admin
 }
 type Service struct{ /* q, the database Resolve reads through, plus the consumer-side interfaces below */ }
-func NewService(q db.DBTX, r resolver, sp participantLister, tp topicLister, bb boardReader) *Service // q since R10
-func (s *Service) Space(ctx context.Context, p auth.Principal, space string) (Overview, error)
+func NewService(d Deps) *Service // Deps{DB, Resolver, Spaces, Topics, Boards, Invites, Inbox} since R13
+func (s *Service) Space(ctx context.Context, p auth.Principal, space string) (Overview, error) // resolves once, then the *For(m) reads (R13)
+// GUI state (R13, moved from web/state.go): web only maps these to contracts.md §10.2.
+func (s *Service) ListState(ctx context.Context, p auth.Principal) (ListState, error)  // open-invite counts in one invites.CountOpen read, only where Membership.MaySeeInvites
+func (s *Service) SpaceState(ctx context.Context, p auth.Principal, space string) (SpaceState, error) // invites.ListOpen only where MaySeeInvites
 ```
 
-Needs one new blackboards read: `func (s *Service) RecentThreads(ctx, p, space string, limit int) ([]RecentThread, error)` — `RecentThread = ThreadInfo + Blackboard + Subscribed`, space-wide, `lastPostAt DESC, MAX(post id) DESC`, LIMIT 10. And `messaging.listTopics` must report `subscribed:false` on `all` for an unjoined admin (`messaging/repository.go:78` forces `all` true) — done in 4c with the admin branch.
+Needs one new blackboards read: `func (s *Service) RecentThreadsFor(ctx, m spaces.Membership, limit int) ([]RecentThread, error)` (membership-scoped since R13) — `RecentThread = ThreadInfo + Blackboard + Subscribed`, space-wide, `lastPostAt DESC, MAX(post id) DESC`, LIMIT 10. And `messaging.listTopics` must report `subscribed:false` on `all` for an unjoined admin (`messaging/repository.go:78` forces `all` true) — done in 4c with the admin branch.
 
 ### 3.6 `internal/guide` (new) [11]
 
@@ -428,7 +432,7 @@ flowchart TD
   web --> tools & auth & overview & invites & inbox
   adm --> auth
   tools --> overview & invites & messaging & blackboards & spaces & inbox & auth & guide
-  overview --> spaces & messaging & blackboards
+  overview --> spaces & messaging & blackboards & invites & inbox
   invites --> inbox & auth
   invites -. "admission iface (impl: spaces)" .-> spaces
   messaging --> spaces & inbox
@@ -455,7 +459,7 @@ Rules kept: no feature imports a transport; `invites` still does not import `spa
 | `authn.go` | middleware: cookie → session → `auth.AuthenticateHash` on every request (re-validation) → principal in ctx; 401 otherwise |
 | `csrf.go` | `X-CSRF-Token` must equal the session's token on every non-GET except `DELETE /web/session` [W2] |
 | `limit.go` | failed sign-ins: ≤ 5 per remote IP per minute, then 429 `{"error":{"code":"rate_limited",…}}` **[AD-9]** |
-| `state.go` | `GET /web/api/state[?space=]` (overview + `invites.ListPending` + inbox waiting count) [W1b] |
+| `state.go` | `GET /web/api/state[?space=]`: maps `overview.ListState`/`SpaceState` (composed in overview since R13) to §10.2 [W1b] |
 | `reads.go` | thread list / thread read via the registry (`bus_list_threads`, `bus_read_thread`) [W1b] |
 | `inbox.go` | `GET /web/api/inbox` → `inbox.Read` (never marks, never acks) [W1b] |
 | `admins.go` | admin area via registry (`bus_list_admins`, `bus_mint_admin`, `bus_revoke_admin`); 403 for non-admin sessions [W2] |
