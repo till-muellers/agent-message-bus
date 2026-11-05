@@ -83,10 +83,9 @@ const TRANSITIONAL_EDGES: Record<string, true> = {
 	"spawn>tools": true,
 };
 
-/** The test files that live in `tests/` itself: the shared doubles, the git index reader and the suite of the wiring root. */
+/** The test files that live in `tests/` itself: the shared doubles and the suites of the wiring root and the repo. */
 const ROOT_TESTS: Record<string, true> = {
 	"fakes.ts": true,
-	"git-index.ts": true,
 	"index.test.ts": true,
 	"layout.test.ts": true,
 	"package.test.ts": true,
