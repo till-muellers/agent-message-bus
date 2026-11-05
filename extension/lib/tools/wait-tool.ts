@@ -87,14 +87,14 @@ async function wait(args: WaitArgs, deps: WaitToolDeps, signal?: AbortSignal): P
 	return source ? local(source, args, seconds * 1000, signal) : forwarded(args, seconds, deps, signal);
 }
 
-/** The local `bus_wait` of a main session, built on the server tool `tool` from `GET /v1/tools`. */
+/** The local `bus_wait` of a main session, built on the server tool `tool` from `GET /v1/tools`, whose name it keeps. */
 export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool, deps: WaitToolDeps): Parameters<ExtensionAPI["registerTool"]>[0] {
 	return {
-		name: WAIT_TOOL,
-		label: WAIT_TOOL,
+		name: tool.name,
+		label: tool.name,
 		description: tool.description,
 		parameters: toZod(tool.inputSchema, pi.zod),
-		...presentationOf(WAIT_TOOL),
+		...presentationOf(tool.name),
 		execute: (_toolCallId: string, params: WaitArgs, signal: AbortSignal | undefined): Promise<ToolResult> =>
 			toolResult(() => wait(params, deps, signal)),
 	};

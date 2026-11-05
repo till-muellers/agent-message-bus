@@ -32,7 +32,7 @@ export interface RemoteToolsOptions {
 	agentId?: string;
 	/** What the local `bus_wait` of a main session waits with; a subagent has none. */
 	wait?: WaitToolDeps;
-	/** Told after every successful `bus_read_thread`: the thread was read. */
+	/** Told after every successful thread read (a `readsThread` tool): the thread was read. */
 	threadRead?: (space: string, threadId: number) => void;
 	/** Awaited after every successful membership tool: the session's spaces changed. */
 	membershipChanged?: () => Promise<void>;
@@ -46,7 +46,10 @@ interface Registration {
 	define(): Parameters<ExtensionAPI["registerTool"]>[0];
 }
 
-/** The tools this session registers: the selected server tools and, in a main session, the local tool of the shadowed one on the server's schema. */
+/**
+ * The tools this session registers: the selected server tools and, in a main session, the local `bus_wait` in place of
+ * the shadowed server tool, on its name and schema (`bus_wait` is the only shadowed row).
+ */
 function registrations(pi: ExtensionAPI, tools: readonly RemoteTool[], options: RemoteToolsOptions): Registration[] {
 	const { kind, wait } = options;
 	const shadow = kind === "main" && wait ? tools.find(tool => policyOf(tool.name).shadowed) : undefined;
