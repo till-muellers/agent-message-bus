@@ -133,9 +133,9 @@ Layout:
 
 |Path|Role|
 |---|---|
-|`main.go`|Wiring only: config, CLI commands (`start`, `stop`, `status`, `admin-token`, `rotate-token`), DB, migrations, then `server.Build` and `httpserver.Serve`.|
+|`main.go`|Wiring only: config, CLI commands (`start`, `stop`, `status`, `admin-token`, `rotate-token`), DB, migrations, then `server.Serve`.|
 |`cmd/tooldoc/`|Prints the generated tool ledger `TOOLS.md` from the registry (no DB needed).|
-|`internal/server/`|Composition root (`Build`) and routes.|
+|`internal/server/`|Composition root (`Build`, `Serve`, `Run`) and routes.|
 |`internal/tools/`|The handler layer: one registry of `bus_*` tools that both transports serve.|
 |`internal/rpc/`, `internal/mcpserver/`|Thin transports over the registry.|
 |`internal/admin/`|Loopback-only admin endpoints (`/v1/admin/shutdown`, `/v1/admin/admin-token`) behind the admin-token guard.|
