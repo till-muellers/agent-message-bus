@@ -136,6 +136,7 @@ func TestErrors(t *testing.T) {
 		{"no token", "", "bus_whoami", "", http.StatusUnauthorized, "unauthenticated"},
 		{"unknown tool", adminToken, "bus_nope", "", http.StatusNotFound, "not_found"},
 		{"unknown arg", adminToken, "bus_mint_leader", `{"name":"x","bogus":1}`, http.StatusBadRequest, "invalid"},
+		{"arg key in other case", adminToken, "bus_mint_leader", `{"name":"x","NAME":"y"}`, http.StatusBadRequest, "invalid"},
 		{"missing arg", adminToken, "bus_mint_leader", `{}`, http.StatusBadRequest, "invalid"},
 	}
 	for _, c := range cases {

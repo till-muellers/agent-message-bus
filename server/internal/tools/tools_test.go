@@ -44,6 +44,25 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+// encoding/json matches keys case-insensitively; the closed schema names each key exactly.
+func TestDecodeRejectsCaseMismatchedKeys(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ name, in, want string }{
+		{"capitalised", `{"Space":"a"}`, `invalid arguments: json: unknown field "Space"`},
+		{"upper case", `{"space":"a","N":3}`, `invalid arguments: json: unknown field "N"`},
+		{"duplicate in other case", `{"n":1,"N":3}`, `invalid arguments: json: unknown field "N"`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := Decode[sample](json.RawMessage(c.in))
+			if k, _ := apperr.KindOf(err); k != apperr.Invalid || err.Error() != c.want {
+				t.Fatalf("got %v, want invalid %q", err, c.want)
+			}
+		})
+	}
+}
+
 func TestDefineRequiresFields(t *testing.T) {
 	tl := define("t", "a", "d", "r", []string{"space", "n"}, map[string]any{"space": str("s"), "n": integer("n")},
 		func(_ context.Context, _ auth.Principal, a sample) (any, error) { return a, nil })
