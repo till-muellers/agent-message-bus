@@ -150,7 +150,7 @@ function inviteOps(deps: SessionDeps, parts: SessionParts, connection: Connectio
 }
 
 /** The connection and the context block it keeps fresh: re-read on every connected restart, dropped when not connected. */
-function connect(deps: SessionDeps, { credentials, identity, view, warn }: SessionParts): { connection: Connection; busContext: BusContext } {
+function connect(deps: SessionDeps, { credentials, identity, view, warn }: SessionParts): { connection: Connection; busContext: BusContext; self(): string | undefined } {
 	const hooks = {
 		membershipChanged: () => busContext.refreshIdentity(),
 		connected: async (connected: boolean) => (connected ? busContext.refresh() : busContext.clear()),
@@ -159,7 +159,7 @@ function connect(deps: SessionDeps, { credentials, identity, view, warn }: Sessi
 	const events = createBusEvents(deps.pi.events, () => busContext.who(), warn);
 	const connection = createConnection({ ...deps, credentials, identity, view, warn, events, ...hooks });
 	const busContext = createBusContext({ client: deps.client, getActive: connection.getActive, warn, isSub: () => view.sub, agentId: () => view.agentId });
-	return { connection, busContext };
+	return { connection, busContext, self: hooks.self };
 }
 
 /** Builds the session of this extension. */
@@ -169,7 +169,7 @@ export function createSession(deps: SessionDeps): Session {
 	const identity = createSessionIdentity(deps.dir, credentials);
 	const view: SessionView = { sub: false, isIdle: () => true, setStatus: () => {} };
 	const parts = { credentials, identity, view, warn };
-	const { connection, busContext } = connect(deps, parts);
+	const { connection, busContext, self } = connect(deps, parts);
 	return {
 		...connection,
 		...inviteOps(deps, parts, connection),
@@ -178,7 +178,7 @@ export function createSession(deps: SessionDeps): Session {
 			busContext.clear();
 		},
 		contextBlock: busContext.block,
-		self: () => busContext.who().agent,
+		self,
 		client: deps.client,
 		credentials,
 		store: deps.store,

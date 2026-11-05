@@ -4,8 +4,7 @@
  * so a later promote or logout of the main session reaches its next call.
  */
 import type { ActiveCredentials } from "../bus/credentials.ts";
-import type { RootIdentities } from "../session/root-identities.ts";
-import { rootKeyOf } from "../session/root-identities.ts";
+import { type RootIdentities, rootKeyOf } from "../session/root-identities.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
 import type { CredentialStore } from "../session/stored-credentials.ts";
