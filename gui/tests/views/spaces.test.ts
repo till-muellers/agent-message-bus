@@ -27,8 +27,8 @@ describe("the space list", () => {
 		expect(rows(list)[0]).toEqual(["Space", "Leaders", "Admins", "Members"]);
 	});
 
-	test("a space the session may not manage has an empty invites cell", () => {
-		const spaces = spaceList.spaces.map((space) => (space.name === "other" ? { ...space, mayManage: false, invites: undefined } : space));
+	test("a space the session may not manage has an empty invites cell, even with a count in the state", () => {
+		const spaces = spaceList.spaces.map((space) => (space.name === "other" ? { ...space, mayManage: false, invites: 3 } : space));
 		const list = { ...spaceList, spaces };
 		expect(rows(list).map((r) => r[4])).toEqual(["Open invites", "1", ""]);
 	});

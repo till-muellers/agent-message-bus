@@ -148,7 +148,7 @@ export function createPoller(deps: { load(route: Route): Promise<ViewData> | und
 
 - Interval 5 s (`web/analysis.md` §3.5), paused while `document.hidden` (`main.ts` calls `refreshNow` on `visibilitychange` to visible), immediate refresh on sign-in, on navigation and after a successful mutation; on errors back off 5 → 10 → 30 s. A background refresh keeps the shown data (no "Loading…"); only the first load of a route shows it. No SSE in milestone 1 (`live-updates.feature` header); `GET /web/api/events` would replace the poller later without touching views.
 - Stale loads have one owner each (R16): the poller drops the answer of a superseded request (navigation, `refreshNow`, `stop`: a generation counter) and dispatches `view/loading` on every load without reading the view; the reducer alone decides whether an answer still fits the route (`sameRoute`) and whether a load shows "Loading…" (only from `idle`).
-- The GUI never opens `GET /v1/inbox/stream` and never calls `bus_inbox_ack` (`gui-inbox.feature`, `live-updates.feature:63-76`); the inbox view is a read of `GET /web/api/inbox`.
+- The GUI never opens `GET /v1/inbox/stream` and never calls `bus_inbox_ack` (`gui-inbox.feature`, `live-updates.feature:63-76`); the inbox view reads `GET /web/api/state` for `maxInboxLimit`, then `GET /web/api/inbox?limit=<maxInboxLimit>`.
 
 ---
 
