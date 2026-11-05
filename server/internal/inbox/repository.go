@@ -144,8 +144,8 @@ func scopeOccupied(ctx context.Context, q db.DBTX, agentID, spaceID int64) (bool
 	return occupied, nil
 }
 
-// markNoticed marks agentID's unnoticed edges in space (0 = all) noticed and returns how many.
-func markNoticed(ctx context.Context, q db.DBTX, agentID, space int64) (int64, error) {
+// markScopeNoticed marks agentID's unnoticed edges in space (0 = all) noticed and returns how many.
+func markScopeNoticed(ctx context.Context, q db.DBTX, agentID, space int64) (int64, error) {
 	res, err := q.ExecContext(ctx, markNoticedSQL, agentID, space, space)
 	if err != nil {
 		return 0, fmt.Errorf("marking inbox edges of agent %d noticed: %w", agentID, err)

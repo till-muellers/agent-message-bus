@@ -36,7 +36,7 @@ func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, boo
 	var n Notice
 	var due bool
 	err := db.InTx(ctx, s.db, func(tx *sql.Tx) error {
-		marked, err := markNoticed(ctx, tx, p.AgentID, spaceFilter(p))
+		marked, err := markScopeNoticed(ctx, tx, p.AgentID, spaceFilter(p))
 		if err != nil || marked == 0 {
 			return err
 		}

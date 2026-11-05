@@ -283,7 +283,9 @@ type Notice struct {
 //   edge = scope had no row before this tx's first insert for it, or the entry is critical (PO-7 re-notify).
 func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, bool, error) // returns+marks unnoticed edges of p's scope [13a; consumed from 13b]
 func (s *Service) MarkNoticed(ctx context.Context, p auth.Principal, es []Entry) error // marks the returned edges noticed; replaces ReadMarking [13b, R12]
-type Noticer interface { TakeNotice(ctx context.Context, p auth.Principal) (Notice, bool, error) } // shared by rpc and mcpserver [R12]
+
+// noticer.go (R12): the mail notice after a successful tool call, shared by rpc and mcpserver.
+type Noticer interface { TakeNotice(ctx context.Context, p auth.Principal) (Notice, bool, error) } // consumed by NoticeAfter; rpc and mcpserver accept it instead of a local copy, because they no longer call TakeNotice themselves (an R20 exception, like Stager + InTx) [R12]
 func NoticeAfter(ctx context.Context, n Noticer, p auth.Principal) (Notice, bool) // after a successful call; logs and swallows a failed query [R12]
 ```
 
@@ -387,7 +389,7 @@ Registry test (table-driven) asserts for every tool: `Access != ""`, `strings.Co
 |---|---|
 | `server` | `Build(ctx, streamRoot, conn, adminToken, shutdown) (api, web http.Handler, error)` — calls `authSvc.Bootstrap(ctx)` [4a]; `web` is the GUI mux (only `/web/*`) [W1a]. `protocol.go`: `const Protocol = 2`; `healthz` sets `Agent-Bus-Protocol` [7]. `httpserver.go`: `NewHTTPServer(h http.Handler) *http.Server` with only `ReadHeaderTimeout: 10s`, so `bus_wait` and streams are never cut by a write/idle timeout (CR-7, `contracts.md` §2.5) [9]; reused for the GUI server [W1a]. `run.go`: `Run` serves the API and the GUI server on their own listeners via `httpserver.Serve` and shuts both down gracefully; the first error stops both [W1a]. `serve.go`: `Serve(ctx, cfg, conn, adminToken)` builds the handlers, opens the listeners (`listen.go`: the API on `AMB_ADDR`, the GUI on `AMB_WEB_ADDR` unless it is empty or `off`; a failed GUI listen closes the API listener), publishes the instance file and calls `Run`; `main.go` only calls it [R17]. `GET /v1/guide` [11]. |
 | `admin` | token-swap handler requires `p.Bootstrap` else `forbidden "only the bootstrap admin may replace the instance admin token"`; shutdown: any admin [6a] |
-| `rpc` | success body `{"result": …, "mail"?: Notice}` via `inbox.TakeNotice` [13b]; `ListTools(reg)` and `CallTool(reg, notices)` are mounted by `server.Routes` behind `auth.Middleware`, with no route table or principal check of their own [R14] |
+| `rpc` | success body `{"result": …, "mail"?: Notice}` via `inbox.NoticeAfter` (`inbox.TakeNotice`) [13b, R12]; `ListTools(reg)` and `CallTool(reg, notices)` are mounted by `server.Routes` behind `auth.Middleware`, with no route table or principal check of their own [R14] |
 | `mcpserver` | `NewHandler(reg, a, notices)`, instructions = `guide.Text` [11]; trailing hint `TextContent` [13b]; tools run through `reg.Call`; an error without kind is logged and fails the call as the protocol error `internal error`, without its detail, like the HTTP 500 [R14] |
 | `web` (new) | see §5 |
 
@@ -499,7 +501,7 @@ Not shared code, explicitly kept out of `platform`/`domain`: the protocol consta
 | AD-3 | `Tool.Description` stays the full served text; `Tool.Access` is a separate exact sentence contained in it | `tool-descriptions.feature:15-19` needs both; avoids composing descriptions at runtime |
 | AD-4 | `AdmitMember` returns the agent id (no extra lookup) | the accept tx already has it from `MintMember` (`spaces/admission.go:27`) |
 | AD-5 | `inbox.NewService` takes the root ctx; `StreamHandler()` loses its parameter | `Wait` (a tool call) needs the same shutdown signal as streams |
-| AD-6 | `Read` never marks; `bus_inbox_read` and `bus_wait` mark what they return (`MarkNoticed`); the SSE stream marks the edges it sends | keeps the GUI's read pure (`mail-hint.feature:104-115`) and the rule inside `inbox` |
+| AD-6 | `Read` never marks; `bus_inbox_read` and `bus_wait` mark what they return (`MarkNoticed`); the SSE stream marks the edges it sends | keeps the GUI's read pure (`mail-hint.feature:104-115`); the one marking primitive `MarkNoticed` stays in `inbox`, and `bus_inbox_read` combines `Read` + `MarkNoticed` in `tools`, as the stream's drain does inside `inbox` [R12] |
 | AD-7 | Receipts via `inbox.Publish` (formerly `DeliverReceipts`), presence sampled right after commit | "slot at commit time" (`presence.feature:53-57`) without leaking slots to other features |
 | AD-8 | Web sessions in memory, 8 h absolute, opaque 32-byte id, store token hash only | "short expiry" (`gui-access.feature:26-28`); restart = sign in again |
 | AD-9 | Web sign-in rate limit local to `web`, 429 `rate_limited` | avoids a new `apperr` kind (shared code) |
