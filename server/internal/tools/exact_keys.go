@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"encoding/json"
 	"maps"
 	"reflect"
@@ -11,28 +12,29 @@ import (
 )
 
 // requireExactKeys fails with invalid "invalid arguments: json: unknown field …" for the first
-// key of object (sorted) that is not exactly the JSON name of a field of struct st; other
-// types pass unchecked.
+// key of object (sorted) that is not exactly the JSON name of a field of struct st. Other
+// types, and input that is no JSON object, pass: the decode into st reports those.
 func requireExactKeys(st reflect.Type, object []byte) error {
 	if st.Kind() != reflect.Struct {
 		return nil
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(object, &fields); err != nil {
-		return apperr.New(apperr.Invalid, "invalid arguments: %v", err)
+	if json.NewDecoder(bytes.NewReader(object)).Decode(&fields) != nil {
+		return nil
 	}
-	names := jsonNames(st)
+	names := jsonFields(st)
 	for _, key := range slices.Sorted(maps.Keys(fields)) {
-		if !names[key] {
+		if _, found := names[key]; !found {
 			return apperr.New(apperr.Invalid, "invalid arguments: json: unknown field %q", key)
 		}
 	}
 	return nil
 }
 
-// jsonNames is the set of JSON names of st's exported fields: the tag name, else the field name.
-func jsonNames(st reflect.Type) map[string]bool {
-	names := make(map[string]bool, st.NumField())
+// jsonFields maps the JSON name of each exported field of st (the tag name, else the field
+// name) to the field.
+func jsonFields(st reflect.Type) map[string]reflect.StructField {
+	fields := make(map[string]reflect.StructField, st.NumField())
 	for i := range st.NumField() {
 		f := st.Field(i)
 		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
@@ -42,7 +44,7 @@ func jsonNames(st reflect.Type) map[string]bool {
 		if name == "" {
 			name = f.Name
 		}
-		names[name] = true
+		fields[name] = f
 	}
-	return names
+	return fields
 }

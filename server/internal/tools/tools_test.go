@@ -51,6 +51,7 @@ func TestDecodeRejectsCaseMismatchedKeys(t *testing.T) {
 		{"capitalised", `{"Space":"a"}`, `invalid arguments: json: unknown field "Space"`},
 		{"upper case", `{"space":"a","N":3}`, `invalid arguments: json: unknown field "N"`},
 		{"duplicate in other case", `{"n":1,"N":3}`, `invalid arguments: json: unknown field "N"`},
+		{"other case with wrong type", `{"N":"x"}`, `invalid arguments: json: unknown field "N"`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

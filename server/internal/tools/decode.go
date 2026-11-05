@@ -22,13 +22,13 @@ func Decode[T any](args json.RawMessage) (T, error) {
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return v, nil
 	}
+	if err := requireExactKeys(reflect.TypeFor[T](), trimmed); err != nil {
+		return v, err
+	}
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&v); err != nil {
 		return v, apperr.New(apperr.Invalid, "invalid arguments: %v", err)
-	}
-	if err := requireExactKeys(reflect.TypeFor[T](), trimmed); err != nil {
-		return v, err
 	}
 	return v, nil
 }
