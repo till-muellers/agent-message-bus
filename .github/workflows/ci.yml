@@ -95,8 +95,13 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install pytest
-        run: python -m pip install pytest
+      - name: Install pytest and ruff
+        run: python -m pip install pytest ruff==0.17.3
+
+      - name: Ruff
+        run: |
+          ruff format --check .
+          ruff check .
 
       - name: Test
         run: python -m pytest tests/test_build.py tests/test_release_version.py

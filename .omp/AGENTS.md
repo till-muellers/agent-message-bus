@@ -27,7 +27,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Go lint/format: `gofmt -l .`, `go vet ./...`, `golangci-lint run ./...`
 - TS: `bun test tests/`, `bun run typecheck`
 - GUI: `cd gui && bun test && bun run typecheck`; build into the embed dir with `bun run build:gui` (repo root). Go builds and tests work without it (fallback page at `/web/`).
-- Python: `pytest tests` (format with `ruff format`)
+- Python: `pytest tests`, `ruff format --check .`, `ruff check .` (settings in `ruff.toml`; `ruff format .` to fix)
 - Tool ledger: `cd server && go run ./cmd/tooldoc > TOOLS.md`
 
 ## Architecture
@@ -107,7 +107,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Import with explicit `.ts` extensions.
 
 ### Python
-- Type hints on all signatures, formatted with ruff.
+- Type hints on all signatures; formatted and linted with ruff (`ruff.toml`: line length 120, Python 3.10+).
 
 ## Running it locally (smoke tests)
 Facts that are not obvious from the code and that cost time to find out:
@@ -187,4 +187,5 @@ bun test
 bun run typecheck
 (cd gui && bun test && bun run typecheck)
 pytest tests
+ruff format --check . && ruff check .
 ```

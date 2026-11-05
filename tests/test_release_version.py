@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -27,7 +28,7 @@ release_version = load_module()
 def write_package(tmp_path: Path, version: str) -> Path:
     """Write a package.json with the given version and return its path."""
     path = tmp_path / "package.json"
-    path.write_text('{"name": "x", "version": "%s"}\n' % version, encoding="utf-8")
+    path.write_text(json.dumps({"name": "x", "version": version}) + "\n", encoding="utf-8")
     return path
 
 
@@ -48,10 +49,7 @@ def test_a_matching_tag_passes() -> None:
 
 
 def test_a_mismatched_tag_names_both_versions() -> None:
-    assert (
-        release_version.check("v0.2.0", "0.1.0")
-        == "package version 0.1.0 does not match tag v0.2.0"
-    )
+    assert release_version.check("v0.2.0", "0.1.0") == "package version 0.1.0 does not match tag v0.2.0"
 
 
 def test_the_v_prefix_is_optional() -> None:
