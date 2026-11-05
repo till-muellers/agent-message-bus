@@ -196,7 +196,7 @@ Deviations from REVIEW §11, with reasons:
 
 - **Goal:** invites record `invited_by`; accept delivers the task as a `direct_message` from the inviter in the accept transaction and no longer returns `task`; `/healthz` reports `Agent-Bus-Protocol: 2`.
 - **Spec moved:** `guidance/first-prompt.feature` rules `:35`, `:52` → `server/spec/invites.feature` (replace `:8`, `:57`, `:61-64`); `findings/plugin-version-skew.feature` scenario `:121-124` → `server/spec/transports.feature` health rule; `spec/README.md:51` glossary (invite code, task).
-- **Files:** `migrations/NNNN_invites_invited_by.{up,down}.sql`, `invites/service.go` (`Create` stores inviter; `Accept` in `ib.Deliver`; `Admission` without `Task`), `invites/repository.go` (`row.invitedBy`), `spaces/admission.go` (`AdmitMember` returns agent id), `server/build.go` (`invites.NewService(…, inboxSvc, …)`), `server/protocol.go` (new), `server/routes.go:34-37`, `tools/invites.go` (description).
+- **Files:** `migrations/NNNN_invites_invited_by.{up,down}.sql`, `invites/service.go` (`Create` stores inviter; `Accept` in `ib.Deliver`, since R10 `inbox.InTx`; `Admission` without `Task`), `invites/repository.go` (`row.invitedBy`), `spaces/admission.go` (`AdmitMember` returns agent id), `server/build.go` (`invites.NewService(…, inboxSvc, …)`), `server/protocol.go` (new), `server/routes.go:34-37`, `tools/invites.go` (description).
 - **Migrations:** `NNNN_invites_invited_by` (number at merge, `schema.md` §2.1).
 - **Tests:** `TestInviteRecordsInviter` (table: lead, lead2, admin "ops", bootstrap "admin"), `TestAcceptDeliversTask` (one entry, fields, published once after commit via fake publisher), `TestAcceptWithoutTaskDeliversNothing`, `TestFailedAdmissionKeepsCodeNoEntry`, `TestTaskFromDepartedInviter`, `TestReinviteSendsAnotherTask`, `TestAcceptBodyHasNoTask` (handler), `TestHealthzProtocolHeader`.
 - **Docs:** `server/README.md` (accept body), `ledger_head.md.tmpl:20` (accept `{name, space, token}`), `server/TOOLS.md`; `spec/README.md:51,71`.
@@ -256,7 +256,7 @@ Deviations from REVIEW §11, with reasons:
 
 - **Goal:** receipts on sends/posts; `connected` on participants and overview.
 - **Spec moved:** `omp-parity/presence.feature` (rules `:23`, `:59`, `:73`) → `server/spec/presence.feature`; additive result lines in `direct-messages.feature`, `topics.feature`, `blackboards.feature`, `spaces.feature:164-184` (participants table).
-- **Files:** `inbox/presence.go` (`Connected`, `DeliverReceipts`, `Receipt`), `inbox/repository.go` (names of recipient ids), `messaging/direct.go`, `messaging/topics.go`, `blackboards/posts.go`, `spaces/service.go` (`Participant.Connected` via a `presence` iface), `overview/service.go`, `tools/topics.go`, `tools/blackboards.go`, `server/build.go`, `server/TOOLS.md`.
+- **Files:** `inbox/presence.go` (`Connected`, `DeliverReceipts`, since R10 `Publish` in `inbox/stage.go`, `Receipt`), `inbox/repository.go` (names of recipient ids), `messaging/direct.go`, `messaging/topics.go`, `blackboards/posts.go`, `spaces/service.go` (`Participant.Connected` via a `presence` iface), `overview/service.go`, `tools/topics.go`, `tools/blackboards.go`, `server/build.go`, `server/TOOLS.md`.
 - **Migrations:** —
 - **Tests:** `TestReceipts` (table: live via slot, live via waiter, queued; topic excludes sender, sorted; empty `[]`; post excludes author), `TestReceiptAtCommit`, `TestParticipantsConnected` (per agent across spaces).
 - **Docs:** `server/TOOLS.md` result sketches.

@@ -118,7 +118,7 @@ ALTER TABLE inbox DROP COLUMN noticed;
 ALTER TABLE inbox DROP COLUMN edge;
 ```
 
-Edge computation (in `inbox.insert`, inside the Deliver tx, per recipient scope, first entry of that scope in the tx only): `NOT EXISTS (SELECT 1 FROM inbox WHERE agent_id = ? AND (? = 0 OR space_id = ?) AND id < ?)` using the existing `inbox_agent(agent_id, id)` index; scope `space` = recipient's space for member-kind agents, 0 otherwise (kind read from `agents`). Critical entries are always edges (PO-7, critical re-notify). Existing rows default to "no edge", so a migrated mailbox stays quiet until it empties once — acceptable (alpha).
+Edge computation (`inbox.isEdge`, called by `Stage` through the caller's transaction before the entry is inserted (R10; formerly the `Deliver` tx), per recipient scope, first entry of that scope in the tx only): the entry is an edge when `scopeOccupiedSQL` finds no entry yet, `SELECT EXISTS (SELECT 1 FROM inbox WHERE agent_id = ? AND (space_id = ? OR (SELECT kind FROM agents WHERE id = ?) <> 'member'))`, using the existing `inbox_agent(agent_id, id)` index; scope = the recipient's space for member-kind agents, every space otherwise. Critical entries are always edges (PO-7, critical re-notify). Existing rows default to "no edge", so a migrated mailbox stays quiet until it empties once — acceptable (alpha).
 
 ### 2.3 `NNNN_invites_id` (slice 10) — PO-3: invite cancel by id, web only
 

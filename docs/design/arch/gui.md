@@ -163,10 +163,10 @@ As in `contracts.md` §10 (checked, every call present). Sign-in errors the logi
 | Sign out | `DELETE /web/session` (CSRF-exempt) | `{ok: true}` |
 | Space list | `GET /web/api/state` | `{you, spaces: [SpaceSummary + mayManage + invites?], inbox: {waiting}, maxInboxLimit}` → `views/spaces.ts`; `maxInboxLimit` → the inbox read |
 | Space | `GET /web/api/state?space=<s>` | `{you, overview, mayManage, invites?, inbox}` → `views/space.ts`; `mayManage` decides the leader controls; `invites` present only for leader-rights sessions (leader of the space or admin) |
-| Pending invites (slice 10) | `GET /web/api/spaces/<s>/invites` | `[{id, name, expiresAt, invitedBy}]` → invite rows with a cancel button; member session 403 `only leaders may list or cancel invites` (section hidden for members) |
+| Pending invites (slice 10) | not called: the invite rows with a cancel button come from the space state's `invites` (`[{id, name, expiresAt, invitedBy}]`); the server's `GET /web/api/spaces/<s>/invites` (contracts §10.6) stays for other web clients | section hidden for members |
 | Threads | `GET /web/api/spaces/<s>/blackboards/<b>/threads` | `bus_list_threads` result → `views/board.ts` |
 | Thread | `GET /web/api/spaces/<s>/threads/<id>` | `bus_read_thread` result → `views/thread.ts` |
-| Inbox | `GET /web/api/inbox?after=&limit=` | `[Entry]` → `views/inbox.ts`; `limit` = the state's `maxInboxLimit` |
+| Inbox | `GET /web/api/inbox?limit=` (no `after`: the GUI shows the oldest unacknowledged entries up to the limit) | `[Entry]` → `views/inbox.ts`; `limit` = the state's `maxInboxLimit` |
 | Admins (W2) | `GET /web/api/admins`, `POST /web/api/admins {name}`, `POST /web/api/admins/<n>/revoke` | list; `{name, token}` shown once; `{deleted}` |
 | Mutations (W3) | `POST …/invites {name, task?}`, `DELETE …/invites/<id>` + `X-CSRF-Token` (→ `{cancelled}`; slice 10, PO-3, `web/gui-invite-cancel.feature:17-19`), `POST …/revoke {name, confirm: "<space>/<name>"}`, `POST …/threads/<id>/posts {body}`, `POST …/topics/<t>/messages {body, critical?}`, `DELETE /web/api/spaces/<s> {confirm: "<s>"}` | per contract; invite code shown once; a `cancelled: false` result shows "the invite was already used, expired or cancelled" and refreshes |
 

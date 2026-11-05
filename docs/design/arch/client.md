@@ -123,6 +123,8 @@ flowchart TD
   commands --> localserver[local-server]
   commands --> spawn
   commands --> version
+  commands --> bus
+  commands --> shared
   connection --> session
   connection --> tools
   connection --> delivery
@@ -148,11 +150,14 @@ flowchart TD
   launch --> process
   localserver --> process
   localserver --> bus
+  localserver --> session
+  localserver --> shared
+  spawn --> tools
   version --> process
   bus --> shared
 ```
 
-Rules: no cycles; `bus/` and `process/` are leaves (plus `shared/`); `render/` never imports `delivery/`; only `index.ts` and `session/session.ts` see the whole graph. A fitness test (`tests/layout.test.ts`, slice P1a) parses imports and fails on an edge not in this diagram. It still whitelists five edges as transitional: `commands>bus` (`BusClient`, `trimUrl`, error wording), `commands>shared` and `local-server>shared` (`CommandResult`), `local-server>session` (the credential store) and `spawn>tools` (tool result and presentation).
+Rules: no cycles; `bus/` and `process/` are leaves (plus `shared/`); `render/` never imports `delivery/`; only `index.ts` and `session/session.ts` see the whole graph. A fitness test (`tests/layout.test.ts`, slice P1a) parses imports and fails on an edge between two feature folders that is not in this diagram (`index.ts` and `session/session.ts` are the wiring roots and exempt). The five edges it once whitelisted as transitional are part of the graph since R22, because each is a narrow, stable use: `commands>bus` (`BusClient`, `trimUrl`, error wording), `commands>shared` and `local-server>shared` (`CommandResult`), `local-server>session` (the credential store) and `spawn>tools` (tool result and presentation).
 
 ---
 
@@ -200,22 +205,28 @@ export function createSessionCredentials(env: ActiveCredentials | undefined): Se
 // lib/session/session.ts
 export interface SessionDeps {
 	pi: ExtensionAPI; store: CredentialStore; busEnv: BusEnv; dir: string;
-	roots: RootIdentities; options: BusExtensionOptions;
+	client: BusClient; localTools: readonly string[]; gate: ServerGate; roots: RootIdentities;
+	sleep?: (ms: number, signal: AbortSignal) => Promise<void>; backlogTimeoutMs?: number;
 }
 export interface Session extends Connection {
 	client: BusClient;
 	credentials: SessionCredentials;
-	view: SessionView;           // mode, sub, agentId, isIdle()
+	store: CredentialStore;      // the stored login
+	gate: ServerGate;            // the protocol gate (§8.1), one per session (`sessionOf` in index.ts)
 	warn(message: string): void;
+	isSub(): boolean;
+	clearAccepted(): Promise<void>;
 	accept(url: string, code: string): Promise<Joined>;
 	join(joined: Joined): Promise<CommandResult>;
 	shutdown(): void;
+	contextBlock(): string | undefined;
+	self(): string | undefined;
 	setContext(ctx: SessionContext, change?: SessionChange): Promise<void>;
 }
 export function createSession(deps: SessionDeps): Session;
 ```
 
-`SessionView` gains `agentId: string` (from `ctx.agent.id`) and `isIdle(): boolean` (bound to the latest `ctx.isIdle`, `CA/extensibility/extensions/types.ts:697`), both refreshed in `setContext`.
+`SessionView` (`connection/session-view.ts`, read by the connection's identity, inbox and tools parts, not a `Session` field) carries `agentId?: string` (from `ctx.agent.id`) and `isIdle(): boolean` (bound to the latest `ctx.isIdle`, `CA/extensibility/extensions/types.ts:697`), both refreshed in `setContext`.
 
 ### 2.3 Subagent identity map, S15 (PO-8 approved)
 
@@ -563,9 +574,10 @@ Contract (contracts.md, Arch-server): `GET /healthz` → `200 ok` + header `Agen
 export function probeProtocol(fetchFn: FetchLike, url: string): Promise<number | undefined>;  // undefined = no header
 // lib/version/server-protocol.ts
 export const MIN_SERVER_PROTOCOL = 2;   // raised in the PR that starts depending on a newer server
-export function tooOld(found: number | undefined): string | undefined; // the refusal text of the spec, or undefined
-// lib/connection/server-gate.ts — caches one probe per url per connection start: `connection.restart()` calls startOver()
-export interface ServerGate { check(url: string): Promise<"ok" | { refused: string }>; last(): { url: string; protocol: number | undefined } | undefined; startOver(): void; }
+export function tooOld(found: number | undefined, url: string): string | undefined; // the refusal text of the spec (naming url), or undefined
+// lib/connection/server-gate.ts — one gate per session (`sessionOf` in index.ts); it caches one probe per url until the next connection start: `connection.restart()` calls startOver()
+export type ServerVerdict = "ok" | { refused: string };
+export interface ServerGate { check(url: string): Promise<ServerVerdict>; last(): { url: string; protocol: number | undefined } | undefined; startOver(): void; }
 ```
 
 - Checked **before** `/v1/invites/accept` (accept path in `commands/accept.ts`) and **before** registering/activating tools in `connection.restart()`. Refusal: no tools activated, no stream, notify `agent-bus: the server at <url> is too old (protocol none, this plugin needs 2); upgrade the agent-message-bus server`.

@@ -8,11 +8,24 @@ Client side (extension, GUI frontend, release pipeline): Arch-client, `docs/desi
 
 PO decisions of 2026-10-26 are applied (PO-1 log line, PO-2, PO-4, PO-7/8/9, PO-10 (b), PO-11 S1 as recommended; **PO-3: no `bus_cancel_invite` tool, web-only cancel by invite id; PO-5: delivery class on every entry; PO-6: omp only**). Architect decisions that the specs leave open are marked **[AD-n]** and listed in §8.
 
-Every code claim below is anchored to the repo as of `526635d` (`git log -1`).
+The baseline table of §1 is anchored to the repo as of `526635d`; the target design (§2 on) was written against it and its signatures are kept in step with `main`.
 
 ---
 
-## 1. Current state (verified)
+## 1. Baseline before the milestone (verified at `526635d`)
+
+The baseline table below is the starting point the milestone was designed against; its anchors point to `526635d`, not to `main`, and many of its rows (admin principal, `requireAgent`, leader checks, invite task, migrations) were changed by the milestone slices as §2–§8 describe. This first table lists what replaced the baseline rows that the review follow-ups (R10–R17) and the wiring changed (paths under `server/internal/`):
+
+| Area | On `main` now | Anchor |
+|---|---|---|
+| Wiring | `Build(streamRoot, conn, adminToken, shutdown) (Handlers, error)` (`Handlers{API, Web}`) runs `authSvc.Bootstrap`, builds every service and returns `Routes` and `WebRoutes`. Hooks: departure = messaging, blackboards; creation = messaging; revocation = the `invites.Service` itself (`OnRevoke`). `Serve` builds, opens both listeners, publishes the instance and calls `Run` | `server/build.go`, `server/serve.go`, `server/run.go` |
+| Routes | adds `GET /v1/guide`; the stream route is `ib.StreamHandler(streamRoot)` | `server/routes.go` |
+| Admission | `auth.Service.AdmitMember(ctx, tx, spaceID, name) (agentID, token, err)` (was `MintMember`); `spaces.Admitter.AdmitMember` returns `(agentID, space, token, err)`; `auth.Service.Revoke(ctx, q, agentID, Scope)` replaces `RevokeSpaceTokens`/`RevokeAgentTokens` | `auth/service.go`, `auth/revoke.go`, `spaces/admission.go` |
+| Inbox | `Deliver` is gone: the feature opens the tx; `Stage` inserts through it, `Publish` wakes recipients after commit and returns receipts; `inbox.InTx` combines them | `inbox/stage.go` |
+| Tool | `Tool{Meta, Call}`; `Meta` carries `Name, Description, Access, Result, Group, Schema` and the args type; 34 tools | `tools/registry.go`, `tools/meta.go`, `tools/registry_test.go` |
+| MCP | `mcp.ServerOptions{Instructions: guide.Text}` | `mcpserver/server.go` |
+
+Baseline:
 
 | Area | Fact | Anchor |
 |---|---|---|
@@ -66,7 +79,7 @@ server/
     mcpserver/                  MCP transport (+instructions, +hint block)    [11,13b]
     admin/                      loopback admin endpoints (bootstrap-only swap)[6a]
     web/             NEW        GUI transport: sessions, CSRF, /web/api, embed[W1a,W1b,W2,W3,10]
-    server/                     Build, Routes, Protocol constant              [4a,7,11,W1a]
+    server/                     Build, Routes, WebRoutes, Run, Serve, Protocol [4a,7,11,W1a,R17]
     domain/                     + ValidText (approved)                         [2]
     platform/                   + config.WebAddr (AMB_WEB_ADDR; PO-approved)  [W1a]
 ```
@@ -249,7 +262,7 @@ func ClassOf(t Type, critical bool) Class
 
 // service.go — constructor takes the stream root so Wait and Stream share one shutdown signal [9]
 func NewService(root context.Context, conn *sql.DB, pub publisher, now func() time.Time) *Service
-func (s *Service) StreamHandler() http.Handler // root no longer passed per call (handler.go:22) [9]
+func (s *Service) StreamHandler(root context.Context) http.Handler // the stream's shutdown root, passed by server.Routes [9]
 
 // requireAgent deleted (service.go:99-104, handler.go:46-52) [4d]; admins read across spaces (spaceFilter 0).
 func (s *Service) Read(ctx context.Context, p auth.Principal, after int64, limit int) ([]Entry, error) // pure listing; never marks
@@ -257,16 +270,17 @@ func (s *Service) Ack(ctx context.Context, p auth.Principal, upTo int64) (int64,
 func (s *Service) Count(ctx context.Context, p auth.Principal) (int, error)                           // unacked entries in p's scope; web state [W1b]
 
 // wait.go (new) [9]
-type Filter struct {
+type WaitQuery struct {
     After    int64
-    From     string // sender name; "" = any
-    ThreadID int64  // 0 = any
+    From     string        // sender name; "" = any
+    ThreadID int64         // 0 = any
+    Timeout  time.Duration // from WaitTimeout(timeoutSeconds): 30 s default, 1..300 s
 }
-const MaxWaitEntries = 100
+const waitLimit = 100 // most entries one Wait returns
 // Wait subscribes to inbox/<agentID>, then reads matching entries; returns at once when any match,
 // else blocks until a matching entry, the timeout, ctx, the service root, or a dropped subscription
 // (then reads once more). Never acks; never takes the stream slot; registers the caller as a waiter (presence).
-func (s *Service) Wait(ctx context.Context, p auth.Principal, f Filter, timeout time.Duration) ([]Entry, error)
+func (s *Service) Wait(ctx context.Context, p auth.Principal, q WaitQuery) ([]Entry, error)
 
 // presence.go (new; absorbs slots.go) [12, waiter count from 9]
 func (s *Service) Connected(agentID int64) bool // stream slot held OR ≥1 active Wait
@@ -371,11 +385,10 @@ Needs one new blackboards read: `func (s *Service) RecentThreadsFor(ctx, m space
 
 ```go
 //go:embed guide.md
-var text string
-func Text() string // ≤ 4000 characters, asserted by a test
+var Text string // ≤ 4000 characters, asserted by a test
 ```
 
-Consumers: `mcpserver.NewHandler(reg, a, guide.Text())` → `mcp.ServerOptions{Instructions: …}`; `server.Routes` → `GET /v1/guide`; `tools.RenderMarkdown` → "Working on the bus" section.
+Consumers: `mcpserver.NewHandler` → `mcp.ServerOptions{Instructions: guide.Text}`; `server.Routes` → `GET /v1/guide`; `tools.RenderMarkdown` → "Working on the bus" section.
 
 ### 3.7 `internal/tools` [3, …]
 
@@ -407,7 +420,7 @@ Registry test (table-driven) asserts for every tool: `Access != ""`, `strings.Co
 
 | Package | Change |
 |---|---|
-| `server` | `Build(ctx, streamRoot, conn, adminToken, shutdown) (api, web http.Handler, error)` — calls `authSvc.Bootstrap(ctx)` [4a]; `web` is the GUI mux (only `/web/*`) [W1a]. `protocol.go`: `const Protocol = 2`; `healthz` sets `Agent-Bus-Protocol` [7]. `httpserver.go`: `NewHTTPServer(h http.Handler) *http.Server` with only `ReadHeaderTimeout: 10s`, so `bus_wait` and streams are never cut by a write/idle timeout (CR-7, `contracts.md` §2.5) [9]; reused for the GUI server [W1a]. `run.go`: `Run` serves the API and the GUI server on their own listeners via `httpserver.Serve` and shuts both down gracefully; the first error stops both [W1a]. `serve.go`: `Serve(ctx, cfg, conn, adminToken)` builds the handlers, opens the listeners (`listen.go`: the API on `AMB_ADDR`, the GUI on `AMB_WEB_ADDR` unless it is empty or `off`; a failed GUI listen closes the API listener), publishes the instance file and calls `Run`; `main.go` only calls it [R17]. `GET /v1/guide` [11]. |
+| `server` | `Build(streamRoot, conn, adminToken, shutdown) (Handlers, error)` with `Handlers{API, Web http.Handler}` — calls `authSvc.Bootstrap(streamRoot)` [4a]; `Web` is the GUI mux (only `/web/*`) [W1a]. `protocol.go`: `const Protocol = 2`; `healthz` sets `Agent-Bus-Protocol` [7]. `httpserver.go`: `NewHTTPServer(h http.Handler) *http.Server` with only `ReadHeaderTimeout: 10s`, so `bus_wait` and streams are never cut by a write/idle timeout (CR-7, `contracts.md` §2.5) [9]; reused for the GUI server [W1a]. `run.go`: `Run` serves the API and the GUI server on their own listeners via `httpserver.Serve` and shuts both down gracefully; the first error stops both [W1a]. `serve.go`: `Serve(ctx, cfg, conn, adminToken)` builds the handlers, opens the listeners (`listen.go`: the API on `AMB_ADDR`, the GUI on `AMB_WEB_ADDR` unless it is empty or `off`; a failed GUI listen closes the API listener), publishes the instance file and calls `Run`; `main.go` only calls it [R17]. `GET /v1/guide` [11]. |
 | `admin` | token-swap handler requires `p.Bootstrap` else `forbidden "only the bootstrap admin may replace the instance admin token"`; shutdown: any admin [6a] |
 | `rpc` | success body `{"result": …, "mail"?: Notice}` via `inbox.NoticeAfter` (`inbox.TakeNotice`) [13b, R12]; `ListTools(reg)` and `CallTool(reg, notices)` are mounted by `server.Routes` behind `auth.Middleware`, with no route table or principal check of their own [R14] |
 | `mcpserver` | `NewHandler(reg, a, notices)`, instructions = `guide.Text` [11]; trailing hint `TextContent` [13b]; tools run through `reg.Call`; an error without kind is logged and fails the call as the protocol error `internal error`, without its detail, like the HTTP 500 [R14] |
@@ -421,7 +434,7 @@ Registry test (table-driven) asserts for every tool: `Access != ""`, `strings.Co
 flowchart TD
   main["main.go"] --> server
   subgraph transports["transports (thin)"]
-    server["internal/server<br/>Build · Routes · Protocol"]
+    server["internal/server<br/>Build · Routes · Run · Serve · Protocol"]
     mcp["internal/mcpserver"]
     rpc["internal/rpc"]
     adm["internal/admin"]
@@ -507,7 +520,7 @@ Not shared code, explicitly kept out of `platform`/`domain`: the protocol consta
 
 - **Transactions.** Every mutation runs in one transaction its feature opens: `db.InTx` when it produces no inbox entries, `inbox.InTx` when it does (R10). The pool has one connection, so nothing inside `fn` may touch `*sql.DB` (`platform/db/dbtx.go:18`); `spaces.Resolver.Resolve` reads through the `q` it is given. `overview` and web reads run outside transactions (read-only, like today's list tools).
 - **Audit lines.** `slog.InfoContext` after commit only: `admin minted` / `admin revoked` [6a/6b] (D14); `web mutation` [W3, 10] (PO-1). Never tokens or codes.
-- **Shutdown.** `bus_wait` and streams watch `inbox.Service.root` (= `streamRoot`), so `Serve`'s `cancelStreams()` ends them before the 10 s shutdown budget (`serve.go:27-31`).
+- **Shutdown.** `bus_wait` and streams watch `inbox.Service.root` (= `streamRoot`), so the `cancelStreams()` that `Run` hands to `httpserver.Serve` ends them before the 10 s shutdown budget (`platform/httpserver/serve.go:26-29`).
 - **Protocol bumps.** `server.Protocol` starts at 2 in slice 7; bumped at most once per release by the first slice after a release tag that adds or changes a contract the extension depends on; `protocol.go` carries one history line per value **[AD-1]**.
 
 ---
@@ -519,8 +532,8 @@ Not shared code, explicitly kept out of `platform`/`domain`: the protocol consta
 | AD-1 | `Agent-Bus-Protocol` starts at **2**; header-less server = legacy; bump ≤ once per release | matches the literal scenario `plugin-version-skew.feature:121-124`; one number per release keeps the extension's minimum meaningful |
 | AD-2 | `invites.invited_by TEXT NOT NULL DEFAULT ''` (spec: `TEXT`) | no NULL branch in Go; the 10-minute window of pre-0002 codes delivers the task with `from ""` (`inbox.from_name` is NOT NULL) |
 | AD-3 | `Tool.Description` stays the full served text; `Tool.Access` is a separate exact sentence contained in it | `tool-descriptions.feature:15-19` needs both; avoids composing descriptions at runtime |
-| AD-4 | `AdmitMember` returns the agent id (no extra lookup) | the accept tx already has it from `MintMember` (`spaces/admission.go:27`) |
-| AD-5 | `inbox.NewService` takes the root ctx; `StreamHandler()` loses its parameter | `Wait` (a tool call) needs the same shutdown signal as streams |
+| AD-4 | `AdmitMember` returns the agent id (no extra lookup) | the accept tx already has it from `auth.Service.AdmitMember` (formerly `MintMember`), which creates or finds the member agent and mints its token (`auth/service.go`, `spaces/admission.go`) |
+| AD-5 | `inbox.NewService` takes the root ctx for `Wait`; `StreamHandler(root)` receives the same root from `server.Routes` | `Wait` (a tool call) needs the same shutdown signal as streams |
 | AD-6 | `Read` never marks; `bus_inbox_read` and `bus_wait` mark what they return (`MarkNoticed`); the SSE stream marks the edges it sends | keeps the GUI's read pure (`mail-hint.feature:104-115`); the one marking primitive `MarkNoticed` stays in `inbox`, and `bus_inbox_read` combines `Read` + `MarkNoticed` in `tools`, as the stream's drain does inside `inbox` [R12] |
 | AD-7 | Receipts via `inbox.Publish` (formerly `DeliverReceipts`), presence sampled right after commit | "slot at commit time" (`presence.feature:53-57`) without leaking slots to other features |
 | AD-8 | Web sessions in memory, 8 h absolute, opaque 32-byte id, store token hash only | "short expiry" (`gui-access.feature:26-28`); restart = sign in again |

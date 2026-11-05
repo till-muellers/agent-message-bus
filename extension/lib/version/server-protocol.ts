@@ -1,7 +1,7 @@
 /**
  * The bus protocol version this extension needs: the server's `Protocol` constant
  * (`server/internal/server/protocol.go`) is the source of truth, and `tests/version/protocol-sync.test.ts`
- * fails when the two disagree (`docs/design/arch/pipeline.md` §3.3).
+ * fails when this minimum is above it (`docs/design/arch/pipeline.md` §3.3).
  */
 
 /** The oldest server this plugin works with. */
