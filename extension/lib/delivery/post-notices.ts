@@ -1,6 +1,6 @@
 /**
  * Blackboard notices (`docs/design/arch/client.md` §3.5, `omp-blackboards.feature` rules 1-2): while the
- * session is busy, the dispatcher holds the entries of a thread whose class may be held, so posts that
+ * session is busy, the inbox ledger holds the entries of a thread whose class may be held, so posts that
  * arrive within a short window reach omp as one notice. Held entries are what `bus_wait` can take.
  * The grouping key is the entry's thread fields, never its type.
  */
@@ -11,7 +11,7 @@ import { matches, type WaitFilter } from "./waiters.ts";
 /** How long the first held entry of a thread waits for more (a debounce, not a step-boundary sync). */
 export const NOTICE_WINDOW_MS = 1500;
 
-/** Whether an entry is delivered as a post notice: a thread entry of a class the dispatcher may hold. */
+/** Whether an entry is delivered as a post notice: a thread entry of a class the inbox ledger may hold. */
 export function isPostNotice(entry: Entry): boolean {
 	return entry.threadId !== undefined && holdable(parseDeliveryClass(entry.class));
 }

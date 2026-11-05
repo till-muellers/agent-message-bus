@@ -1,14 +1,19 @@
 /**
  * Starts and stops the session's inbox loop (`inbox-loop.ts`), warning on errors and on another session holding the stream.
- * Each start streams into the dispatcher it is given; stopping stops that dispatcher.
+ * Each start streams into the sink it is given, the inbox ledger of that connection start; stopping stops that sink.
  */
 import type { BusClient } from "../bus/client.ts";
 import type { ActiveCredentials } from "../bus/credentials.ts";
 import { conflictWarning } from "./conflict.ts";
 import { errorMessage } from "../bus/errors.ts";
 import type { ConnectionState } from "./bus-events.ts";
-import type { Dispatcher } from "./dispatcher.ts";
-import { type InboxLoopOptions, runInboxLoop } from "./inbox-loop.ts";
+import { type EntrySink, type InboxLoopOptions, runInboxLoop } from "./inbox-loop.ts";
+
+/** What one start streams into: the entries, and the end of the start's stream. */
+export interface StartSink extends EntrySink {
+	/** The start's stream stopped: drop what is held, end what waits. */
+	stop(): void;
+}
 
 export interface InboxRunnerOptions {
 	client: BusClient;
@@ -20,8 +25,8 @@ export interface InboxRunnerOptions {
 }
 
 export interface InboxRunner {
-	/** Streams the inbox into `dispatcher` until `stop()`. */
-	start(dispatcher: Dispatcher): void;
+	/** Streams the inbox into `sink` until `stop()`. */
+	start(sink: StartSink): void;
 	stop(): void;
 	/** Whether this session holds its inbox stream right now. */
 	isOpen(): boolean;
@@ -29,7 +34,7 @@ export interface InboxRunner {
 
 export function createInboxRunner({ client, getActive, warn, sleep, onState }: InboxRunnerOptions): InboxRunner {
 	let loop: AbortController | undefined;
-	let streamed: Dispatcher | undefined;
+	let streamed: StartSink | undefined;
 	let open = false;
 	async function onConflict(): Promise<void> {
 		onState?.("conflict");
@@ -37,10 +42,10 @@ export function createInboxRunner({ client, getActive, warn, sleep, onState }: I
 		if (current) warn(await conflictWarning(client, current));
 	}
 	return {
-		start(dispatcher) {
+		start(sink) {
 			const current = new AbortController();
 			loop = current;
-			streamed = dispatcher;
+			streamed = sink;
 			const onError = (error: Error) => warn(error.message);
 			// A stopped loop may still report its stream's end after the next loop opened its own.
 			const onStream = (isOpen: boolean) => {
@@ -49,7 +54,7 @@ export function createInboxRunner({ client, getActive, warn, sleep, onState }: I
 				if (isOpen) onState?.("connected");
 			};
 			const onRetry = () => onState?.("retrying");
-			void runInboxLoop({ client, getActive, signal: current.signal, sleep, dispatcher, onError, onConflict, onStream, onRetry }).catch(error =>
+			void runInboxLoop({ client, getActive, signal: current.signal, sleep, sink, onError, onConflict, onStream, onRetry }).catch(error =>
 				warn(errorMessage(error)),
 			);
 		},

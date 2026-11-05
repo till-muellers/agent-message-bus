@@ -52,7 +52,7 @@ export function isBusy(phase: SessionPhase): boolean {
 	return phase === "interactive-busy" || phase === "oneshot-busy";
 }
 
-/** Whether the dispatcher may hold an entry of this class for coalescing. */
+/** Whether the inbox ledger may hold an entry of this class for coalescing. */
 export function holdable(cls: DeliveryClass): boolean {
 	return cls === "queue";
 }

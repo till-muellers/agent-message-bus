@@ -3,7 +3,6 @@ import type { BusError } from "../../extension/lib/bus/client.ts";
 import { createClient } from "../../extension/lib/bus/client.ts";
 import { runInboxLoop } from "../../extension/lib/delivery/inbox-loop.ts";
 import type { Entry } from "../../extension/lib/bus/entry.ts";
-import type { Dispatcher } from "../../extension/lib/delivery/dispatcher.ts";
 import { callsTo, entry, errorResponse, fakeBus, frame, streamOf, type ToolHandler, URL_ } from "../fakes.ts";
 
 const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
@@ -20,7 +19,7 @@ async function runLoop(streams: (() => Response)[], tools: Record<string, ToolHa
 		client: createClient(bus.fetchFn),
 		getActive: () => ({ url: URL_, token: "tok" }),
 		signal,
-		dispatcher: { receive: (e: Entry) => void delivered.push(e.id), handedUpTo: async () => true, takeHeld: () => [], waitNext: async () => [], claim: () => [], stop: () => {} } satisfies Dispatcher,
+		sink: { deliver: (e: Entry) => void delivered.push(e.id) },
 		onError: error => void errors.push(error.message),
 		onConflict: async (error: BusError) => void conflicts.push(error.code),
 		onStream: isOpen => void open.push(isOpen),

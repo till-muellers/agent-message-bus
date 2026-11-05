@@ -115,7 +115,7 @@ export function createSession(deps: SessionDeps): Session {
 		if (view.mode !== "print" && view.mode !== "json") return;
 		const maxId = await highestInboxId(client, connection.getActive());
 		if (maxId === undefined) return;
-		const delivered = await connection.dispatcher().handedUpTo(maxId, backlogTimeoutMs);
+		const delivered = await connection.ledger().handedUpTo(maxId, backlogTimeoutMs);
 		if (!delivered) warn(`inbox backlog not delivered within ${backlogTimeoutMs / 1000} s; continuing`);
 	}
 	return {

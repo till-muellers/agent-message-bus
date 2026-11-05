@@ -1,16 +1,21 @@
 /** Inbox stream consumer: the reconnecting deliver+ack loop. */
 import { BusError, type BusClient } from "../bus/client.ts";
 import type { Entry } from "../bus/entry.ts";
-import type { Dispatcher } from "./dispatcher.ts";
 import type { ActiveCredentials } from "../bus/credentials.ts";
 import { parseSse } from "../bus/sse.ts";
+
+/** Where the loop puts the entries of the stream: the inbox ledger of the connection start (`inbox-ledger.ts`). */
+export interface EntrySink {
+	/** The stream delivered `entry`; new ids arrive ascending, a reconnect replays the unacked ones. */
+	deliver(entry: Entry): void;
+}
 
 export interface InboxLoopOptions {
 	client: BusClient;
 	getActive: () => ActiveCredentials | undefined;
 	signal: AbortSignal;
 	/** Receives every entry of the stream; it hands it over to the session. */
-	dispatcher: Dispatcher;
+	sink: EntrySink;
 	onError: (error: Error) => void;
 	/** Another session holds this agent's stream (409): called once per streak of refusals; the loop keeps retrying. */
 	onConflict: (error: BusError) => void | Promise<void>;
@@ -47,12 +52,12 @@ interface LoopState {
 	conflicted: boolean;
 }
 
-/** Hands every entry of an open stream over to the dispatcher; the ack waits for its consumption. */
+/** Puts every entry of an open stream into the sink; the ack waits for its consumption. */
 async function consume(options: InboxLoopOptions, state: LoopState, body: ReadableStream<Uint8Array>): Promise<void> {
 	for await (const frame of parseSse(body)) {
 		if (frame.event !== "inbox") continue;
 		const entry = JSON.parse(frame.data) as Entry;
-		options.dispatcher.receive(entry);
+		options.sink.deliver(entry);
 		state.delay = INITIAL_DELAY_MS;
 	}
 }

@@ -1,5 +1,5 @@
 /**
- * The `bus_wait` calls waiting in a dispatcher: the next entry a waiter's filter matches goes to that
+ * The `bus_wait` calls waiting in an inbox ledger: the next entry a waiter's filter matches goes to that
  * waiter instead of omp (`docs/design/arch/client.md` §3.4).
  */
 import type { Entry } from "../bus/entry.ts";
