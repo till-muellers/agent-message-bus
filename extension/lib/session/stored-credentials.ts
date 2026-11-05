@@ -25,20 +25,10 @@ export interface StoredCredentials {
 	token?: string;
 }
 
-/** The url and agent token the session acts with. */
-export interface ActiveCredentials {
-	url: string;
-	token: string;
-}
-
 export type CredentialStore = JsonFileStore<StoredCredentials>;
 
 export function configDir(env: NodeJS.ProcessEnv = process.env): string {
 	return env.OMP_AGENT_BUS_DIR || join(agentConfigDir(env), "agent-message-bus");
-}
-
-export function trimUrl(url: string): string {
-	return url.replace(/\/+$/, "");
 }
 
 function optionalString(value: unknown): string | undefined {

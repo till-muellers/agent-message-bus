@@ -10,8 +10,8 @@
  * resolves here: a subagent acts with the identity its root session published
  * (`root-identities.ts`), never with its own.
  */
-import type { ActiveCredentials, StoredCredentials } from "./stored-credentials.ts";
-import { trimUrl } from "./stored-credentials.ts";
+import { type ActiveCredentials, trimUrl } from "../bus/credentials.ts";
+import type { StoredCredentials } from "./stored-credentials.ts";
 
 /** Where the active credentials came from. */
 export type CredentialSource = "promote" | "env" | "accepted" | "stored-agent" | "stored-admin";

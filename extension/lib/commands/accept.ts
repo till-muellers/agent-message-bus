@@ -5,7 +5,7 @@
 import type { CommandResult } from "../shared/command.ts";
 import type { BusClient } from "../bus/client.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
-import { trimUrl } from "../session/stored-credentials.ts";
+import { trimUrl } from "../bus/credentials.ts";
 import type { SessionIdentity } from "../session/session-identity.ts";
 import type { ServerGate } from "../connection/server-gate.ts";
 

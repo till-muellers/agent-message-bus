@@ -6,7 +6,7 @@
  * publishes (`root-identities.ts`).
  */
 import { basename, join } from "node:path";
-import type { ActiveCredentials } from "./stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
 import { createJsonFileStore, type JsonFileStore } from "../shared/credential-store.ts";
 
 export type SessionStore = JsonFileStore<ActiveCredentials>;

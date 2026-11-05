@@ -3,8 +3,8 @@
  * Each start streams into the dispatcher it is given; stopping stops that dispatcher.
  */
 import type { BusClient } from "../bus/client.ts";
-import { conflictWarning } from "../connection/conflict.ts";
-import type { ActiveCredentials } from "../session/stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
+import { conflictWarning } from "./conflict.ts";
 import { errorMessage } from "../bus/errors.ts";
 import type { ConnectionState } from "./bus-events.ts";
 import type { Dispatcher } from "./dispatcher.ts";

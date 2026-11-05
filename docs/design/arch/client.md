@@ -55,13 +55,13 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 
 | Folder | Responsibility | Depends on |
 |---|---|---|
-| `lib/bus/` | HTTP wire to the server: client, SSE parser, JSON-schema→zod, error wording, the `Entry` wire type, `/healthz` probe | `shared/` |
+| `lib/bus/` | HTTP wire to the server: client, SSE parser, JSON-schema→zod, error wording, the `Entry` wire type, the `ActiveCredentials` wire shape (`credentials.ts`, with `trimUrl`), `/healthz` probe | `shared/` |
 | `lib/session/` | Who this session is: credential store, env, the single credential owner, accepted identity + its file, root-identity registry, `createSession` | `bus/`, `shared/` |
-| `lib/connection/` | Connect/disconnect: restart, tool on/off, 409 warning, server-protocol gate | `session/`, `tools/`, `delivery/`, `bus/`, `version/` |
+| `lib/connection/` | Connect/disconnect: restart, tool on/off, server-protocol gate | `session/`, `tools/`, `delivery/`, `bus/`, `version/` |
 | `lib/tools/` | Mirroring server tools: selection (allow-list/excludes), presentation (loadMode/approval), remote tool definition, local `bus_wait`, subagent attribution, tool-result shape | `bus/`, `delivery/` (wait only), `render/` (tool renderers) |
-| `lib/delivery/` | Inbox → omp: stream loop, runner, dispatcher, delivery policy, ack watermark, acker, consumption observer, post-notice coalescing, `pi.events` publishing | `bus/`, `render/` |
+| `lib/delivery/` | Inbox → omp: stream loop, runner, 409 warning, dispatcher, delivery policy, ack watermark, acker, consumption observer, post-notice coalescing, `pi.events` publishing | `bus/`, `render/` |
 | `lib/render/` | What the model and the user see: envelope text, escaping, message details, card renderer, tool call/result renderers, status line | `bus/` (types only) |
-| `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `session/` (types), `delivery/` (consumption observer is composed here) |
+| `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `delivery/` (consumption observer is composed here) |
 | `lib/commands/` | `/bus` command logic and its sub-actions (accept, invite flag, status) | `session/`, `connection/`, `local-server/`, `spawn/`, `version/` |
 | `lib/local-server/` | `/bus server start|stop|status`, binary resolution, release download | `process/`, `bus/` |
 | `lib/spawn/` | Worker start: invite + launch, `bus_spawn_worker` tool, forwarded plugin flags, worker plugin-version check (S1) | `launch/`, `bus/`, `version/`, `process/`, `render/` (outgoing card) |
@@ -80,9 +80,9 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/binary.ts` | `lib/local-server/binary.ts` | `findOnPath` is also used by `index.ts` for `which` |
 | `lib/client.ts` | `lib/bus/client.ts` | E9a adds `probeProtocol`; E9b drops `task` |
 | `lib/command.ts` | `lib/commands/command.ts` | status grows protocol/version lines (E9a, P2a) |
-| `lib/conflict.ts` | `lib/connection/conflict.ts` | |
+| `lib/conflict.ts` | `lib/delivery/conflict.ts` | The 409 is an inbox-stream fact (review 2026-11 X4, R5) |
 | `lib/connection.ts` | `lib/connection/connection.ts` | |
-| `lib/credentials.ts` | `lib/session/stored-credentials.ts` | Keeps `StoredCredentials`, `ActiveCredentials`, `configDir`, `trimUrl`, `createCredentialStore`; `SessionCredentials` + `resolveActive` move to `session-credentials.ts` (E4a). Renamed so it is not confused with `lib/shared/credential-store.ts` |
+| `lib/credentials.ts` | `lib/session/stored-credentials.ts` | Keeps `StoredCredentials`, `configDir`, `createCredentialStore`; `SessionCredentials` + `resolveActive` move to `session-credentials.ts` (E4a); `ActiveCredentials` + `trimUrl` move to `bus/credentials.ts` (review 2026-11 X3, R5). Renamed so it is not confused with `lib/shared/credential-store.ts` |
 | `lib/deliver.ts` | `lib/delivery/delivery-class.ts` | Rewritten as the class → mechanism mapping (E1); message building moves to `render/` |
 | `lib/download.ts` | `lib/local-server/download.ts` | |
 | `lib/env.ts` | `lib/session/env.ts` | |
@@ -105,7 +105,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/delivery-start.ts` (bug 0de.23); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a), `bus/credentials.ts` (R5); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/delivery-start.ts` (bug 0de.23); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -132,7 +132,6 @@ flowchart TD
   context --> delivery
   context --> render
   context --> bus
-  context --> session
   tools --> delivery
   tools --> render
   tools --> bus
@@ -153,7 +152,7 @@ flowchart TD
   bus --> shared
 ```
 
-Rules: no cycles; `bus/` and `process/` are leaves (plus `shared/`); `render/` never imports `delivery/`; only `index.ts` and `session/session.ts` see the whole graph. A fitness test (`tests/layout.test.ts`, slice P1a) parses imports and fails on an edge not in this diagram.
+Rules: no cycles; `bus/` and `process/` are leaves (plus `shared/`); `render/` never imports `delivery/`; only `index.ts` and `session/session.ts` see the whole graph. A fitness test (`tests/layout.test.ts`, slice P1a) parses imports and fails on an edge not in this diagram. It still whitelists five edges as transitional: `commands>bus` (`BusClient`, `trimUrl`, error wording), `commands>shared` and `local-server>shared` (`CommandResult`), `local-server>session` (the credential store) and `spawn>tools` (tool result and presentation).
 
 ---
 

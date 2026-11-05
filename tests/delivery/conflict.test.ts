@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createClient } from "../../extension/lib/bus/client.ts";
-import { conflictWarning } from "../../extension/lib/connection/conflict.ts";
+import { conflictWarning } from "../../extension/lib/delivery/conflict.ts";
 import { errorResponse, fakeBus, URL_ } from "../fakes.ts";
 
 describe("conflictWarning", () => {

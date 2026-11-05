@@ -2,7 +2,7 @@
 import { BusError, type BusClient } from "../bus/client.ts";
 import type { Entry } from "../bus/entry.ts";
 import type { Dispatcher } from "./dispatcher.ts";
-import type { ActiveCredentials } from "../session/stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
 import { parseSse } from "../bus/sse.ts";
 
 export interface InboxLoopOptions {

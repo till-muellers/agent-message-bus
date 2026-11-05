@@ -8,7 +8,7 @@
  */
 import type { FetchLike } from "../bus/client.ts";
 import { probeProtocol } from "../bus/health.ts";
-import { trimUrl } from "../session/stored-credentials.ts";
+import { trimUrl } from "../bus/credentials.ts";
 import { tooOld } from "../version/server-protocol.ts";
 
 /** The verdict of a check: "ok" when the server may be used, the refusal text otherwise. */

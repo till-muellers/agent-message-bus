@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { createClient, type FetchLike } from "../../extension/lib/bus/client.ts";
 import { createIdentityCache } from "../../extension/lib/context/identity-cache.ts";
-import type { ActiveCredentials } from "../../extension/lib/session/stored-credentials.ts";
+import type { ActiveCredentials } from "../../extension/lib/bus/credentials.ts";
 import { callsTo, errorResponse, fakeBus, URL_ } from "../fakes.ts";
 
 type Tools = NonNullable<Parameters<typeof fakeBus>[0]>["tools"];

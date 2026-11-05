@@ -7,7 +7,8 @@
 import { type CommandResult, parseArgs } from "../shared/command.ts";
 import type { BusClient } from "../bus/client.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
-import { type CredentialStore, trimUrl } from "../session/stored-credentials.ts";
+import type { CredentialStore } from "../session/stored-credentials.ts";
+import { trimUrl } from "../bus/credentials.ts";
 import { errorMessage } from "../bus/errors.ts";
 import { type ServerCli, serverCommand } from "../local-server/server-cli.ts";
 import type { SpawnRequest, SpawnResult } from "../spawn/spawn.ts";

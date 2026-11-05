@@ -3,7 +3,7 @@
  * (`session-store.ts`) and the accepted token of the credential set, which nothing else writes.
  */
 import type { SessionCredentials } from "./session-credentials.ts";
-import type { ActiveCredentials } from "./stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
 import { createSessionStore, type SessionStore, sessionKey } from "./session-store.ts";
 
 /** The part of the omp context that identifies a session: its session file. */

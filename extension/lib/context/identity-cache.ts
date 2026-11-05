@@ -5,7 +5,7 @@
  * keeps the last identity; a revoked token drops it.
  */
 import { BusError, type BusClient } from "../bus/client.ts";
-import type { ActiveCredentials } from "../session/stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
 
 type Role = "admin" | "leader" | "member";
 

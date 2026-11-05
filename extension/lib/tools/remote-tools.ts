@@ -1,7 +1,7 @@
 /** Mirrors the bus server's tool registry into the omp session. */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { BusClient, RemoteTool } from "../bus/client.ts";
-import type { ActiveCredentials } from "../session/stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
 import { errorMessage, NOT_LOGGED_IN } from "../bus/errors.ts";
 import { toZod } from "../bus/schema.ts";
 import { fixedSender, isSendTool, outgoingCard, sentMessage } from "../render/outgoing-card.ts";

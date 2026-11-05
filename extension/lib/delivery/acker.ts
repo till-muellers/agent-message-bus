@@ -4,7 +4,7 @@
  */
 import type { BusClient } from "../bus/client.ts";
 import { errorMessage } from "../bus/errors.ts";
-import type { ActiveCredentials } from "../session/stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
 
 export interface AckerDeps {
 	client: BusClient;
