@@ -8,13 +8,14 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { BusClient } from "../bus/client.ts";
 import type { CommandResult } from "../shared/command.ts";
 import { acceptInvite, type Joined } from "../commands/accept.ts";
-import { type Connection, createConnection, type SessionView } from "../connection/connection.ts";
+import { type Connection, createConnection } from "../connection/connection.ts";
+import type { SessionView } from "../connection/session-view.ts";
 import type { ServerGate } from "../connection/server-gate.ts";
-import { createBusContext } from "../context/bus-context.ts";
+import { type BusContext, createBusContext } from "../context/bus-context.ts";
 import { createBusEvents } from "../delivery/bus-events.ts";
 import type { SessionCredentials } from "./session-credentials.ts";
 import { createSessionCredentials } from "./session-credentials.ts";
-import { createSessionIdentity, type IdentityContext, type SessionChange } from "./session-identity.ts";
+import { createSessionIdentity, type IdentityContext, type SessionChange, type SessionIdentity } from "./session-identity.ts";
 import type { RootIdentities } from "./root-identities.ts";
 import type { ActiveCredentials } from "../bus/credentials.ts";
 import type { CredentialStore } from "./stored-credentials.ts";
@@ -35,6 +36,10 @@ export interface SessionContext extends IdentityContext {
 export interface Session extends Connection {
 	client: BusClient;
 	credentials: SessionCredentials;
+	/** The stored login. */
+	store: CredentialStore;
+	/** Keeps the extension off a server that is too old. */
+	gate: ServerGate;
 	warn(message: string): void;
 	isSub(): boolean;
 	clearAccepted(): Promise<void>;
@@ -89,65 +94,103 @@ async function highestInboxId(client: BusClient, active: ActiveCredentials | und
 	}
 }
 
-/** Builds the session of this extension. */
-export function createSession(deps: SessionDeps): Session {
-	const { pi, store, busEnv, dir, client, localTools, gate, roots } = deps;
-	const warn = (message: string) => pi.logger.warn(`agent-bus: ${message}`);
-	const credentials = createSessionCredentials(busEnv.credentials);
-	const identity = createSessionIdentity(dir, credentials);
-	const view: SessionView = { sub: false, isIdle: () => true, setStatus: () => {} };
-	// The context block is read again on every connected restart, and dropped when the server is not connected.
+/** A one-shot run's wait for the inbox backlog after it redeemed an invite. */
+interface BacklogWait {
+	client: BusClient;
+	connection: Pick<Connection, "getActive" | "ledger">;
+	view: SessionView;
+	warn(message: string): void;
+	timeoutMs: number;
+}
+
+/**
+ * A one-shot run starts its own prompt right after the session start, so the entries of the redeemed invite must be
+ * queued before it. The wait ends when the stream handed them over, or after the timeout.
+ */
+async function waitForBacklog({ client, connection, view, warn, timeoutMs }: BacklogWait): Promise<void> {
+	if (view.mode !== "print" && view.mode !== "json") return;
+	const maxId = await highestInboxId(client, connection.getActive());
+	if (maxId === undefined) return;
+	const delivered = await connection.ledger().handedUpTo(maxId, timeoutMs);
+	if (!delivered) warn(`inbox backlog not delivered within ${timeoutMs / 1000} s; continuing`);
+}
+
+/** The latest omp context, as the connection reads it. */
+function bindView(view: SessionView, ctx: SessionContext): void {
+	view.mode = ctx.mode;
+	view.sub = ctx.agent?.kind === "sub";
+	view.agentId = ctx.agent?.id;
+	view.sessionFile = ctx.sessionManager?.getSessionFile();
+	view.isIdle = () => ctx.isIdle();
+	view.setStatus = (key, text) => ctx.ui?.setStatus(key, text);
+}
+
+/** What the session is made of besides its deps. */
+interface SessionParts {
+	credentials: SessionCredentials;
+	identity: SessionIdentity;
+	view: SessionView;
+	warn(message: string): void;
+}
+
+/** Redeeming an invite: accept posts the code, join reconnects as the member and, in a one-shot run, waits for the backlog. */
+function inviteOps(deps: SessionDeps, parts: SessionParts, connection: Connection): Pick<Session, "accept" | "join" | "clearAccepted"> {
+	const { client, gate } = deps;
+	const { credentials, identity, view, warn } = parts;
+	const timeoutMs = deps.backlogTimeoutMs ?? BACKLOG_TIMEOUT_MS;
+	return {
+		accept: (url, code) => acceptInvite({ client, session: credentials, identity, gate }, url, code),
+		async join(joined) {
+			await connection.restart();
+			await waitForBacklog({ client, connection, view, warn, timeoutMs });
+			return joined.result;
+		},
+		clearAccepted: () => identity.clear(),
+	};
+}
+
+/** The connection and the context block it keeps fresh: re-read on every connected restart, dropped when not connected. */
+function connect(deps: SessionDeps, { credentials, identity, view, warn }: SessionParts): { connection: Connection; busContext: BusContext; self(): string | undefined } {
 	const hooks = {
 		membershipChanged: () => busContext.refreshIdentity(),
 		connected: async (connected: boolean) => (connected ? busContext.refresh() : busContext.clear()),
 		self: () => busContext.who().agent,
 	};
-	const events = createBusEvents(pi.events, () => busContext.who(), warn);
-	const connection = createConnection({ pi, client, store, credentials, identity, roots, view, gate, warn, sleep: deps.sleep, localTools, events, ...hooks });
-	const busContext = createBusContext({ client, getActive: connection.getActive, warn, isSub: () => view.sub, agentId: () => view.agentId });
-	const backlogTimeoutMs = deps.backlogTimeoutMs ?? BACKLOG_TIMEOUT_MS;
-	/**
-	 * A one-shot run starts its own prompt right after the session start, so the entries of the
-	 * redeemed invite must be queued before it. The wait ends when the stream handed them over,
-	 * or after the timeout.
-	 */
-	async function waitForBacklog(): Promise<void> {
-		if (view.mode !== "print" && view.mode !== "json") return;
-		const maxId = await highestInboxId(client, connection.getActive());
-		if (maxId === undefined) return;
-		const delivered = await connection.ledger().handedUpTo(maxId, backlogTimeoutMs);
-		if (!delivered) warn(`inbox backlog not delivered within ${backlogTimeoutMs / 1000} s; continuing`);
-	}
+	const events = createBusEvents(deps.pi.events, () => busContext.who(), warn);
+	const connection = createConnection({ ...deps, credentials, identity, view, warn, events, ...hooks });
+	const busContext = createBusContext({ client: deps.client, getActive: connection.getActive, warn, isSub: () => view.sub, agentId: () => view.agentId });
+	return { connection, busContext, self: hooks.self };
+}
+
+/** Builds the session of this extension. */
+export function createSession(deps: SessionDeps): Session {
+	const warn = (message: string) => deps.pi.logger.warn(`agent-bus: ${message}`);
+	const credentials = createSessionCredentials(deps.busEnv.credentials);
+	const identity = createSessionIdentity(deps.dir, credentials);
+	const view: SessionView = { sub: false, isIdle: () => true, setStatus: () => {} };
+	const parts = { credentials, identity, view, warn };
+	const { connection, busContext, self } = connect(deps, parts);
 	return {
 		...connection,
+		...inviteOps(deps, parts, connection),
 		async logout() {
 			await connection.logout();
 			busContext.clear();
 		},
 		contextBlock: busContext.block,
-		self: hooks.self,
-		client,
+		self,
+		client: deps.client,
 		credentials,
+		store: deps.store,
+		gate: deps.gate,
 		warn,
 		isSub: () => view.sub,
-		clearAccepted: () => identity.clear(),
-		accept: (url, code) => acceptInvite({ client, session: credentials, identity, gate }, url, code),
-		async join(joined) {
-			await connection.restart();
-			await waitForBacklog();
-			return joined.result;
-		},
 		shutdown() {
 			connection.stop();
 			credentials.ended();
 		},
 		setContext(ctx, change) {
-			view.mode = ctx.mode;
-			view.sub = ctx.agent?.kind === "sub";
-			view.agentId = ctx.agent?.id;
-			view.sessionFile = ctx.sessionManager?.getSessionFile();
-			view.isIdle = () => ctx.isIdle();
-			view.setStatus = (key, text) => ctx.ui?.setStatus(key, text);
+			bindView(view, ctx);
 			return identity.bind(ctx, change);
 		},
 	};

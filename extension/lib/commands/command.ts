@@ -1,8 +1,8 @@
 /**
- * `/bus` command logic, kept free of the omp API so it is unit-testable: the
- * handler gets the credential store, the HTTP client and the loop controls,
- * and returns the message to show. `SUBCOMMANDS` is the one list the usage
- * text, the command description and the dispatch are built from.
+ * `/bus` command logic, kept free of the omp API so it is unit-testable: `commandDeps` builds what a call needs
+ * from the session, the handler gets the credential store, the HTTP client and the loop controls, and returns the
+ * message to show. `SUBCOMMANDS` is the one list the usage text, the command description and the dispatch are
+ * built from.
  */
 import { type CommandResult, parseArgs } from "../shared/command.ts";
 import type { BusClient } from "../bus/client.ts";
@@ -12,6 +12,7 @@ import { trimUrl } from "../bus/credentials.ts";
 import { errorMessage } from "../bus/errors.ts";
 import { type ServerCli, serverCommand } from "../local-server/server-cli.ts";
 import type { SpawnRequest, SpawnResult } from "../spawn/spawn.ts";
+import type { Joined } from "./accept.ts";
 import { installedSkewWarning } from "../version/installed-plugin.ts";
 import type { ServerGate } from "../connection/server-gate.ts";
 import { MIN_SERVER_PROTOCOL } from "../version/server-protocol.ts";
@@ -38,7 +39,47 @@ export interface CommandDeps {
 	/** The version of the installed omp plugin; undefined when it cannot be read. */
 	installedPluginVersion(): Promise<string | undefined>;
 	/** The server's protocol; the status shows it. */
-	gate: ServerGate;
+	gate: Pick<ServerGate, "check" | "last">;
+}
+
+/** What `/bus` uses of the session (`session/session.ts`). */
+export interface CommandSession {
+	store: CredentialStore;
+	client: BusClient;
+	credentials: CommandDeps["session"];
+	gate: CommandDeps["gate"];
+	restart(): Promise<void>;
+	logout(): Promise<void>;
+	clearAccepted(): Promise<void>;
+	accept(url: string, code: string): Promise<Joined>;
+	/** After an accept: reconnects as the member and returns the reply. */
+	join(joined: Joined): Promise<CommandResult>;
+}
+
+/** What `/bus` needs besides the session: the local server, the worker spawner and the plugin versions. */
+export interface CommandTools {
+	server: ServerCli;
+	spawn(req: SpawnRequest): Promise<SpawnResult>;
+	pluginVersion: string;
+	installedPluginVersion(): Promise<string | undefined>;
+}
+
+/** The deps of one `/bus` call; a spawned worker starts in `cwd`, the session's working directory. */
+export function commandDeps(session: CommandSession, tools: CommandTools, cwd: string): CommandDeps {
+	return {
+		store: session.store,
+		client: session.client,
+		session: session.credentials,
+		gate: session.gate,
+		server: tools.server,
+		restart: session.restart,
+		stop: session.logout,
+		accept: async (url, code) => session.join(await session.accept(url, code)),
+		clearAccepted: session.clearAccepted,
+		spawn: req => tools.spawn({ ...req, cwd }),
+		pluginVersion: tools.pluginVersion,
+		installedPluginVersion: tools.installedPluginVersion,
+	};
 }
 
 interface Whoami {

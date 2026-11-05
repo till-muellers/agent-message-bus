@@ -49,28 +49,3 @@ export function createRootIdentities(): RootIdentities {
 		},
 	};
 }
-
-/** A main session's entry in the registry: one key at a time, the session's current one. */
-export interface RootPublication {
-	/** Publishes `creds` under `rootKey` (withdraws it without credentials) and withdraws the key published before. */
-	set(rootKey: string | undefined, creds: ActiveCredentials | undefined): void;
-	/** Withdraws what was published. */
-	clear(): void;
-}
-
-export function createRootPublication(roots: RootIdentities): RootPublication {
-	let published: string | undefined;
-	const clear = () => {
-		if (published !== undefined) roots.withdraw(published);
-		published = undefined;
-	};
-	return {
-		set(rootKey, creds) {
-			clear();
-			if (rootKey === undefined || !creds) return;
-			roots.publish(rootKey, creds);
-			published = rootKey;
-		},
-		clear,
-	};
-}
