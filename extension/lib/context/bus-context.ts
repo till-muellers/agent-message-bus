@@ -5,7 +5,7 @@
  */
 import type { BusClient } from "../bus/client.ts";
 import { NOT_LOGGED_IN } from "../bus/errors.ts";
-import type { ActiveCredentials } from "../session/stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
 import { mainBlock, subagentBlock } from "./context-block.ts";
 import { createGuide } from "./guide.ts";
 import { createIdentityCache } from "./identity-cache.ts";

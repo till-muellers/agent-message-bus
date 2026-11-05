@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { acceptInvite } from "../../extension/lib/commands/accept.ts";
 import { createClient } from "../../extension/lib/bus/client.ts";
 import { createSessionCredentials } from "../../extension/lib/session/session-credentials.ts";
-import type { ActiveCredentials } from "../../extension/lib/session/stored-credentials.ts";
+import type { ActiveCredentials } from "../../extension/lib/bus/credentials.ts";
 import { CODE, fakeBus, URL_ } from "../fakes.ts";
 import type { ServerGate } from "../../extension/lib/connection/server-gate.ts";
 

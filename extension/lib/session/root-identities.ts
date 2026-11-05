@@ -13,7 +13,7 @@
  * writes it only after the first assistant message).
  */
 import { dirname, resolve } from "node:path";
-import type { ActiveCredentials } from "./stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
 
 /** How far a subagent session walks up to its root; mirrors omp's `resolveBreadcrumbToInteractiveRoot`. */
 const MAX_NESTING = 8;

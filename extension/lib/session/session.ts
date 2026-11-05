@@ -16,7 +16,8 @@ import type { SessionCredentials } from "./session-credentials.ts";
 import { createSessionCredentials } from "./session-credentials.ts";
 import { createSessionIdentity, type IdentityContext, type SessionChange } from "./session-identity.ts";
 import type { RootIdentities } from "./root-identities.ts";
-import type { ActiveCredentials, CredentialStore } from "./stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
+import type { CredentialStore } from "./stored-credentials.ts";
 import type { BusEnv } from "./env.ts";
 
 /** The parts of the omp context a session reads: mode, agent kind, idleness and the session file. */

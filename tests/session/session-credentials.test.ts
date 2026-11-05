@@ -11,7 +11,8 @@ import {
 	type ResolvedCredentials,
 	type SessionCredentials,
 } from "../../extension/lib/session/session-credentials.ts";
-import type { ActiveCredentials, StoredCredentials } from "../../extension/lib/session/stored-credentials.ts";
+import type { ActiveCredentials } from "../../extension/lib/bus/credentials.ts";
+import type { StoredCredentials } from "../../extension/lib/session/stored-credentials.ts";
 
 const ENV: ActiveCredentials = { url: "http://env", token: "env-tok" };
 const PROMOTED: ActiveCredentials = { url: "http://promoted", token: "promoted-tok" };

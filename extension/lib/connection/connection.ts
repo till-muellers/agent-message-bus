@@ -9,7 +9,8 @@ import { activateBusTools, deactivateBusTools, deactivateTools } from "./activat
 import type { BusClient } from "../bus/client.ts";
 import { createRootPublication, type RootIdentities, rootKeyOf } from "../session/root-identities.ts";
 import type { SessionCredentials } from "../session/session-credentials.ts";
-import { type ActiveCredentials, type CredentialStore } from "../session/stored-credentials.ts";
+import type { ActiveCredentials } from "../bus/credentials.ts";
+import type { CredentialStore } from "../session/stored-credentials.ts";
 import { createAcker } from "../delivery/acker.ts";
 import type { Consume } from "../delivery/consumer.ts";
 import { NOT_LOGGED_IN } from "../bus/errors.ts";

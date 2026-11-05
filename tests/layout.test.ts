@@ -72,19 +72,15 @@ const GRAPH_EDGES: Record<string, true> = {
 };
 
 /**
- * The edges the code still has and `client.md` §1.3 does not list yet: the credential types that several folders
- * read, the error wording in `bus/errors.ts` and the launchers behind `spawn/`. The slice that moves the module
- * holding each of them removes it.
+ * The edges the code still has and `client.md` §1.3 does not list yet: the credential store that `/bus` and the
+ * local server write, the error wording in `bus/errors.ts` and the tool helpers behind `spawn/`. The slice that
+ * moves the module holding each of them removes it.
  */
 const TRANSITIONAL_EDGES: Record<string, true> = {
 	"commands>bus": true,
 	"commands>shared": true,
-	"tools>session": true,
-	"delivery>session": true,
-	"delivery>connection": true,
 	"local-server>session": true,
 	"local-server>shared": true,
-	"spawn>session": true,
 	"spawn>tools": true,
 };
 
