@@ -202,9 +202,8 @@ func TestAdmitMember(t *testing.T) {
 	lead := leader(t, e, 1, "lead")
 	mustCreate(t, e, lead, "alpha")
 	member, tok1 := inviteMember(t, e, lead, "alpha", "work")
-	if n := countRows(t, e.db, `SELECT COUNT(*) FROM participants WHERE agent_id = ? AND role = 'member'`, member.AgentID); n != 1 {
-		t.Fatalf("participant rows = %d", n)
-	}
+	alpha := []Participant{{"lead", RoleLeader, false}, {"work", RoleMember, false}}
+	wantParticipants(t, e, "alpha", alpha)
 	var agentID int64
 	var space, tok2 string
 	err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
@@ -225,9 +224,7 @@ func TestAdmitMember(t *testing.T) {
 	if _, err := e.auth.Authenticate(ctx, tok1); err != nil {
 		t.Fatalf("first token: %v", err)
 	}
-	if n := countRows(t, e.db, `SELECT COUNT(*) FROM participants WHERE agent_id = ?`, member.AgentID); n != 1 {
-		t.Fatalf("participant rows = %d", n)
-	}
+	wantParticipants(t, e, "alpha", alpha)
 }
 
 func TestLeave(t *testing.T) {
@@ -369,12 +366,13 @@ func seedInbox(t *testing.T, e env, member auth.Principal) {
 	}
 }
 
-// wantNoInbox asserts member's space inbox rows are gone.
+// wantNoInbox asserts that no inbox entry of member's agent remains in member's space;
+// a member-scoped principal makes inbox.Count look at that one space.
 func wantNoInbox(t *testing.T, e env, member auth.Principal) {
 	t.Helper()
-	if n := countRows(t, e.db, `SELECT COUNT(*) FROM inbox WHERE agent_id = ? AND space_id = ?`,
-		member.AgentID, member.SpaceID); n != 0 {
-		t.Fatalf("inbox rows = %d, want 0", n)
+	scope := auth.Principal{Kind: auth.Member, AgentID: member.AgentID, SpaceID: member.SpaceID}
+	if n, err := e.inbox.Count(context.Background(), scope); err != nil || n != 0 {
+		t.Fatalf("inbox entries = %d, %v; want 0", n, err)
 	}
 }
 
@@ -416,9 +414,7 @@ func TestCreationHook(t *testing.T) {
 			if hook.calls[0] != wantM || wantM.SpaceID == 0 {
 				t.Fatalf("membership = %+v, want %+v", hook.calls[0], wantM)
 			}
-			if n := countRows(t, e.db, `SELECT COUNT(*) FROM spaces WHERE name = 'alpha'`); (n == 1) != tc.want {
-				t.Fatalf("spaces = %d, want exists %v", n, tc.want)
-			}
+			wantSpace(t, e, "alpha", tc.want)
 		})
 	}
 }

@@ -244,12 +244,8 @@ func TestDeparture(t *testing.T) {
 			if len(boards) != tc.boardsLeft {
 				t.Fatalf("boards = %+v", boards)
 			}
-			if tc.boardsLeft == 1 {
-				var n int
-				must(t, f.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM thread_subscriptions WHERE agent_id = ?`, owner.AgentID).Scan(&n))
-				if n != 0 {
-					t.Fatalf("departing subscriptions remain: %d", n)
-				}
+			if tc.boardsLeft == 1 && subscribed(t, f, owner, id) {
+				t.Fatal("departing owner is still subscribed")
 			}
 		})
 	}

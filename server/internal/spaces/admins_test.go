@@ -58,7 +58,7 @@ func TestRevokeAdmin(t *testing.T) {
 	}
 	_, err = e.auth.Authenticate(ctx, webTok)
 	apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
-	wantGone(t, e, "gamma")
+	wantSpace(t, e, "gamma", false)
 	wantParticipants(t, e, "demo", []Participant{{"lead", RoleLeader, false}})
 	wantNoInbox(t, e, auth.Principal{AgentID: web.AgentID, SpaceID: spaceID(t, e, "demo")})
 

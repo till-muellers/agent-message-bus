@@ -29,6 +29,7 @@ type world struct {
 	sp    *spaces.Service
 	msg   *messaging.Service
 	bb    *blackboards.Service
+	ib    *inbox.Service
 	lead  auth.Principal
 	lead2 auth.Principal
 	ops   auth.Principal
@@ -42,7 +43,7 @@ func newWorld(t *testing.T) *world {
 	now := stepClock()
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), now)
 	r := spaces.NewResolver(conn)
-	w := &world{conn: conn,
+	w := &world{conn: conn, ib: ib,
 		msg: messaging.NewService(conn, r, ib, now), bb: blackboards.NewService(conn, r, ib, now)}
 	authSvc := auth.NewService(conn, "overview-test-admin-token-0123456789", now)
 	w.sp = spaces.NewService(conn, r, authSvc, ib, now, spaces.Hooks{
@@ -76,11 +77,9 @@ func (w *world) seed(t *testing.T) {
 
 func (w *world) spaceID(t *testing.T, name string) int64 {
 	t.Helper()
-	var id int64
-	if err := w.conn.QueryRowContext(t.Context(), `SELECT id FROM spaces WHERE name = ?`, name).Scan(&id); err != nil {
-		t.Fatalf("space %s: %v", name, err)
-	}
-	return id
+	m, err := spaces.NewResolver(w.conn).Resolve(t.Context(), w.lead, name)
+	w.must(t, err)
+	return m.SpaceID
 }
 
 func (w *world) must(t *testing.T, err error) {

@@ -57,9 +57,7 @@ func TestAdminDeletesAnySpace(t *testing.T) {
 	if err := e.svc.Delete(ctx, ops, "demo"); err != nil {
 		t.Fatalf("admin deletes space with leaders: %v", err)
 	}
-	if n := countRows(t, e.db, `SELECT COUNT(*) FROM spaces WHERE name = 'demo'`); n != 0 {
-		t.Fatalf("space demo still exists")
-	}
+	wantSpace(t, e, "demo", false)
 }
 
 func TestJoinedAdminNotOtherLeader(t *testing.T) {

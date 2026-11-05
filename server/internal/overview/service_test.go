@@ -9,8 +9,12 @@ import (
 	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/blackboards"
+	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
+	"github.com/till-muellers/agent-message-bus/server/internal/overview"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
+	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 const (
@@ -228,37 +232,48 @@ func TestOverviewHasNoSideEffects(t *testing.T) {
 	memberViewSetup(t, w)
 	_, err := w.msg.SendDirect(t.Context(), w.lead, "demo", "worker", "hello", false)
 	w.must(t, err)
-	before := rowCounts(t, w)
+	before := visibleState(t, w)
 	for _, p := range []auth.Principal{w.wkr, w.lead, w.ops} {
 		_, err := w.overview(t.Context(), t, p, `{"space":"demo"}`)
 		w.must(t, err)
 	}
-	if after := rowCounts(t, w); !reflect.DeepEqual(after, before) {
-		t.Fatalf("row counts changed:\nbefore %v\nafter  %v", before, after)
+	if after := visibleState(t, w); !reflect.DeepEqual(after, before) {
+		t.Fatalf("state changed:\nbefore %v\nafter  %v", before, after)
 	}
 }
 
-// rowCounts returns the row count of every table in the database.
-func rowCounts(t *testing.T, w *world) map[string]int {
+// seen is what the feature services show one caller in demo.
+type seen struct {
+	waiting      int
+	participants []spaces.Participant
+	topics       []messaging.TopicInfo
+	boards       []blackboards.BoardInfo
+	threads      []blackboards.RecentThread
+}
+
+// visibleState reads, through the feature services, what worker, peer, lead and ops see:
+// their waiting inbox entries, the participants, their topic and thread subscriptions and
+// the boards.
+func visibleState(t *testing.T, w *world) map[string]seen {
 	t.Helper()
-	rows, err := w.conn.QueryContext(t.Context(), `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
-	w.must(t, err)
-	var names []string
-	for rows.Next() {
-		var n string
-		w.must(t, rows.Scan(&n))
-		names = append(names, n)
+	state := map[string]seen{}
+	for _, p := range []auth.Principal{w.wkr, w.peer, w.lead, w.ops} {
+		var s seen
+		var err error
+		s.waiting, err = w.ib.Count(t.Context(), p)
+		w.must(t, err)
+		s.participants, err = w.sp.Participants(t.Context(), p, "demo")
+		w.must(t, err)
+		s.topics, err = w.msg.ListTopics(t.Context(), p, "demo")
+		w.must(t, err)
+		s.boards, err = w.bb.List(t.Context(), p, "demo")
+		w.must(t, err)
+		s.threads, err = w.bb.RecentThreads(t.Context(), p, "demo", overview.RecentThreads)
+		w.must(t, err)
+		state[p.AgentName] = s
 	}
-	w.must(t, rows.Err())
-	w.must(t, rows.Close())
-	counts := make(map[string]int, len(names))
-	for _, n := range names {
-		var c int
-		w.must(t, w.conn.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM `+n).Scan(&c))
-		counts[n] = c
+	if state["worker"].waiting == 0 {
+		t.Fatal("fixture lacks an inbox entry to watch")
 	}
-	if counts["inbox"] == 0 || counts["topic_subscriptions"] == 0 || counts["thread_subscriptions"] == 0 {
-		t.Fatalf("fixture lacks rows to watch: %v", counts)
-	}
-	return counts
+	return state
 }

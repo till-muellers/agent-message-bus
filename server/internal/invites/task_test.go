@@ -124,9 +124,11 @@ func TestFailedAdmissionKeepsCodeNoEntry(t *testing.T) {
 	if n := countInvites(t, e); n != 1 {
 		t.Fatalf("invites = %d, want the code kept", n)
 	}
-	var n int
-	if err := e.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM inbox`).Scan(&n); err != nil || n != 0 {
-		t.Fatalf("inbox rows = %d, %v; want 0", n, err)
+	x := auth.Principal{Kind: auth.Leader, AgentID: 7, AgentName: "x"}
+	for _, p := range []auth.Principal{e.lead, x} {
+		if n, err := e.ib.Count(context.Background(), p); err != nil || n != 0 {
+			t.Fatalf("inbox of %s = %d, %v; want 0", p.AgentName, n, err)
+		}
 	}
 }
 
