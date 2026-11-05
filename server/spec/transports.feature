@@ -52,11 +52,6 @@ Feature: Transports
       Then the response status is 401
       And the call fails with unauthenticated "bearer token required"
 
-    Scenario: The tool handler without an authenticated caller
-      # Unreachable through the server routes, which authenticate first.
-      When the tool call handler runs without an authenticated caller
-      Then the call fails with unauthenticated "bearer token required"
-
   Rule: Listing tools (GET /v1/tools)
 
     Scenario: The list holds all 34 tools sorted by name
@@ -240,8 +235,10 @@ Feature: Transports
       Then the result is an error with text "not_found: tool x not found"
 
     Scenario: A non-application tool failure is not a tool result
-      When an MCP tool fails with an error that is not an application error
+      When an MCP tool fails with a non-application error "secret db detail"
       Then the MCP call fails with a protocol error instead of an error result
+      And the protocol error message is "internal error"
+      And the error is logged on the server
 
     Scenario Outline: MCP bearer authentication (<case>)
       When a client connects to /mcp <how>

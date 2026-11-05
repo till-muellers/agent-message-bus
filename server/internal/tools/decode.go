@@ -11,8 +11,10 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
 
-// decode strictly unmarshals args into T; empty or null args yield the zero value.
-func decode[T any](args json.RawMessage) (T, error) {
+// Decode strictly unmarshals args into T; empty or null args yield the zero value, anything
+// else that does not fit T fails with invalid "invalid arguments: …". Transports decode
+// their own JSON request bodies with it, so a bad body fails like a bad tool argument.
+func Decode[T any](args json.RawMessage) (T, error) {
 	var v T
 	trimmed := bytes.TrimSpace(args)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -31,7 +33,7 @@ func requirePresent(args json.RawMessage, required []string) error {
 	if len(required) == 0 {
 		return nil
 	}
-	fields, err := decode[map[string]json.RawMessage](args)
+	fields, err := Decode[map[string]json.RawMessage](args)
 	if err != nil {
 		return err
 	}
@@ -49,14 +51,16 @@ func requirePresent(args json.RawMessage, required []string) error {
 func define[A any](name, access, desc, result string, required []string, props map[string]any,
 	call func(ctx context.Context, p auth.Principal, a A) (any, error)) Tool {
 	return Tool{
-		Name:        name,
-		Description: desc + " " + access,
-		Access:      access,
-		Result:      result,
-		Schema:      object(required, props),
-		argsType:    reflect.TypeFor[A](),
+		Meta: Meta{
+			Name:        name,
+			Description: desc + " " + access,
+			Access:      access,
+			Result:      result,
+			Schema:      object(required, props),
+			argsType:    reflect.TypeFor[A](),
+		},
 		Call: func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error) {
-			a, err := decode[A](args)
+			a, err := Decode[A](args)
 			if err != nil {
 				return nil, err
 			}

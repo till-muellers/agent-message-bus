@@ -149,6 +149,9 @@ func inviteCases() []mutationCase {
 			body: `{"name":"new"}`, status: http.StatusForbidden, want: `"code":"forbidden"`, check: noInvite},
 		{name: "invite without a session", method: http.MethodPost, path: invitesPath, body: `{"name":"new"}`,
 			status: http.StatusUnauthorized, want: "session required", check: noInvite},
+		{name: "an unknown body field is rejected like a tool argument", as: "ops", method: http.MethodPost,
+			path: invitesPath, body: `{"name":"new","bogus":1}`, status: http.StatusBadRequest,
+			want: `invalid arguments: json: unknown field \"bogus\"`, check: noInvite},
 	}
 }
 

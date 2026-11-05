@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	if _, err := fmt.Fprint(os.Stdout, tools.RenderMarkdown(tools.New(tools.Deps{}))); err != nil {
+	if _, err := fmt.Fprint(os.Stdout, tools.RenderMarkdown(tools.Metadata())); err != nil {
 		fmt.Fprintf(os.Stderr, "tooldoc: writing ledger: %v\n", err)
 		os.Exit(1)
 	}

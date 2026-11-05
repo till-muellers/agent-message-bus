@@ -1,6 +1,6 @@
 # agent-message-bus tools
 
-This page is the reference for every `bus_*` tool. The server serves the same 34 tools from one registry over two transports:
+This page is the reference for every `bus_*` tool. The server serves the same 34 tools from one registry over two agent transports; the web GUI (`/web/api/*`, on its own listener) calls the same registry in-process, with the same errors:
 
 - **MCP** at `POST /mcp` (streamable HTTP, tools; the server instructions are the guide in [Working on the bus](#working-on-the-bus));
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`. `GET /v1/guide` returns the same guide as `text/markdown`.
@@ -625,7 +625,7 @@ A failed RPC call returns the HTTP status for its code and this envelope:
 | `conflict` | 409 | The name is taken, or the current state forbids the change (for example, the last leader leaving, or a second inbox stream for the same agent). |
 | `internal` | 500 | An unexpected server failure. The message is always `internal error`. |
 
-Over MCP, a failed call returns a tool result with `isError: true` and the text `<code>: <message>`, for example `forbidden: only leaders may send to all`. Unexpected server failures surface as a JSON-RPC error instead. The omp extension shows errors in the same `<code>: <message>` form. The rule behind each error is specified per feature in [`spec/`](spec/README.md).
+Over MCP, a failed call returns a tool result with `isError: true` and the text `<code>: <message>`, for example `forbidden: only leaders may send to all`. Unexpected server failures surface as a JSON-RPC error with the message `internal error` instead; a tool name the server doesn't serve is a JSON-RPC error raised by the MCP library. The omp extension shows errors in the same `<code>: <message>` form. The rule behind each error is specified per feature in [`spec/`](spec/README.md).
 
 ## omp extension
 

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,15 +12,15 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
 
-// Tools looks up bus tools (tools.Registry). The GUI calls them in-process with the
-// session's principal, so rules, decoding and error kinds match /v1/tools.
+// Tools runs bus tools (tools.Registry). The GUI calls them in-process with the session's
+// principal, so rules, decoding and error kinds match /v1/tools.
 type Tools interface {
-	Get(name string) (tools.Tool, bool)
+	Call(ctx context.Context, p auth.Principal, name string, args json.RawMessage) (any, error)
 }
 
 // threads answers GET /web/api/spaces/{space}/blackboards/{board}/threads as bus_list_threads.
 func (g *Web) threads(r *http.Request, p auth.Principal) (any, error) {
-	return g.call(r, p, "bus_list_threads", map[string]any{"space": r.PathValue("space"), "blackboard": r.PathValue("board")})
+	return g.call(r, p, tools.BusListThreads, map[string]any{"space": r.PathValue("space"), "blackboard": r.PathValue("board")})
 }
 
 // thread answers GET /web/api/spaces/{space}/threads/{id} as bus_read_thread; a thread of
@@ -29,7 +30,7 @@ func (g *Web) thread(r *http.Request, p auth.Principal) (any, error) {
 	if err != nil {
 		return nil, apperr.New(apperr.Invalid, "threadId must be an integer")
 	}
-	return g.call(r, p, "bus_read_thread", map[string]any{"space": r.PathValue("space"), "threadId": id})
+	return g.call(r, p, tools.BusReadThread, map[string]any{"space": r.PathValue("space"), "threadId": id})
 }
 
 // call runs tool name with args as p.
@@ -43,9 +44,5 @@ func (g *Web) call(r *http.Request, p auth.Principal, name string, args map[stri
 
 // callRaw runs tool name with the JSON arguments raw as p, decoded exactly like /v1/tools.
 func (g *Web) callRaw(r *http.Request, p auth.Principal, name string, raw []byte) (any, error) {
-	t, ok := g.tools.Get(name)
-	if !ok {
-		return nil, fmt.Errorf("tool %s is not registered", name)
-	}
-	return t.Call(r.Context(), p, raw)
+	return g.tools.Call(r.Context(), p, name, raw)
 }

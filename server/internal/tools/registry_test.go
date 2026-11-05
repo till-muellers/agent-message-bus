@@ -1,13 +1,18 @@
 package tools
 
 import (
+	"context"
+	"encoding/json"
 	"slices"
 	"sort"
 	"testing"
+
+	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
 
 func TestRegistryHasAllToolsSortedAndUnique(t *testing.T) {
-	ts := New(Deps{}).List()
+	ts := New(Deps{}).list
 	if len(ts) != 34 {
 		t.Fatalf("got %d tools, want 34", len(ts))
 	}
@@ -31,8 +36,24 @@ func TestRegistryHasAllToolsSortedAndUnique(t *testing.T) {
 	}
 }
 
+func TestRegistryCall(t *testing.T) {
+	t.Parallel()
+	echo := Tool{Meta: Meta{Name: "echo"}, Call: func(_ context.Context, _ auth.Principal, args json.RawMessage) (any, error) {
+		return string(args), nil
+	}}
+	reg := NewRegistry([]Tool{echo})
+	got, err := reg.Call(context.Background(), auth.Principal{}, "echo", json.RawMessage(`{"a":1}`))
+	if err != nil || got != `{"a":1}` {
+		t.Fatalf("echo = %v, %v", got, err)
+	}
+	_, err = reg.Call(context.Background(), auth.Principal{}, "bus_nope", nil)
+	if k, _ := apperr.KindOf(err); k != apperr.NotFound || err.Error() != "tool bus_nope not found" {
+		t.Fatalf("unknown tool = %v", err)
+	}
+}
+
 func TestSchemasUseAllowedSubset(t *testing.T) {
-	for _, tl := range New(Deps{}).List() {
+	for _, tl := range Metadata() {
 		t.Run(tl.Name, func(t *testing.T) {
 			if tl.Schema["additionalProperties"] != false {
 				t.Fatalf("additionalProperties must be false")

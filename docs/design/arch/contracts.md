@@ -13,13 +13,14 @@ PO decisions applied (2026-10-26): PO-1 one log line per GUI change; PO-2 tiers 
 
 | Item | Contract | Anchor |
 |---|---|---|
-| RPC call | `POST /v1/tools/{name}`, body = JSON args, `Authorization: Bearer <token>` | `rpc/handler.go:40-63` |
-| RPC success | `200 {"result": <tool result>}` — plus optional sibling `"mail"` from 13b (§9) | `rpc/handler.go:62` |
+| RPC call | `POST /v1/tools/{name}`, body = JSON args, `Authorization: Bearer <token>` | `rpc/handler.go` |
+| RPC success | `200 {"result": <tool result>}` — plus optional sibling `"mail"` from 13b (§9) | `rpc/handler.go` |
 | RPC/HTTP error | `{"error":{"code":"<kind>","message":"<msg>"}}`, status by kind | `platform/httpx/json.go:13-50` |
 | Error kinds | `invalid` 400, `unauthenticated` 401, `forbidden` 403, `not_found` 404, `conflict` 409, `internal` 500 (`"internal error"`). **No new `apperr` kind.** The one exception on the wire is the web sign-in limiter's local `429 rate_limited` (§10.1, [AD-9], Q-A9), written by `internal/web` only. | `platform/apperr/apperr.go:13-19` |
-| MCP error | tool result `isError: true`, text `<code>: <message>` | `mcpserver/server.go:49-58` |
-| MCP success | one `TextContent` = JSON; `structuredContent` when the result is an object | `mcpserver/server.go:60-70` |
-| Args | closed schema (`additionalProperties:false`); unknown field → `invalid "invalid arguments: …"`; missing → `invalid "<field> is required"` | `tools/decode.go:13-42`, `tools/schema.go:10-23` |
+| MCP error | tool result `isError: true`, text `<code>: <message>`; an error without kind fails the call as a JSON-RPC error with message `internal error` (detail only in the server log, like the HTTP 500). An unknown tool name never reaches the registry: the MCP SDK answers it with a JSON-RPC error | `mcpserver/server.go` |
+| MCP success | one `TextContent` = JSON; `structuredContent` when the result is an object | `mcpserver/server.go` |
+| Args | closed schema (`additionalProperties:false`); unknown field → `invalid "invalid arguments: …"`; missing → `invalid "<field> is required"`. The web GUI's JSON request bodies (`/web/api/*`) decode the same way and fail with the same message | `tools/decode.go`, `tools/schema.go` |
+| Unknown tool | `Registry.Call` → `not_found "tool <name> not found"`, the same on `POST /v1/tools/{name}` and on a `/web/api/*` route whose tool is not registered. RPC reads the body first, so a body error (`request body exceeds 1 MiB`, `reading request body: …`) wins over the unknown name | `tools/registry.go` |
 | Names | `^[a-z0-9][a-z0-9_-]{0,62}$`; error `invalid "<field> must match …"` | `domain/text.go:13,22-28` |
 | Timestamps | RFC3339Nano UTC strings | `platform/db/dbtx.go:35` |
 
@@ -362,6 +363,9 @@ New (all existing kinds):
 | forbidden | `invalid CSRF token` | W2 |
 | invalid | `confirm the revoke of <name> in space <space>` / `confirm the deletion of space <space>` | W3 |
 | (429) `rate_limited` | `too many failed sign-ins; try again later` | W1a |
+| not_found | `tool <name> not found` (now also on `/web/api/*`, which answered 500 `internal error`) | R14 |
+| invalid | `invalid arguments: …` for a bad web GUI request body (replaces `invalid request body: …`) | R14 |
+| internal (MCP) | JSON-RPC error `internal error` (replaces the internal detail as the JSON-RPC error message) | R14 |
 
 Removed: `admin token cannot act in spaces; mint a leader with bus_mint_leader` (4c), `admin token has no inbox; mint a leader with bus_mint_leader` (4d). Narrowed: `last leader cannot leave; delete the space instead` only while other participants remain (5). Unchanged and still asserted: `only leaders may send to all`, `only leaders may send critical messages`, `space demo has other leaders; they must leave first` (leader caller), `not a participant of space demo`, `token is not valid for space demo`, `invalid or expired invite code`.
 

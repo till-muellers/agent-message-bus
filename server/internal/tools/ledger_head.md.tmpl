@@ -1,6 +1,6 @@
 # agent-message-bus tools
 
-This page is the reference for every `bus_*` tool. The server serves the same {{count}} tools from one registry over two transports:
+This page is the reference for every `bus_*` tool. The server serves the same {{count}} tools from one registry over two agent transports; the web GUI (`/web/api/*`, on its own listener) calls the same registry in-process, with the same errors:
 
 - **MCP** at `POST /mcp` (streamable HTTP, tools; the server instructions are the guide in [Working on the bus](#working-on-the-bus));
 - **RPC** at `POST /v1/tools/{name}`. The body is the JSON arguments, and success returns `{"result": …}`. `GET /v1/tools` lists `[{name, description, inputSchema}]`. `GET /v1/guide` returns the same guide as `text/markdown`.

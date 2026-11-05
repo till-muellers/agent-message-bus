@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -17,6 +18,9 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
 
+// errInternal is the protocol error of a failure without apperr kind; the detail stays in the log.
+var errInternal = errors.New("internal error")
+
 // NewHandler returns a bearer-authenticated, stateless MCP HTTP handler serving reg. A
 // successful tool result gains a trailing "You have mail" text block when notices has one.
 // Every client receives the agent guide as the server instructions.
@@ -24,7 +28,7 @@ func NewHandler(reg *tools.Registry, a *auth.Service, notices Noticer) http.Hand
 	srv := mcp.NewServer(&mcp.Implementation{Name: "agent-message-bus", Version: "1"},
 		&mcp.ServerOptions{Instructions: guide.Text})
 	for _, t := range reg.List() {
-		srv.AddTool(&mcp.Tool{Name: t.Name, Description: t.Description, InputSchema: t.Schema}, handler(t, notices))
+		srv.AddTool(&mcp.Tool{Name: t.Name, Description: t.Description, InputSchema: t.Schema}, handler(reg, t.Name, notices))
 	}
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
@@ -32,7 +36,7 @@ func NewHandler(reg *tools.Registry, a *auth.Service, notices Noticer) http.Hand
 	return mw(h)
 }
 
-func handler(t tools.Tool, notices Noticer) mcp.ToolHandler {
+func handler(reg *tools.Registry, name string, notices Noticer) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		p, ok := principalOf(req.Extra.TokenInfo)
 		if !ok {
@@ -42,23 +46,27 @@ func handler(t tools.Tool, notices Noticer) mcp.ToolHandler {
 		if len(req.Params.Arguments) > 0 {
 			args = req.Params.Arguments
 		}
-		out, err := t.Call(ctx, p, args)
+		out, err := reg.Call(ctx, p, name, args)
 		if err != nil {
-			return errorResult(err)
+			return errorResult(ctx, err)
 		}
 		res, err := successResult(out)
 		if err != nil {
-			return nil, err
+			return errorResult(ctx, err)
 		}
 		addHint(ctx, notices, p, res)
 		return res, nil
 	}
 }
 
-func errorResult(err error) (*mcp.CallToolResult, error) {
+// errorResult is the isError result "<kind>: <message>". An error without kind is logged
+// and fails the call as a protocol error "internal error", never with its detail, like the
+// HTTP transports' 500.
+func errorResult(ctx context.Context, err error) (*mcp.CallToolResult, error) {
 	var ae *apperr.Error
 	if !errors.As(err, &ae) {
-		return nil, err
+		slog.ErrorContext(ctx, "internal error", "err", err)
+		return nil, errInternal
 	}
 	return &mcp.CallToolResult{
 		IsError: true,

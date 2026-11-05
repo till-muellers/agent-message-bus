@@ -13,13 +13,13 @@ func TestToolsLedgerIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading TOOLS.md: %v", err)
 	}
-	if RenderMarkdown(New(Deps{})) != string(want) {
+	if RenderMarkdown(Metadata()) != string(want) {
 		t.Fatal("TOOLS.md is stale: run go run ./cmd/tooldoc > TOOLS.md")
 	}
 }
 
 func TestToolsLedgerCarriesGuide(t *testing.T) {
-	doc := RenderMarkdown(New(Deps{}))
+	doc := RenderMarkdown(Metadata())
 	section := guideSection(guide.Text)
 	if !strings.Contains(doc, "\n## Working on the bus\n\n"+section+"\n") {
 		t.Fatal(`TOOLS.md lacks the guide as section "Working on the bus"`)
@@ -29,13 +29,15 @@ func TestToolsLedgerCarriesGuide(t *testing.T) {
 	}
 }
 
-func toolNamed(t *testing.T, name string) Tool {
+func toolNamed(t *testing.T, name string) Meta {
 	t.Helper()
-	tl, ok := New(Deps{}).Get(name)
-	if !ok {
-		t.Fatalf("no tool %s", name)
+	for _, m := range Metadata() {
+		if m.Name == name {
+			return m
+		}
 	}
-	return tl
+	t.Fatalf("no tool %s", name)
+	return Meta{}
 }
 
 func TestArgumentTable(t *testing.T) {
@@ -62,7 +64,7 @@ func TestArgumentTable(t *testing.T) {
 }
 
 func TestToolSectionAndIndexShareAnchor(t *testing.T) {
-	doc := RenderMarkdown(New(Deps{}))
+	doc := RenderMarkdown(Metadata())
 	for _, want := range []string{
 		"\n### bus_add_post\n",
 		"| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants and admins. |",

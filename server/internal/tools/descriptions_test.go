@@ -45,7 +45,7 @@ var wantAccess = map[string]string{
 
 func TestEveryToolStatesAccess(t *testing.T) {
 	t.Parallel()
-	ts := New(Deps{}).List()
+	ts := Metadata()
 	if len(ts) != len(wantAccess) {
 		t.Fatalf("registry has %d tools, access table %d", len(ts), len(wantAccess))
 	}
@@ -114,7 +114,7 @@ func TestCriticalProperty(t *testing.T) {
 
 func TestLedgerIndexUsesAccess(t *testing.T) {
 	t.Parallel()
-	doc := RenderMarkdown(New(Deps{}))
+	doc := RenderMarkdown(Metadata())
 	for _, want := range []string{
 		"| [bus_whoami](#bus_whoami) | [Spaces & membership](#spaces--membership) | Any token; no side effects. | " +
 			"Returns the caller's kind, name and the spaces it participates in. |\n",
@@ -129,7 +129,7 @@ func TestLedgerIndexUsesAccess(t *testing.T) {
 
 func TestLedgerDocumentsSpawnWorker(t *testing.T) {
 	t.Parallel()
-	doc := RenderMarkdown(New(Deps{}))
+	doc := RenderMarkdown(Metadata())
 	for _, want := range []string{
 		"### bus_spawn_worker\n\nStarts a worker agent",
 		"Leaders of the space and admins.",

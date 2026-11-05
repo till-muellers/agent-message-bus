@@ -112,6 +112,12 @@ Feature: Web GUI mutations
       And the page shows the error "agent ops is an admin agent"
       And no invite code is stored
 
+    Scenario: A request body with an unknown field is refused like a tool argument
+      When the operator posts an invite with body {"name":"new","bogus":1} in space "demo"
+      Then the response status is 400
+      And the page shows the error "invalid arguments: json: unknown field \"bogus\""
+      And no invite code is stored
+
   Rule: The operator revokes a member
 
     Scenario: The operator revokes a member of any space

@@ -11,7 +11,7 @@ import (
 // property decoding into a pointer (a pointer marks an argument whose absence matters).
 func TestSchemaMatchesDecoder(t *testing.T) {
 	t.Parallel()
-	for _, tl := range New(Deps{}).List() {
+	for _, tl := range Metadata() {
 		t.Run(tl.Name, func(t *testing.T) {
 			if tl.argsType == nil {
 				t.Fatal("argument type unknown: build the tool with define")

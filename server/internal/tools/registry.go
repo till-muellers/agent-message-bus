@@ -4,10 +4,10 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 	"sort"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
 
 // Tool groups, in ledger order.
@@ -19,22 +19,10 @@ const (
 	GroupInbox       = "Inbox"
 )
 
-// Tool is one callable operation with a JSON Schema for its arguments.
+// Tool is one callable operation: its Meta and the call that decodes and runs its arguments.
 type Tool struct {
-	Name string
-	// Description is the full text served over MCP and GET /v1/tools: purpose first, then
-	// the Access sentence and the pitfalls an agent cannot see from the schema.
-	Description string
-	// Access is the exact access sentence contained in Description; the ledger's Access column.
-	Access string
-	// Result is a one-line sketch of the success result shape.
-	Result string
-	// Group is the ledger section the tool belongs to (one of the Group* constants).
-	Group  string
-	Schema map[string]any
-	Call   func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error)
-	// argsType is the struct Call decodes the arguments into; it must match Schema.
-	argsType reflect.Type
+	Meta
+	Call func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error)
 }
 
 // inGroup sets group on every tool in ts and returns ts.
@@ -45,7 +33,7 @@ func inGroup(group string, ts []Tool) []Tool {
 	return ts
 }
 
-// Registry is an immutable, name-sorted set of tools.
+// Registry is an immutable, name-sorted set of tools; transports run them through Call.
 type Registry struct {
 	list   []Tool
 	byName map[string]Tool
@@ -62,11 +50,21 @@ func NewRegistry(ts []Tool) *Registry {
 	return &Registry{list: list, byName: byName}
 }
 
-// List returns all tools sorted by name.
-func (r *Registry) List() []Tool { return append([]Tool(nil), r.list...) }
+// List returns the metadata of all tools sorted by name.
+func (r *Registry) List() []Meta {
+	metas := make([]Meta, len(r.list))
+	for i, t := range r.list {
+		metas[i] = t.Meta
+	}
+	return metas
+}
 
-// Get returns the tool named name.
-func (r *Registry) Get(name string) (Tool, bool) {
-	t, ok := r.byName[name]
-	return t, ok
+// Call runs tool name with the JSON arguments args as p. An unknown name is not_found, a
+// bad argument invalid; every transport maps these kinds like any other tool error.
+func (r *Registry) Call(ctx context.Context, p auth.Principal, name string, args json.RawMessage) (any, error) {
+	t, found := r.byName[name]
+	if !found {
+		return nil, apperr.New(apperr.NotFound, "tool %s not found", name)
+	}
+	return t.Call(ctx, p, args)
 }

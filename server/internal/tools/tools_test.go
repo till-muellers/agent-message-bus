@@ -30,7 +30,7 @@ func TestDecode(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, err := decode[sample](json.RawMessage(c.in))
+			got, err := Decode[sample](json.RawMessage(c.in))
 			if c.invalid {
 				if k, _ := apperr.KindOf(err); k != apperr.Invalid {
 					t.Fatalf("want invalid, got %v", err)
