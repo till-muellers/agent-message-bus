@@ -50,9 +50,9 @@ func TestAuthenticate(t *testing.T) {
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
 	spaceID := seedSpace(t, db, lead.AgentID)
-	memberID, memberTok, err := s.MintMember(ctx, db, "worker", spaceID)
+	memberID, memberTok, err := s.AdmitMember(ctx, db, spaceID, "worker")
 	if err != nil {
-		t.Fatalf("MintMember: %v", err)
+		t.Fatalf("AdmitMember: %v", err)
 	}
 	leadTok2, err := s.MintLeader(ctx, admin, "lead")
 	if err != nil {
@@ -97,8 +97,8 @@ func TestMintLeaderErrors(t *testing.T) {
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
 	spaceID := seedSpace(t, db, lead.AgentID)
-	if _, _, err := s.MintMember(ctx, db, "worker", spaceID); err != nil {
-		t.Fatalf("MintMember: %v", err)
+	if _, _, err := s.AdmitMember(ctx, db, spaceID, "worker"); err != nil {
+		t.Fatalf("AdmitMember: %v", err)
 	}
 	tests := []struct {
 		name   string
@@ -121,29 +121,29 @@ func TestMintLeaderErrors(t *testing.T) {
 	}
 }
 
-func TestMintMemberErrors(t *testing.T) {
+func TestAdmitMemberErrors(t *testing.T) {
 	t.Parallel()
 	s, db := newTestService(t)
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
 	spaceID := seedSpace(t, db, lead.AgentID)
-	_, _, err := s.MintMember(ctx, db, "lead", spaceID)
+	_, _, err := s.AdmitMember(ctx, db, spaceID, "lead")
 	apperrtest.WantKind(t, err, apperr.Conflict, "agent lead is a leader agent")
 }
 
-func TestMintMemberReinviteSameAgent(t *testing.T) {
+func TestAdmitMemberReinviteSameAgent(t *testing.T) {
 	t.Parallel()
 	s, db := newTestService(t)
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
 	spaceID := seedSpace(t, db, lead.AgentID)
-	id1, tok1, err := s.MintMember(ctx, db, "worker", spaceID)
+	id1, tok1, err := s.AdmitMember(ctx, db, spaceID, "worker")
 	if err != nil {
-		t.Fatalf("MintMember: %v", err)
+		t.Fatalf("AdmitMember: %v", err)
 	}
-	id2, tok2, err := s.MintMember(ctx, db, "worker", spaceID)
+	id2, tok2, err := s.AdmitMember(ctx, db, spaceID, "worker")
 	if err != nil {
-		t.Fatalf("second MintMember: %v", err)
+		t.Fatalf("second AdmitMember: %v", err)
 	}
 	if id1 != id2 || tok1 == tok2 {
 		t.Errorf("ids %d/%d tokens equal=%v", id1, id2, tok1 == tok2)
@@ -164,55 +164,14 @@ func TestStoredHashIsNotPlaintext(t *testing.T) {
 	apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
 }
 
-func TestRevokeSpaceTokens(t *testing.T) {
-	t.Parallel()
-	s, db := newTestService(t)
-	ctx := context.Background()
-	leadTok, lead := mustLeader(t, s, "lead")
-	spaceID := seedSpace(t, db, lead.AgentID)
-	dbtest.SeedSpace(t, db, 200, "other", lead.AgentID)
-	memberID, memberTok, err := s.MintMember(ctx, db, "worker", spaceID)
-	if err != nil {
-		t.Fatalf("MintMember: %v", err)
-	}
-	_, otherTok, err := s.MintMember(ctx, db, "worker", 200)
-	if err != nil {
-		t.Fatalf("MintMember other: %v", err)
-	}
-	if err := s.RevokeSpaceTokens(ctx, db, memberID, spaceID); err != nil {
-		t.Fatalf("RevokeSpaceTokens: %v", err)
-	}
-	tests := []struct {
-		name  string
-		token string
-		alive bool
-	}{
-		{"revoked member", memberTok, false},
-		{"other space", otherTok, true},
-		{"leader", leadTok, true},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			_, err := s.Authenticate(ctx, tc.token)
-			if tc.alive && err != nil {
-				t.Fatalf("Authenticate: %v", err)
-			}
-			if !tc.alive {
-				apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
-			}
-		})
-	}
-}
-
 func TestCheckMemberName(t *testing.T) {
 	t.Parallel()
 	s, db := newTestService(t)
 	ctx := context.Background()
 	_, lead := mustLeader(t, s, "lead")
 	spaceID := seedSpace(t, db, lead.AgentID)
-	if _, _, err := s.MintMember(ctx, db, "worker", spaceID); err != nil {
-		t.Fatalf("MintMember: %v", err)
+	if _, _, err := s.AdmitMember(ctx, db, spaceID, "worker"); err != nil {
+		t.Fatalf("AdmitMember: %v", err)
 	}
 	tests := []struct {
 		name     string

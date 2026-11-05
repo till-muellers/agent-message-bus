@@ -74,8 +74,3 @@ func (s *Service) AdminAgent(ctx context.Context, q db.DBTX, name string) (id in
 	id, found, err = s.agentOfKind(ctx, q, name, Admin)
 	return id, found, found && name == BootstrapName, err
 }
-
-// RevokeAgentTokens deletes every token of agentID through q and reports how many were removed.
-func (s *Service) RevokeAgentTokens(ctx context.Context, q db.DBTX, agentID int64) (int64, error) {
-	return deleteAgentTokens(ctx, q, agentID)
-}

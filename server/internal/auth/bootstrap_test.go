@@ -79,7 +79,7 @@ func TestKindConflictArticle(t *testing.T) {
 		{"lead", "agent lead is a leader agent"},
 	}
 	for _, tc := range tests {
-		_, _, err := s.MintMember(ctx, db, tc.name, 0)
+		_, _, err := s.AdmitMember(ctx, db, 0, tc.name)
 		apperrtest.WantKind(t, err, apperr.Conflict, tc.msg)
 	}
 }

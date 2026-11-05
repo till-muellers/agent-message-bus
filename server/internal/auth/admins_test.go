@@ -32,8 +32,8 @@ func TestMintAdmin(t *testing.T) {
 	ctx := context.Background()
 	s, root := bootstrapped(t)
 	_, lead := mustLeader(t, s, "lead")
-	if _, _, err := s.MintMember(ctx, s.db, "worker", seedSpace(t, s.db, lead.AgentID)); err != nil {
-		t.Fatalf("MintMember: %v", err)
+	if _, _, err := s.AdmitMember(ctx, s.db, seedSpace(t, s.db, lead.AgentID), "worker"); err != nil {
+		t.Fatalf("AdmitMember: %v", err)
 	}
 	tests := []struct {
 		name, target string

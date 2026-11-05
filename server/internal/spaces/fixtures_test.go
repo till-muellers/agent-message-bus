@@ -20,6 +20,7 @@ type env struct {
 	auth  *auth.Service
 	inbox *inbox.Service
 	svc   *Service
+	adm   *Admitter
 }
 
 func newEnv(t *testing.T, departure []DepartureHook, creation []CreationHook) env {
@@ -32,7 +33,9 @@ func newEnvHooks(t *testing.T, hooks Hooks) env {
 	conn := dbtest.Open(t)
 	a := auth.NewService(conn, "admin-secret", time.Now)
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), time.Now)
-	return env{db: conn, auth: a, inbox: ib, svc: NewService(conn, NewResolver(), a, ib, time.Now, hooks)}
+	r := NewResolver()
+	return env{db: conn, auth: a, inbox: ib, svc: NewService(conn, r, a, ib, time.Now, hooks),
+		adm: NewAdmitter(r, a, time.Now)}
 }
 
 // leader seeds leader agent id and returns its principal.
@@ -60,11 +63,11 @@ func inviteMember(t *testing.T, e env, lead auth.Principal, space, name string) 
 func invite(ctx context.Context, e env, lead auth.Principal, space, name string) (string, error) {
 	var tok string
 	err := db.InTx(ctx, e.db, func(tx *sql.Tx) error {
-		id, err := e.svc.AuthorizeInvite(ctx, tx, lead, space, name)
+		id, err := e.adm.AuthorizeInvite(ctx, tx, lead, space, name)
 		if err != nil {
 			return err
 		}
-		_, _, tok, err = e.svc.AdmitMember(ctx, tx, id, name)
+		_, _, tok, err = e.adm.AdmitMember(ctx, tx, id, name)
 		return err
 	})
 	return tok, err

@@ -13,7 +13,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-// Service authenticates bearer tokens and mints admin, leader and member tokens.
+// Service authenticates bearer tokens, mints admin, leader and member tokens and revokes them.
 type Service struct {
 	db          *sql.DB
 	adminHash   atomic.Pointer[string]
@@ -75,8 +75,8 @@ func (s *Service) MintLeader(ctx context.Context, p Principal, name string) (str
 	return token, nil
 }
 
-// MintMember creates (or reuses) member agent name and issues a token bound to spaceID.
-func (s *Service) MintMember(ctx context.Context, tx db.DBTX, name string, spaceID int64) (agentID int64, token string, err error) {
+// AdmitMember creates (or reuses) member agent name and issues a token bound to spaceID.
+func (s *Service) AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, token string, err error) {
 	if err := domain.ValidName("name", name); err != nil {
 		return 0, "", err
 	}
@@ -139,11 +139,6 @@ func (s *Service) issue(ctx context.Context, q db.DBTX, prefix string, agentID, 
 		return "", err
 	}
 	return token, nil
-}
-
-// RevokeSpaceTokens deletes every token of agentID bound to spaceID.
-func (s *Service) RevokeSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) error {
-	return deleteSpaceTokens(ctx, q, agentID, spaceID)
 }
 
 func (s *Service) stamp() string {

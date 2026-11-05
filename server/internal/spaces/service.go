@@ -14,13 +14,10 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-// accounts mints, vets and revokes the agents and tokens that spaces admit and remove.
+// accounts finds admin agents and revokes the tokens of agents that spaces remove.
 type accounts interface {
-	MintMember(ctx context.Context, tx db.DBTX, name string, spaceID int64) (agentID int64, token string, err error)
-	RevokeSpaceTokens(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
-	CheckMemberName(ctx context.Context, q db.DBTX, name string) error
 	AdminAgent(ctx context.Context, q db.DBTX, name string) (id int64, found, bootstrap bool, err error)
-	RevokeAgentTokens(ctx context.Context, q db.DBTX, agentID int64) (int64, error)
+	Revoke(ctx context.Context, q db.DBTX, agentID int64, scope auth.Scope) (int64, error)
 }
 
 type inboxStore interface {
@@ -209,7 +206,7 @@ func (s *Service) removeParticipant(ctx context.Context, tx db.DBTX, m Membershi
 	if err := s.ib.DeleteSpaceEntries(ctx, tx, m.AgentID, m.SpaceID); err != nil {
 		return nil, err
 	}
-	if err := s.accounts.RevokeSpaceTokens(ctx, tx, m.AgentID, m.SpaceID); err != nil {
+	if _, err := s.accounts.Revoke(ctx, tx, m.AgentID, auth.InSpace(m.SpaceID)); err != nil {
 		return nil, err
 	}
 	if err := deleteParticipant(ctx, tx, m.SpaceID, m.AgentID); err != nil {
