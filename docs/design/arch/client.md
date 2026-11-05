@@ -334,6 +334,8 @@ export interface Dispatcher {
 	takeHeld(filter: WaitFilter): Entry[];
 	/** bus_wait (E6): the next matching entry, routed to the waiter instead of omp; [] on timeout/abort. */
 	waitNext(filter: WaitFilter, timeoutMs: number, signal?: AbortSignal): Promise<Entry[]>;
+	/** bus_wait forwarded to the server (0de.24): the entries not handed over yet, which then count as handed over; the stream consumes them on arrival (0de.25). */
+	claim(entries: readonly Entry[]): Entry[];
 	/** The start's stream stopped (E10a, 0de.23): held entries are dropped unhanded; waiting bus_wait calls return []. */
 	stop(): void;
 	/** First-prompt bounded wait (E9b): resolves when every id <= `id` was handed over, or after `ms`. */
@@ -341,7 +343,7 @@ export interface Dispatcher {
 }
 // lib/delivery/waiters.ts — the pending bus_wait calls of a dispatcher (E6)
 export interface WaitFilter { from?: string; threadId?: number; after?: number; }
-export function createDispatcher(deps: { handOver(message: BusMessage, mechanism: Mechanism): void; watermark: AckWatermark; phase: () => SessionPhase; warn(message: string): void; }): Dispatcher;
+export function createDispatcher(deps: { handOver(message: BusMessage, mechanism: Mechanism): void; watermark: AckWatermark; consume: Consume; phase: () => SessionPhase; warn(message: string): void; }): Dispatcher;
 ```
 
 - **Replay dedupe:** the dispatcher keeps the ids it handed over in this connection start; a stream reconnect within the start replays unacked ids (`server/spec/inbox.feature:249-257`) and those are skipped. A connection restart (session switch/branch, login, promote, accept) creates a new dispatcher and a new watermark (`delivery/delivery-start.ts`, `createDeliveryStart`), so asides dropped by omp on a generation change (`agent-session.ts:9687`) are delivered again, and ids the last start received but never saw consumed (posts held at the switch, an old identity's entries) cannot hold the next acks. `Connection.dispatcher()` and `consume` always reach the current start.
@@ -354,7 +356,7 @@ export interface AckWatermark {
 }
 // lib/delivery/acker.ts — calls bus_inbox_ack {upTo}; failures only warned (as today, lib/inbox.ts:58-66)
 export function createAcker(deps: { client: BusClient; getActive(): ActiveCredentials | undefined; warn(m: string): void }): (upTo: number) => Promise<void>;
-// lib/delivery/consumer.ts (E6) — consumed ids → watermark → acker; fed by the context handler and by bus_wait
+// lib/delivery/consumer.ts (E6) — consumed ids → watermark → acker; fed by the context handler, by bus_wait and by the dispatcher (claimed entries on arrival)
 export function createConsumer(deps: { watermark: AckWatermark; ack(upTo: number): Promise<void> }): (ids: readonly number[]) => void;
 // lib/delivery/consumption.ts — pure: entry ids of agent-bus messages present in a model request
 export function consumedEntryIds(messages: readonly AgentMessage[]): number[];
@@ -380,8 +382,9 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 
 - Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, description and `inputSchema` from `GET /v1/tools`); `tool-selection.ts` excludes the server tool from mirroring. Subagents never register it.
 - Order: `takeHeld(filter)` → non-empty returns at once (E10a); else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`).
-- Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`), and no ack. The same value goes into Bun's `fetch` `timeout` (its socket idle timer, 5 min by default): the server sends nothing until the wait ends, so a 300 s wait would otherwise be cut.
-- Race with the session's own stream (0de.24): what a forwarded call returns goes through `Dispatcher.claim`. An entry the stream already handed over is left out of the result. The rest count as handed over, so the stream skips them when it delivers them (and `handedUpTo` passes them). They are also marked consumed: the watermark acks them only after this start's stream received them, so an entry another session streams is never acked here.
+- Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`); the server acks nothing (claimed entries are acked when this start's stream delivers them, below). The same value goes into Bun's `fetch` `timeout` (its socket idle timer, 5 min by default): the server sends nothing until the wait ends, so a 300 s wait would otherwise be cut.
+- Race with the session's own stream (0de.24): what a forwarded call returns goes through `Dispatcher.claim`. An entry the stream already handed over is left out of the result. The rest count as handed over, so the stream skips them when it delivers them (and `handedUpTo` passes them). They are also marked consumed: the watermark acks them only after this start's stream received them, so an entry another session streams is never acked here. When the stream delivers a claimed entry, the dispatcher consumes it again (`deps.consume`, the start's `createConsumer`), so the ack follows at once instead of waiting for a model request (0de.25).
+- Claim leaves nothing (0de.25): the server returns every unacked matching entry at once, so when the stream delivered them all the call waits on with `after` = the highest returned id until a deadline taken before the first call. If the session's stream is open by then, it waits in the dispatcher (`takeHeld`, then `waitNext` for the time left), since the stream now hands new entries to omp; else it forwards again with `timeoutSeconds` = the time left (rounded up). It returns when the claim yields entries, the server returns `[]`, or the deadline passed. So `[]` still means timeout.
 - `timeoutSeconds` outside 1..300 is refused locally with the server's error (`invalid: timeoutSeconds must be 1..300`).
 - Cancellation: the `execute` `signal` (`CA/extensibility/extensions/types.ts:925-933`) aborts the wait; nothing is consumed.
 - Server dependency: slice 9 (server `bus_wait`, contract `{"result":[Entry…]}`) for the schema and the fallback; it ships under protocol 2 (contracts.md §6), so `MIN_SERVER_PROTOCOL` stays 2.

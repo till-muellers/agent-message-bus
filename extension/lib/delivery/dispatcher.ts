@@ -6,13 +6,15 @@
  *
  * The message (`render/details.ts`) carries the entry, so the request that consumes it acks it. There is one
  * dispatcher per connection start (`delivery-start.ts`): a stream reconnect within the start replays the entries that
- * were not acked, and the ones this dispatcher already handed over are skipped.
+ * were not acked, and the ones this dispatcher already handed over are skipped. An entry a forwarded `bus_wait`
+ * claimed is consumed when the stream delivers it, so it is acked without waiting for a model request.
  */
 import type { Entry } from "../bus/entry.ts";
 import { parseDeliveryClass } from "../bus/entry.ts";
 import { errorMessage } from "../bus/errors.ts";
 import { type BusMessage, busMessage, noticeMessage } from "../render/details.ts";
 import type { AckWatermark } from "./ack-watermark.ts";
+import type { Consume } from "./consumer.ts";
 import { isBusy, mechanismFor, type Mechanism, type SessionPhase } from "./delivery-class.ts";
 import { createPostNotices, isPostNotice, NOTICE_WINDOW_MS, type PostNotices } from "./post-notices.ts";
 import { createWaiters, type WaitFilter, type Waiters } from "./waiters.ts";
@@ -42,6 +44,8 @@ export interface DispatcherDeps {
 	watermark: AckWatermark;
 	/** Hands the session message of an entry over to omp with the mechanism. */
 	handOver(message: BusMessage, mechanism: Mechanism): void;
+	/** Marks entries consumed: a claimed entry once the stream delivered it. */
+	consume: Consume;
 	/** Reports a held notice omp refused. */
 	warn(message: string): void;
 }
@@ -100,6 +104,7 @@ function createProgress(): { advance(id: number): void; until(id: number, ms: nu
 /** The dispatcher of one connection start: it maps every entry to the mechanism its class asks for. */
 export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 	const handedOver = new Set<number>();
+	const claimed = new Set<number>();
 	const waitCalls = createWaiters();
 	const { deliver, notices } = createRouting(deps, waitCalls);
 	const progress = createProgress();
@@ -107,8 +112,9 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 		receive(entry) {
 			deps.watermark.received(entry.id);
 			// A reconnect replays the entries that were not acked; this start already handed them over or a forwarded
-			// `bus_wait` claimed them. Either way they count as handed over.
-			if (!handedOver.has(entry.id)) {
+			// `bus_wait` claimed them. Either way they count as handed over; a claimed one is consumed now.
+			if (claimed.has(entry.id)) deps.consume([entry.id]);
+			else if (!handedOver.has(entry.id)) {
 				handedOver.add(entry.id);
 				deliver(entry);
 			}
@@ -118,7 +124,10 @@ export function createDispatcher(deps: DispatcherDeps): Dispatcher {
 		waitNext: waitCalls.wait,
 		claim(entries) {
 			const unseen = entries.filter(entry => !handedOver.has(entry.id));
-			for (const entry of unseen) handedOver.add(entry.id);
+			for (const entry of unseen) {
+				handedOver.add(entry.id);
+				claimed.add(entry.id);
+			}
 			return unseen;
 		},
 		handedUpTo: progress.until,

@@ -6,16 +6,18 @@ import { createDispatcher } from "../../extension/lib/delivery/dispatcher.ts";
 import type { BusMessage } from "../../extension/lib/render/details.ts";
 import { entry } from "../fakes.ts";
 
-/** A dispatcher of an idle interactive session that records the ids it hands over to omp. */
+/** A dispatcher of an idle interactive session that records the ids it hands over to omp and the ids it consumes. */
 function dispatcher() {
 	const handed: number[] = [];
+	const consumed: number[][] = [];
 	const it = createDispatcher({
 		phase: () => "interactive-idle",
 		watermark: createAckWatermark(),
 		handOver: message => void handed.push(...message.details.entryIds),
+		consume: ids => void consumed.push([...ids]),
 		warn: () => {},
 	});
-	return { it, handed };
+	return { it, handed, consumed };
 }
 
 describe("the dispatcher's waiters (bus_wait)", () => {
@@ -96,6 +98,16 @@ describe("the dispatcher's waiters (bus_wait)", () => {
 		it.receive(entry(3));
 		expect(handed).toEqual([1, 3]);
 	});
+
+	test("a claimed entry is consumed when the stream delivers it; a replayed entry omp got is not", () => {
+		const { it, handed, consumed } = dispatcher();
+		it.receive(entry(1));
+		it.claim([entry(2)]);
+		it.receive(entry(1));
+		it.receive(entry(2));
+		expect(handed).toEqual([1]);
+		expect(consumed).toEqual([[2]]);
+	});
 });
 
 /** A dispatcher whose phase can change, recording every message it hands over (with its mechanism) and every warning. */
@@ -111,6 +123,7 @@ function recording(initial: SessionPhase) {
 			if (state.fail) throw new Error("omp refused the message");
 			messages.push({ message, mechanism });
 		},
+		consume: () => {},
 		warn: message => void warnings.push(message),
 	});
 	const handed = () => messages.map(m => [m.message.details.entryIds, m.mechanism.deliverAs]);

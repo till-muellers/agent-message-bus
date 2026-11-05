@@ -521,15 +521,32 @@ describe("bus_wait in omp", () => {
 		await app.warning("invalid token");
 		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(6))]);
 		await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message })));
-		expect(callsTo(bus, "/bus_inbox_ack").map(call => call.body)).toEqual([{ upTo: 6 }]);
+		expect(callsTo(bus, "/bus_inbox_ack").map(call => call.body)).toEqual([{ upTo: 5 }, { upTo: 6 }]);
 		await app.emit("session_shutdown");
 	});
 
-	test("a forwarded bus_wait that returns an entry the session's own stream already delivered returns it no more", async () => {
+	test("an entry a forwarded bus_wait returned is acked when the session's own stream delivers it, without a model request", async () => {
+		const stream = liveStream();
+		const { options, sleep, retry } = takeover(stream, () => Response.json({ result: [entry(5)] }));
+		const { bus, app } = await bootWorker(options, sleep);
+		await app.warning("another session is already connected as w; inbox not delivered here");
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		retry();
+		await stream.opened;
+		stream.push(entry(5));
+		stream.close();
+		await app.warning("invalid token");
+		expect(app.sent).toEqual([]);
+		expect(callsTo(bus, "/bus_inbox_ack").map(call => call.body)).toEqual([{ upTo: 5 }]);
+		await app.emit("session_shutdown");
+	});
+
+	test("a forwarded bus_wait whose entries the session's own stream already delivered asks again after them", async () => {
 		const stream = liveStream();
 		const answer = Promise.withResolvers<Response>();
-		const { options, sleep, retry } = takeover(stream, () => answer.promise);
-		const { app } = await bootWorker(options, sleep);
+		const answers = [answer.promise, Promise.resolve(Response.json({ result: [entry(6)] }))];
+		const { options, sleep, retry } = takeover(stream, () => answers.shift() ?? Response.json({ result: [] }));
+		const { bus, app } = await bootWorker(options, sleep);
 		await app.warning("another session is already connected as w; inbox not delivered here");
 		const waiting = app.tool("bus_wait").execute("id", { timeoutSeconds: 10 });
 		retry();
@@ -538,7 +555,8 @@ describe("bus_wait in omp", () => {
 		stream.close();
 		await app.warning("invalid token");
 		answer.resolve(Response.json({ result: [entry(5)] }));
-		expect(resultOf(await waiting)).toEqual([]);
+		expect(resultOf(await waiting)).toEqual([entry(6)]);
+		expect(callsTo(bus, "/v1/tools/bus_wait").map(call => call.body)).toEqual([{ timeoutSeconds: 10 }, { after: 5, timeoutSeconds: 10 }]);
 		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(5))]);
 		await app.emit("session_shutdown");
 	});

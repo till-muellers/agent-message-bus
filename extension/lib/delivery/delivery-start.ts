@@ -14,12 +14,13 @@ export interface DeliveryStart {
 	consume: Consume;
 }
 
-export interface DeliveryStartDeps extends Omit<DispatcherDeps, "watermark"> {
+export interface DeliveryStartDeps extends Omit<DispatcherDeps, "watermark" | "consume"> {
 	/** Tells the server how far the session consumed the inbox. */
 	ack(upTo: number): Promise<void>;
 }
 
 export function createDeliveryStart({ ack, ...dispatch }: DeliveryStartDeps): DeliveryStart {
 	const watermark = createAckWatermark();
-	return { dispatcher: createDispatcher({ ...dispatch, watermark }), consume: createConsumer({ watermark, ack }) };
+	const consume = createConsumer({ watermark, ack });
+	return { dispatcher: createDispatcher({ ...dispatch, watermark, consume }), consume };
 }
