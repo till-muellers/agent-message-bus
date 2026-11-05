@@ -24,7 +24,8 @@ type accounts interface {
 }
 
 type inboxStore interface {
-	Deliver(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) error
+	Stage(ctx context.Context, tx db.DBTX, es []inbox.Entry) (inbox.Staged, error)
+	Publish(st inbox.Staged) []inbox.Receipt
 	DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
 	Connected(agentID int64) bool
 }
@@ -118,12 +119,12 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, name string) err
 	if err := domain.ValidName("space", name); err != nil {
 		return err
 	}
-	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
-		return nil, s.createInTx(ctx, tx, p, name)
+	return db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		return s.createInTx(ctx, tx, p, name)
 	})
 }
 
-func (s *Service) createInTx(ctx context.Context, tx *sql.Tx, p auth.Principal, name string) error {
+func (s *Service) createInTx(ctx context.Context, tx db.DBTX, p auth.Principal, name string) error {
 	exists, err := spaceExists(ctx, tx, name)
 	if err != nil {
 		return err
@@ -154,21 +155,21 @@ func (s *Service) Join(ctx context.Context, p auth.Principal, name string) error
 	if err := requireLeaderPrincipal(p, "join spaces"); err != nil {
 		return err
 	}
-	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	return db.InTx(ctx, s.db, func(tx *sql.Tx) error {
 		id, found, err := spaceIDByName(ctx, tx, name)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if !found {
-			return nil, apperr.New(apperr.NotFound, "space %s not found", name)
+			return apperr.New(apperr.NotFound, "space %s not found", name)
 		}
 		if _, joined, err := participantRole(ctx, tx, id, p.AgentID); err != nil || joined {
 			if err == nil {
 				err = apperr.New(apperr.Conflict, "already a participant of %s", name)
 			}
-			return nil, err
+			return err
 		}
-		return nil, insertParticipant(ctx, tx, id, p.AgentID, joinRole(p), s.stamp())
+		return insertParticipant(ctx, tx, id, p.AgentID, joinRole(p), s.stamp())
 	})
 }
 
@@ -183,33 +184,33 @@ func joinRole(p auth.Principal) Role {
 // Delete removes a space. Admins may delete any space; a leader only once no other
 // leader remains.
 func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) error {
-	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
-		m, err := s.r.ResolveTx(ctx, tx, p, name)
+	return db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		m, err := s.r.Resolve(ctx, tx, p, name)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if err := requireLeaderRole(m, "delete spaces"); err != nil {
-			return nil, err
+			return err
 		}
 		if m.Admin {
-			return nil, deleteSpace(ctx, tx, m.SpaceID)
+			return deleteSpace(ctx, tx, m.SpaceID)
 		}
 		n, err := countOtherLeaders(ctx, tx, m.SpaceID, m.AgentID)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if n > 0 {
-			return nil, apperr.New(apperr.Conflict, "space %s has other leaders; they must leave first", name)
+			return apperr.New(apperr.Conflict, "space %s has other leaders; they must leave first", name)
 		}
-		return nil, deleteSpace(ctx, tx, m.SpaceID)
+		return deleteSpace(ctx, tx, m.SpaceID)
 	})
 }
 
 // Leave removes p from space. The last leader cannot leave while other participants
 // remain, and an admin that has not joined has nothing to leave.
 func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) error {
-	return s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
-		m, err := s.r.ResolveTx(ctx, tx, p, space)
+	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
+		m, err := s.r.Resolve(ctx, tx, p, space)
 		if err != nil {
 			return nil, err
 		}
@@ -221,10 +222,11 @@ func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) err
 		}
 		return s.removeParticipant(ctx, tx, m)
 	})
+	return err
 }
 
 // checkLastLeader refuses leader m's departure when it is the last leader and others remain.
-func checkLastLeader(ctx context.Context, tx *sql.Tx, m Membership) error {
+func checkLastLeader(ctx context.Context, tx db.DBTX, m Membership) error {
 	if m.Role != RoleLeader {
 		return nil
 	}
@@ -244,7 +246,7 @@ func checkLastLeader(ctx context.Context, tx *sql.Tx, m Membership) error {
 
 // removeParticipant runs departure hooks, then deletes inbox rows, space tokens and the
 // participant. When nobody remains it deletes the space and drops the hooks' entries.
-func (s *Service) removeParticipant(ctx context.Context, tx *sql.Tx, m Membership) ([]inbox.Entry, error) {
+func (s *Service) removeParticipant(ctx context.Context, tx db.DBTX, m Membership) ([]inbox.Entry, error) {
 	entries, err := s.runDepartureHooks(ctx, tx, m)
 	if err != nil {
 		return nil, err
@@ -266,7 +268,7 @@ func (s *Service) removeParticipant(ctx context.Context, tx *sql.Tx, m Membershi
 }
 
 // runDepartureHooks runs every departure hook for m and collects their entries.
-func (s *Service) runDepartureHooks(ctx context.Context, tx *sql.Tx, m Membership) ([]inbox.Entry, error) {
+func (s *Service) runDepartureHooks(ctx context.Context, tx db.DBTX, m Membership) ([]inbox.Entry, error) {
 	var entries []inbox.Entry
 	for _, h := range s.hooks.Departure {
 		es, err := h.OnDeparture(ctx, tx, m)
@@ -280,7 +282,7 @@ func (s *Service) runDepartureHooks(ctx context.Context, tx *sql.Tx, m Membershi
 
 // Participants lists the participants of space, leaders first, each marked connected.
 func (s *Service) Participants(ctx context.Context, p auth.Principal, space string) ([]Participant, error) {
-	m, err := s.r.Resolve(ctx, p, space)
+	m, err := s.r.Resolve(ctx, s.db, p, space)
 	if err != nil {
 		return nil, err
 	}

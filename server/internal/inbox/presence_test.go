@@ -2,10 +2,11 @@ package inbox
 
 import (
 	"context"
-	"database/sql"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 func TestStreamSlots(t *testing.T) {
@@ -83,7 +84,7 @@ func TestPresenceConnected(t *testing.T) {
 // deliverTo delivers one entry per named agent and returns the receipts.
 func (w *world) deliverTo(t *testing.T, during func(), agents ...string) []Receipt {
 	t.Helper()
-	rs, err := w.svc.DeliverReceipts(t.Context(), func(*sql.Tx) ([]Entry, error) {
+	rs, err := InTx(t.Context(), w.db, w.svc, func(db.DBTX) ([]Entry, error) {
 		es := make([]Entry, 0, len(agents))
 		for _, a := range agents {
 			es = append(es, w.entry(a, "alpha", "r-"+a))
@@ -94,7 +95,7 @@ func (w *world) deliverTo(t *testing.T, during func(), agents ...string) []Recei
 		return es, nil
 	})
 	if err != nil {
-		t.Fatalf("DeliverReceipts: %v", err)
+		t.Fatalf("InTx: %v", err)
 	}
 	return rs
 }

@@ -58,7 +58,7 @@ server/
     invites/                    invites; id + cancel; ListPending; task→inbox [2,7,10,W1b]
     messaging/                  topics, topic_subscriptions                   [4b,4c,12]
     blackboards/                blackboards, threads, posts, thread_subs      [4b,4c,8,12]
-    inbox/                      inbox; class; Deliver; stream; Wait; presence; notice [D1,4d,9,12,13]
+    inbox/                      inbox; class; Stage/Publish + InTx; stream; Wait; presence; notice [D1,4d,9,12,13,R10]
     overview/        NEW        read composition, owns no table               [8]
     guide/           NEW        embedded guide.md, owns no table              [11]
     tools/                      registry (+Access), descriptions, TOOLS.md    [3,…]
@@ -76,22 +76,22 @@ server/
 | Package | Writes | Reads from others (read-only joins, existing precedent `blackboards/repository.go:56-57`) | Hooks it implements | Hooks/services it calls |
 |---|---|---|---|---|
 | `auth` | `agents`, `tokens` | `participants`, `spaces` (only `ListAdmins.spaces`) | — | — |
-| `spaces` | `spaces`, `participants` | `agents` | defines `CreationHook`, `DepartureHook`, `RevocationHook` | `auth` (accounts iface), `inbox` (Deliver, DeleteSpaceEntries), hooks |
-| `invites` | `invites` | — | `spaces.RevocationHook` (`invites.Revocation`) | `spaces` (admission iface), `inbox.Deliver` **[7]** |
-| `messaging` | `topics`, `topic_subscriptions` | `agents` | `CreationHook`, `DepartureHook` | resolver, `inbox.Deliver`, `inbox.Receipts` **[12]** |
-| `blackboards` | `blackboards`, `threads`, `posts`, `thread_subscriptions` | `agents` | `DepartureHook` | resolver, `inbox.Deliver`, `inbox.Receipts` **[12]** |
+| `spaces` | `spaces`, `participants` | `agents` | defines `CreationHook`, `DepartureHook`, `RevocationHook` | `auth` (accounts iface), `inbox` (Stage/Publish via `inbox.InTx`, DeleteSpaceEntries), hooks |
+| `invites` | `invites` | — | `spaces.RevocationHook` (`invites.Revocation`) | `spaces` (admission iface), `inbox.InTx` **[7, R10]** |
+| `messaging` | `topics`, `topic_subscriptions` | `agents` | `CreationHook`, `DepartureHook` | resolver, `inbox.InTx`, `inbox.Receipts` **[12, R10]** |
+| `blackboards` | `blackboards`, `threads`, `posts`, `thread_subscriptions` | `agents` | `DepartureHook` | resolver, `inbox.InTx`, `inbox.Receipts` **[12, R10]** |
 | `inbox` | `inbox` | `spaces` (name join), `agents` (kind for notice scope **[13a]**, names for receipts **[12]**) | — | broker |
 | `overview` | none | via services only | — | resolver, spaces, messaging, blackboards |
 | `guide` | none | — | — | — |
 | `web` | none (sessions in memory) | via services/registry only | — | auth, tools registry, overview, invites, inbox |
 
-Cross-feature *writes* happen only through hooks or service methods inside the caller's transaction (unchanged rule, `.omp/AGENTS.md:36`). New cross-feature write paths and how they stay legal:
+Cross-feature *writes* happen only through hooks or service methods inside the caller's transaction (`.omp/AGENTS.md`). Since R10 the caller owns that transaction: a feature opens it with `db.InTx` (no entries) or `inbox.InTx(ctx, conn, stager, fn)` (entries: `fn` returns them, `inbox.Stage` inserts them in the same transaction, `inbox.Publish` wakes the recipients after commit). Every hook and cross-feature method takes `db.DBTX`, never `*sql.Tx`. New cross-feature write paths and how they stay legal:
 
 | Effect | Path | Tx |
 |---|---|---|
-| Invite accept writes a `direct_message` inbox row | `invites.Accept` runs inside `inbox.Deliver(fn)`; `fn` returns the entry; inbox inserts it | one tx (Deliver) |
-| Last participant leaves → space deleted | `spaces.removeParticipant` → `countParticipants` → `deleteSpace` (spaces' own table; FK cascades remove other features' rows) | caller's Deliver tx |
-| Admin revoked → tokens deleted | `spaces.RevokeAdmin` → `accounts.RevokeAgentTokens` (auth method, tx passed in) | one Deliver tx |
+| Invite accept writes a `direct_message` inbox row | `invites.Accept` runs in `inbox.InTx(fn)`; `fn` returns the entry; inbox stages it in the same tx | one tx (invites' `inbox.InTx`) |
+| Last participant leaves → space deleted | `spaces.removeParticipant` → `countParticipants` → `deleteSpace` (spaces' own table; FK cascades remove other features' rows) | the caller's tx |
+| Admin revoked → tokens deleted | `spaces.RevokeAdmin` → `accounts.RevokeAgentTokens` (auth method, tx passed in) | one tx (spaces' `inbox.InTx`) |
 | Admin revoked → leaves every joined space | `spaces.RevokeAdmin` → `removeParticipant` per space (departure hooks run) | same tx |
 
 The FK cascade on `deleteSpace` is the one sanctioned exception to "writes only its own tables": it is declared in `0001_schema` and already relied on by `bus_delete_space` (`spaces/service.go:161-180`, `spec/README.md:87`).
@@ -169,11 +169,13 @@ func (m Membership) Joined() bool { return m.Role != "" }                    // 
 Resolver admin branch [4c] (`resolver.go:53-75` today):
 
 ```go
-// ResolveTx: Admin principal → space must exist (not_found "space X not found");
-// participant row optional; returns Membership{…, Role: row role or "", Admin: true}.
-// requireAgent is deleted (resolver.go:19-25).
-func (r *Resolver) ResolveTx(ctx context.Context, q db.DBTX, p auth.Principal, space string) (Membership, error)
+// Resolve reads through q: the caller's transaction, or the database outside one (R10;
+// replaces Resolve/ResolveTx). Admin principal → space must exist (not_found "space X
+// not found"); participant row optional; returns Membership{…, Role: row role or "", Admin: true}.
+func (r *Resolver) Resolve(ctx context.Context, q db.DBTX, p auth.Principal, space string) (Membership, error)
 func requireJoined(m Membership) error // forbidden "join space X first; only participants receive messages"
+// Notify builds the entries through inbox.Sender{SpaceID, Space, Name}.Notify, the inbox-owned constructor (R10).
+func (m Membership) Notify(recipients []int64, proto inbox.Entry) []inbox.Entry
 ```
 
 Lifecycle and listing [4d, 5]:
@@ -259,9 +261,16 @@ type Receipt struct {
     To       string   `json:"to"`
     Delivery Delivery `json:"delivery"`
 }
-// DeliverReceipts is Deliver plus one receipt per distinct recipient of the stored entries,
-// names read in the tx, presence sampled right after commit, sorted by name. [12]
-func (s *Service) DeliverReceipts(ctx context.Context, fn func(tx *sql.Tx) ([]Entry, error)) ([]Receipt, error)
+// stage.go (R10; replaces Deliver/DeliverReceipts): the caller owns the transaction.
+// Stage inserts es through the caller's tx and reads the recipient names there; Publish,
+// after commit, samples presence, returns one receipt per distinct recipient sorted by
+// name and wakes them [12]. InTx is the one-liner: db.InTx + Stage, then Publish.
+func (s *Service) Stage(ctx context.Context, tx db.DBTX, es []Entry) (Staged, error)
+func (s *Service) Publish(st Staged) []Receipt
+func InTx(ctx context.Context, conn *sql.DB, st Stager, fn func(tx db.DBTX) ([]Entry, error)) ([]Receipt, error)
+// sender.go (R10): the one constructor that addresses entries.
+type Sender struct{ SpaceID int64; Space, Name string }
+func (s Sender) Notify(recipients []int64, proto Entry) []Entry
 
 // notice.go (new) [13a, 13b] — PO-7 approved
 type Notice struct {
@@ -269,7 +278,7 @@ type Notice struct {
     Critical int      `json:"critical"`
     Spaces   []string `json:"spaces"`
 }
-// insert (service.go:44-57) computes edge per recipient scope inside the Deliver tx:
+// insert (service.go:44-57) computes edge per recipient scope inside the staging tx:
 //   scope = (agent) for leader/admin kind, (agent, space) for member kind;
 //   edge = scope had no row before this tx's first insert for it, or the entry is critical (PO-7 re-notify).
 func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, bool, error) // returns+marks unnoticed edges of p's scope [13a; consumed from 13b]
@@ -286,10 +295,11 @@ type admission interface { // invites/service.go:14-17
     AdmitMember(ctx context.Context, tx db.DBTX, spaceID int64, name string) (agentID int64, space, token string, err error) // [7]
     AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Principal, space string) (int64, error)                      // list/cancel gate [W1b, 10]
 }
-type deliverer interface { // [7]
-    Deliver(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) error
+type stager interface { // [7, R10]
+    Stage(ctx context.Context, tx db.DBTX, es []inbox.Entry) (inbox.Staged, error)
+    Publish(st inbox.Staged) []inbox.Receipt
 }
-func NewService(conn *sql.DB, a admission, ib deliverer, now func() time.Time) *Service
+func NewService(conn *sql.DB, a admission, ib stager, now func() time.Time) *Service
 
 type Admission struct { // POST /v1/invites/accept body; Task removed [7]
     Name  string `json:"name"`
@@ -297,7 +307,7 @@ type Admission struct { // POST /v1/invites/accept body; Task removed [7]
     Token string `json:"token"`
 }
 func (s *Service) Create(ctx, p, space, name string, task *string) (Invite, error) // ValidText("task") [2]; stores invited_by = p.AgentName [7]
-func (s *Service) Accept(ctx context.Context, code string) (Admission, error)      // runs in ib.Deliver; task → direct_message from invited_by [7]
+func (s *Service) Accept(ctx context.Context, code string) (Admission, error)      // runs in inbox.InTx; task → direct_message from invited_by [7]
 func (s *Service) Cancel(ctx context.Context, p auth.Principal, space, id string) (name string, cancelled bool, err error) // [10] PO-3: by invite id, web only, no tool; name feeds the log line
 type Pending struct {
     ID        string `json:"id"`        // opaque invite id [10]; absent before slice 10
@@ -326,8 +336,8 @@ type You struct {
     Name string       `json:"name"`
     Role *spaces.Role `json:"role"` // null for an unjoined admin
 }
-type Service struct{ /* consumer-side interfaces below */ }
-func NewService(r resolver, sp participantLister, tp topicLister, bb boardReader) *Service
+type Service struct{ /* q, the database Resolve reads through, plus the consumer-side interfaces below */ }
+func NewService(q db.DBTX, r resolver, sp participantLister, tp topicLister, bb boardReader) *Service // q since R10
 func (s *Service) Space(ctx context.Context, p auth.Principal, space string) (Overview, error)
 ```
 
@@ -471,7 +481,7 @@ Not shared code, explicitly kept out of `platform`/`domain`: the protocol consta
 
 ## 7. Cross-cutting concerns
 
-- **Transactions.** Every new mutation runs in one `inbox.Deliver` (or `DeliverReceipts`) transaction; the pool has one connection, so nothing inside `fn` may touch `*sql.DB` (`platform/db/dbtx.go:18`). `overview` and web reads run outside transactions (read-only, like today's list tools).
+- **Transactions.** Every mutation runs in one transaction its feature opens: `db.InTx` when it produces no inbox entries, `inbox.InTx` when it does (R10). The pool has one connection, so nothing inside `fn` may touch `*sql.DB` (`platform/db/dbtx.go:18`); `spaces.Resolver.Resolve` reads through the `q` it is given. `overview` and web reads run outside transactions (read-only, like today's list tools).
 - **Audit lines.** `slog.InfoContext` after commit only: `admin minted` / `admin revoked` [6a/6b] (D14); `web mutation` [W3, 10] (PO-1). Never tokens or codes.
 - **Shutdown.** `bus_wait` and streams watch `inbox.Service.root` (= `streamRoot`), so `Serve`'s `cancelStreams()` ends them before the 10 s shutdown budget (`serve.go:27-31`).
 - **Protocol bumps.** `server.Protocol` starts at 2 in slice 7; bumped at most once per release by the first slice after a release tag that adds or changes a contract the extension depends on; `protocol.go` carries one history line per value **[AD-1]**.
@@ -488,7 +498,7 @@ Not shared code, explicitly kept out of `platform`/`domain`: the protocol consta
 | AD-4 | `AdmitMember` returns the agent id (no extra lookup) | the accept tx already has it from `MintMember` (`spaces/admission.go:27`) |
 | AD-5 | `inbox.NewService` takes the root ctx; `StreamHandler()` loses its parameter | `Wait` (a tool call) needs the same shutdown signal as streams |
 | AD-6 | `Read` never marks; `ReadMarking` marks; the SSE stream marks the edges it sends | keeps the GUI's read pure (`mail-hint.feature:104-115`) and the rule inside `inbox` |
-| AD-7 | Receipts via `inbox.DeliverReceipts`, presence sampled right after commit | "slot at commit time" (`presence.feature:53-57`) without leaking slots to other features |
+| AD-7 | Receipts via `inbox.Publish` (formerly `DeliverReceipts`), presence sampled right after commit | "slot at commit time" (`presence.feature:53-57`) without leaking slots to other features |
 | AD-8 | Web sessions in memory, 8 h absolute, opaque 32-byte id, store token hash only | "short expiry" (`gui-access.feature:26-28`); restart = sign in again |
 | AD-9 | Web sign-in rate limit local to `web`, 429 `rate_limited` | avoids a new `apperr` kind (shared code) |
 | AD-10 | Web reads beyond `state` go through the registry in-process | one rule path; drops `mail` by construction |

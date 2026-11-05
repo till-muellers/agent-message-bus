@@ -34,7 +34,7 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 		return Handlers{}, err
 	}
 	inboxSvc := inbox.NewService(streamRoot, conn, broker.NewMemory(256), time.Now)
-	resolver := spaces.NewResolver(conn)
+	resolver := spaces.NewResolver()
 	msgSvc := messaging.NewService(conn, resolver, inboxSvc, time.Now)
 	bbSvc := blackboards.NewService(conn, resolver, inboxSvc, time.Now)
 	spaceSvc := spaces.NewService(conn, resolver, authSvc, inboxSvc, time.Now, spaces.Hooks{
@@ -43,7 +43,7 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 		Revocation: []spaces.RevocationHook{invites.Revocation{}},
 	})
 	invSvc := invites.NewService(conn, spaceSvc, inboxSvc, time.Now)
-	ov := overview.NewService(resolver, spaceSvc, msgSvc, bbSvc)
+	ov := overview.NewService(conn, resolver, spaceSvc, msgSvc, bbSvc)
 	reg := tools.New(tools.Deps{
 		Auth: authSvc, Spaces: spaceSvc, Messaging: msgSvc, Blackboards: bbSvc, Inbox: inboxSvc, Invites: invSvc,
 		Overview: ov,

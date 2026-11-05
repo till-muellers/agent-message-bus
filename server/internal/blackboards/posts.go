@@ -8,7 +8,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
-	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 // AddPost appends a post, notifies the thread's subscribers except the author and returns
@@ -18,7 +17,11 @@ func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, i
 		return 0, nil, err
 	}
 	var postID int64
-	rs, err := s.inSpaceReceipts(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	rs, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
+		m, err := s.spaces.Resolve(ctx, tx, p, space)
+		if err != nil {
+			return nil, err
+		}
 		t, err := mustFindThread(ctx, tx, m.SpaceID, id)
 		if err != nil {
 			return nil, err
@@ -38,26 +41,29 @@ func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, i
 
 // Subscribe subscribes the caller to a thread; idempotent.
 func (s *Service) Subscribe(ctx context.Context, p auth.Principal, space string, id int64) error {
-	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
-		if err := m.RequireJoined(); err != nil {
-			return nil, err
-		}
-		if _, err := mustFindThread(ctx, tx, m.SpaceID, id); err != nil {
-			return nil, err
-		}
-		return nil, subscribe(ctx, tx, id, m.AgentID)
-	})
+	return s.changeSubscription(ctx, p, space, id, subscribe)
 }
 
 // Unsubscribe removes the caller's subscription to a thread; idempotent.
 func (s *Service) Unsubscribe(ctx context.Context, p auth.Principal, space string, id int64) error {
-	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	return s.changeSubscription(ctx, p, space, id, unsubscribe)
+}
+
+type subscriptionOp func(ctx context.Context, q db.DBTX, threadID, agentID int64) error
+
+// changeSubscription applies op to the joined caller's subscription of thread id.
+func (s *Service) changeSubscription(ctx context.Context, p auth.Principal, space string, id int64, op subscriptionOp) error {
+	return db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		m, err := s.spaces.Resolve(ctx, tx, p, space)
+		if err != nil {
+			return err
+		}
 		if err := m.RequireJoined(); err != nil {
-			return nil, err
+			return err
 		}
 		if _, err := mustFindThread(ctx, tx, m.SpaceID, id); err != nil {
-			return nil, err
+			return err
 		}
-		return nil, unsubscribe(ctx, tx, id, m.AgentID)
+		return op(ctx, tx, id, m.AgentID)
 	})
 }

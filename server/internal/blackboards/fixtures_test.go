@@ -45,7 +45,7 @@ func newFixture(t *testing.T) fixture {
 	ib := inbox.NewService(t.Context(), db, broker.NewMemory(64), time.Now)
 	return fixture{
 		db:   db,
-		svc:  NewService(db, spaces.NewResolver(db), ib, time.Now),
+		svc:  NewService(db, spaces.NewResolver(), ib, time.Now),
 		ib:   ib,
 		lead: auth.Principal{Kind: auth.Leader, AgentID: 1, AgentName: "lead"},
 		m1:   auth.Principal{Kind: auth.Member, AgentID: 2, AgentName: "m1", SpaceID: 10},

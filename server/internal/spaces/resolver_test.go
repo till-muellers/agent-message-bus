@@ -21,7 +21,7 @@ func TestResolve(t *testing.T) {
 	dbtest.SeedParticipant(t, conn, 10, 1, "leader")
 	dbtest.SeedParticipant(t, conn, 10, 2, "member")
 	dbtest.SeedParticipant(t, conn, 20, 1, "leader")
-	r := NewResolver(conn)
+	r := NewResolver()
 	lead := auth.Principal{Kind: auth.Leader, AgentID: 1, AgentName: "lead"}
 	work := auth.Principal{Kind: auth.Member, AgentID: 2, AgentName: "work", SpaceID: 10}
 	tests := []struct {
@@ -44,7 +44,7 @@ func TestResolve(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := r.Resolve(context.Background(), tc.p, tc.space)
+			got, err := r.Resolve(context.Background(), conn, tc.p, tc.space)
 			if tc.wantKind != "" {
 				apperrtest.WantKind(t, err, tc.wantKind, tc.wantMsg)
 				return

@@ -106,7 +106,7 @@ Sessions live in memory (a restart signs everybody out) for at most 8 hours and 
 ## Concurrency model
 
 - **Single writer.** `db.Open` sets `SetMaxOpenConns(1)`.
-  - Every mutating operation is one transaction, which does the permission check (`Resolver.ResolveTx`), the change and the inbox insert together.
+  - Every mutating operation is one transaction, opened by its feature (`db.InTx`, or `inbox.InTx` when it produces inbox entries), which does the permission check (`Resolver.Resolve` through the transaction), the change and the inbox insert together.
   - Inside a transaction, use only the transaction. Querying `*sql.DB` there deadlocks.
   - Unique indexes back every name rule.
 - **Inbox delivery.**

@@ -26,18 +26,18 @@ func emptyWorld(t *testing.T) *world {
 	return w
 }
 
-// deliver stores es in one Deliver tx; fail makes the tx fail after producing them.
+// deliver stores es in one InTx transaction; fail makes the tx fail after producing them.
 func (w *world) deliver(t *testing.T, fail bool, es ...Entry) {
 	t.Helper()
 	boom := errors.New("boom")
-	err := w.svc.Deliver(t.Context(), func(*sql.Tx) ([]Entry, error) {
+	_, err := InTx(t.Context(), w.db, w.svc, func(db.DBTX) ([]Entry, error) {
 		if fail {
 			return es, boom
 		}
 		return es, nil
 	})
 	if fail != errors.Is(err, boom) || (!fail && err != nil) {
-		t.Fatalf("Deliver err = %v, fail = %v", err, fail)
+		t.Fatalf("InTx err = %v, fail = %v", err, fail)
 	}
 	if fail {
 		return
@@ -199,11 +199,11 @@ func TestNoticeSurvivesRestart(t *testing.T) {
 	dbtest.SeedAgent(t, conn, 1, "lead", "leader")
 	dbtest.SeedAgent(t, conn, 2, "worker", "member")
 	dbtest.SeedSpace(t, conn, 1, "alpha", 1)
-	err := svc.Deliver(t.Context(), func(*sql.Tx) ([]Entry, error) {
+	_, err := InTx(t.Context(), conn, svc, func(db.DBTX) ([]Entry, error) {
 		return []Entry{{AgentID: 2, SpaceID: 1, Space: "alpha", Type: DirectMessage, From: "lead", Body: "a1"}}, nil
 	})
 	if err != nil {
-		t.Fatalf("Deliver: %v", err)
+		t.Fatalf("InTx: %v", err)
 	}
 	if err := conn.Close(); err != nil {
 		t.Fatalf("closing: %v", err)

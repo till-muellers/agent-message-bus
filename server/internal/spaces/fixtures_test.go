@@ -32,7 +32,7 @@ func newEnvHooks(t *testing.T, hooks Hooks) env {
 	conn := dbtest.Open(t)
 	a := auth.NewService(conn, "admin-secret", time.Now)
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), time.Now)
-	return env{db: conn, auth: a, inbox: ib, svc: NewService(conn, NewResolver(conn), a, ib, time.Now, hooks)}
+	return env{db: conn, auth: a, inbox: ib, svc: NewService(conn, NewResolver(), a, ib, time.Now, hooks)}
 }
 
 // leader seeds leader agent id and returns its principal.

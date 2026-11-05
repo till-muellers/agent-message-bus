@@ -47,7 +47,7 @@ func direct(by, to, body string, critical bool) step {
 func depart(name string) step {
 	return func(ctx context.Context, w *world) error {
 		p := w.p[name]
-		m, err := spaces.NewResolver(w.db).Resolve(ctx, p, space)
+		m, err := spaces.NewResolver().Resolve(ctx, w.db, p, space)
 		if err != nil {
 			return err
 		}

@@ -23,7 +23,7 @@ type TopicInfo struct {
 
 // ListTopics returns the open topics of space, all first, then by name.
 func (s *Service) ListTopics(ctx context.Context, p auth.Principal, space string) ([]TopicInfo, error) {
-	m, err := s.spaces.Resolve(ctx, p, space)
+	m, err := s.spaces.Resolve(ctx, s.db, p, space)
 	if err != nil {
 		return nil, err
 	}
@@ -38,28 +38,33 @@ func (s *Service) CreateTopic(ctx context.Context, p auth.Principal, space, name
 	if name == allTopic {
 		return apperr.New(apperr.Conflict, "topic %s is already open", name)
 	}
-	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	return db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		m, err := s.spaces.Resolve(ctx, tx, p, space)
+		if err != nil {
+			return err
+		}
 		if _, found, err := openTopic(ctx, tx, m.SpaceID, name); err != nil || found {
 			if err == nil {
 				err = apperr.New(apperr.Conflict, "topic %s is already open", name)
 			}
-			return nil, err
+			return err
 		}
 		id, err := insertTopic(ctx, tx, m.SpaceID, name, m.AgentID, db.Timestamp(s.now()))
-		if err != nil {
-			return nil, err
+		if err != nil || !m.Joined() {
+			return err // only participants are subscribed; an admin that has not joined is not
 		}
-		if !m.Joined() {
-			return nil, nil // only participants are subscribed; an admin that has not joined is not
-		}
-		return nil, subscribe(ctx, tx, id, m.AgentID)
+		return subscribe(ctx, tx, id, m.AgentID)
 	})
 }
 
 // SendTopic delivers body to the topic's recipients except the sender and returns a
 // receipt per recipient, sorted by name.
 func (s *Service) SendTopic(ctx context.Context, p auth.Principal, space, topic, body string, critical bool) ([]inbox.Receipt, error) {
-	return s.inSpaceReceipts(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	return inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
+		m, err := s.spaces.Resolve(ctx, tx, p, space)
+		if err != nil {
+			return nil, err
+		}
 		if err := checkMessage(m, body, critical); err != nil {
 			return nil, err
 		}
@@ -76,7 +81,7 @@ func (s *Service) SendTopic(ctx context.Context, p auth.Principal, space, topic,
 	})
 }
 
-func (s *Service) topicRecipients(ctx context.Context, tx *sql.Tx, m spaces.Membership, t topicRow) ([]int64, error) {
+func (s *Service) topicRecipients(ctx context.Context, tx db.DBTX, m spaces.Membership, t topicRow) ([]int64, error) {
 	if t.name != allTopic {
 		return subscriberIDs(ctx, tx, t.id, m.AgentID)
 	}
@@ -106,15 +111,19 @@ func (s *Service) changeSubscription(ctx context.Context, p auth.Principal, spac
 	if topic == allTopic {
 		return apperr.New(apperr.Invalid, "the all topic cannot be subscribed or unsubscribed")
 	}
-	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	return db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		m, err := s.spaces.Resolve(ctx, tx, p, space)
+		if err != nil {
+			return err
+		}
 		if err := m.RequireJoined(); err != nil {
-			return nil, err
+			return err
 		}
 		t, err := requireTopic(ctx, tx, m, topic)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		return nil, op(ctx, tx, t.id, m.AgentID)
+		return op(ctx, tx, t.id, m.AgentID)
 	})
 }
 
@@ -123,7 +132,11 @@ func (s *Service) CloseTopic(ctx context.Context, p auth.Principal, space, topic
 	if topic == allTopic {
 		return apperr.New(apperr.Forbidden, "the all topic cannot be closed")
 	}
-	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
+		m, err := s.spaces.Resolve(ctx, tx, p, space)
+		if err != nil {
+			return nil, err
+		}
 		t, err := requireTopic(ctx, tx, m, topic)
 		if err != nil {
 			return nil, err
@@ -140,6 +153,7 @@ func (s *Service) CloseTopic(ctx context.Context, p auth.Principal, space, topic
 		}
 		return m.Notify(recipients, inbox.Entry{Type: inbox.TopicClosed, Topic: topic}), nil
 	})
+	return err
 }
 
 func requireTopic(ctx context.Context, q db.DBTX, m spaces.Membership, name string) (topicRow, error) {

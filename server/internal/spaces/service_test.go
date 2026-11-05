@@ -291,7 +291,7 @@ func TestParticipantsConnected(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t, nil, nil)
 			stub := presenceStub{Service: e.inbox, connected: map[int64]bool{}}
-			e.svc = NewService(e.db, NewResolver(e.db), e.auth, stub, time.Now, Hooks{})
+			e.svc = NewService(e.db, NewResolver(), e.auth, stub, time.Now, Hooks{})
 			lead := leader(t, e, 1, "lead")
 			mustCreate(t, e, lead, "alpha")
 			mustCreate(t, e, lead, "beta")
@@ -354,7 +354,7 @@ func TestDepartureHook(t *testing.T) {
 // seedInbox delivers one direct message to member through the real inbox service.
 func seedInbox(t *testing.T, e env, member auth.Principal) {
 	t.Helper()
-	err := e.inbox.Deliver(context.Background(), func(*sql.Tx) ([]inbox.Entry, error) {
+	_, err := inbox.InTx(context.Background(), e.db, e.inbox, func(db.DBTX) ([]inbox.Entry, error) {
 		return []inbox.Entry{{AgentID: member.AgentID, SpaceID: member.SpaceID, Space: "alpha",
 			Type: inbox.DirectMessage, From: "lead", Body: "hi"}}, nil
 	})

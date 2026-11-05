@@ -18,9 +18,10 @@ type admission interface {
 	AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Principal, space string) (int64, error)
 }
 
-// deliverer stores inbox entries inside a transaction and publishes them after commit.
-type deliverer interface {
-	Deliver(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) error
+// stager stores inbox entries in the caller's transaction and publishes them after commit.
+type stager interface {
+	Stage(ctx context.Context, tx db.DBTX, es []inbox.Entry) (inbox.Staged, error)
+	Publish(st inbox.Staged) []inbox.Receipt
 }
 
 // TTL is how long an invite code stays redeemable.
@@ -53,13 +54,13 @@ type Pending struct {
 type Service struct {
 	db    *sql.DB
 	admit admission
-	ib    deliverer
+	ib    stager
 	now   func() time.Time
 }
 
 // NewService returns an invites Service admitting members through a and delivering their
 // tasks through ib.
-func NewService(conn *sql.DB, a admission, ib deliverer, now func() time.Time) *Service {
+func NewService(conn *sql.DB, a admission, ib stager, now func() time.Time) *Service {
 	return &Service{db: conn, admit: a, ib: ib, now: now}
 }
 
@@ -118,7 +119,7 @@ func (s *Service) Accept(ctx context.Context, code string) (Admission, error) {
 		return Admission{}, apperr.New(apperr.Unauthenticated, invalidCode)
 	}
 	var a Admission
-	err := s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
 		r, found, err := takeInvite(ctx, tx, auth.Hash(norm))
 		if err != nil {
 			return nil, err
@@ -145,8 +146,8 @@ func taskEntry(r row, agentID int64, space string) []inbox.Entry {
 	if !r.task.Valid {
 		return nil
 	}
-	return []inbox.Entry{{AgentID: agentID, SpaceID: r.spaceID, Space: space,
-		Type: inbox.DirectMessage, From: r.invitedBy, Body: r.task.String}}
+	from := inbox.Sender{SpaceID: r.spaceID, Space: space, Name: r.invitedBy}
+	return from.Notify([]int64{agentID}, inbox.Entry{Type: inbox.DirectMessage, Body: r.task.String})
 }
 
 // ListPending returns the open invites of space, soonest expiry first; redeemed, expired and

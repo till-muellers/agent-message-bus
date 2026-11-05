@@ -8,6 +8,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/blackboards"
 	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
@@ -15,7 +16,7 @@ import (
 const RecentThreads = 10
 
 type resolver interface {
-	Resolve(ctx context.Context, p auth.Principal, space string) (spaces.Membership, error)
+	Resolve(ctx context.Context, q db.DBTX, p auth.Principal, space string) (spaces.Membership, error)
 }
 
 type participantLister interface {
@@ -49,21 +50,23 @@ type You struct {
 
 // Service builds overviews; it only reads.
 type Service struct {
+	q  db.DBTX
 	r  resolver
 	sp participantLister
 	tp topicLister
 	bb boardReader
 }
 
-// NewService builds an overview Service over the feature services' reads.
-func NewService(r resolver, sp participantLister, tp topicLister, bb boardReader) *Service {
-	return &Service{r: r, sp: sp, tp: tp, bb: bb}
+// NewService builds an overview Service over the feature services' reads; q is the
+// database the membership is resolved through.
+func NewService(q db.DBTX, r resolver, sp participantLister, tp topicLister, bb boardReader) *Service {
+	return &Service{q: q, r: r, sp: sp, tp: tp, bb: bb}
 }
 
 // Space returns the overview of space for p. The reads run outside a transaction, like
 // the list tools they mirror.
 func (s *Service) Space(ctx context.Context, p auth.Principal, space string) (Overview, error) {
-	m, err := s.r.Resolve(ctx, p, space)
+	m, err := s.r.Resolve(ctx, s.q, p, space)
 	if err != nil {
 		return Overview{}, err
 	}
