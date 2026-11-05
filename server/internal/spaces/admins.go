@@ -2,11 +2,11 @@ package spaces
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 // RevokeAdmin deletes every token of minted admin name and removes it from every space it
@@ -18,7 +18,7 @@ func (s *Service) RevokeAdmin(ctx context.Context, p auth.Principal, name string
 		return false, err
 	}
 	var deleted bool
-	err := s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
 		entries, removed, err := s.revokeAdminTx(ctx, tx, name)
 		deleted = removed
 		return entries, err
@@ -31,7 +31,7 @@ func (s *Service) RevokeAdmin(ctx context.Context, p auth.Principal, name string
 }
 
 // revokeAdminTx removes admin name's tokens and participations and returns the departure entries.
-func (s *Service) revokeAdminTx(ctx context.Context, tx *sql.Tx, name string) ([]inbox.Entry, bool, error) {
+func (s *Service) revokeAdminTx(ctx context.Context, tx db.DBTX, name string) ([]inbox.Entry, bool, error) {
 	id, found, bootstrap, err := s.accounts.AdminAgent(ctx, tx, name)
 	if err != nil || !found {
 		return nil, false, err
@@ -49,7 +49,7 @@ func (s *Service) revokeAdminTx(ctx context.Context, tx *sql.Tx, name string) ([
 }
 
 // departEverywhere removes agent m from every space it joined and reports how many it left.
-func (s *Service) departEverywhere(ctx context.Context, tx *sql.Tx, m Membership) ([]inbox.Entry, int, error) {
+func (s *Service) departEverywhere(ctx context.Context, tx db.DBTX, m Membership) ([]inbox.Entry, int, error) {
 	rows, err := joinedSpaces(ctx, tx, m.AgentID)
 	if err != nil {
 		return nil, 0, err

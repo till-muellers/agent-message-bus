@@ -42,14 +42,14 @@ func newWorld(t *testing.T) *world {
 	conn := dbtest.Open(t)
 	now := stepClock()
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), now)
-	r := spaces.NewResolver(conn)
+	r := spaces.NewResolver()
 	w := &world{conn: conn, ib: ib,
 		msg: messaging.NewService(conn, r, ib, now), bb: blackboards.NewService(conn, r, ib, now)}
 	authSvc := auth.NewService(conn, "overview-test-admin-token-0123456789", now)
 	w.sp = spaces.NewService(conn, r, authSvc, ib, now, spaces.Hooks{
 		Departure: []spaces.DepartureHook{w.msg, w.bb}, Creation: []spaces.CreationHook{w.msg}})
 	w.reg = tools.New(tools.Deps{Auth: authSvc, Spaces: w.sp, Messaging: w.msg, Blackboards: w.bb, Inbox: ib,
-		Overview: overview.NewService(r, w.sp, w.msg, w.bb)})
+		Overview: overview.NewService(conn, r, w.sp, w.msg, w.bb)})
 	w.seed(t)
 	return w
 }
@@ -77,7 +77,7 @@ func (w *world) seed(t *testing.T) {
 
 func (w *world) spaceID(t *testing.T, name string) int64 {
 	t.Helper()
-	m, err := spaces.NewResolver(w.conn).Resolve(t.Context(), w.lead, name)
+	m, err := spaces.NewResolver().Resolve(t.Context(), w.conn, w.lead, name)
 	w.must(t, err)
 	return m.SpaceID
 }

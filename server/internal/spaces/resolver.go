@@ -2,7 +2,6 @@ package spaces
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
@@ -10,11 +9,13 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-// Resolver is the single authorization gate for space-scoped operations.
-type Resolver struct{ db db.DBTX }
+// Resolver is the single authorization gate for space-scoped operations. It holds no
+// connection: every method reads through the q its caller passes, the caller's
+// transaction or the database.
+type Resolver struct{}
 
-// NewResolver returns a Resolver reading from db.
-func NewResolver(conn *sql.DB) *Resolver { return &Resolver{db: conn} }
+// NewResolver returns a Resolver.
+func NewResolver() *Resolver { return &Resolver{} }
 
 // requireLeaderPrincipal rejects every principal that is neither a leader nor an admin agent.
 func requireLeaderPrincipal(p auth.Principal, action string) error {
@@ -35,15 +36,10 @@ func (r *Resolver) ParticipantIDs(ctx context.Context, q db.DBTX, spaceID int64)
 	return participantIDs(ctx, q, spaceID)
 }
 
-// Resolve returns p's membership in space or a forbidden/not-found error.
-// NEVER call it while holding a transaction (the pool has one connection); use ResolveTx.
-func (r *Resolver) Resolve(ctx context.Context, p auth.Principal, space string) (Membership, error) {
-	return r.ResolveTx(ctx, r.db, p, space)
-}
-
-// ResolveTx is Resolve inside the caller's transaction q. An admin resolves in every
-// space with Admin set; its Role is its participant role, or "" when it has not joined.
-func (r *Resolver) ResolveTx(ctx context.Context, q db.DBTX, p auth.Principal, space string) (Membership, error) {
+// Resolve returns p's membership in space, read through q, or a forbidden/not-found
+// error. An admin resolves in every space with Admin set; its Role is its participant
+// role, or "" when it has not joined.
+func (r *Resolver) Resolve(ctx context.Context, q db.DBTX, p auth.Principal, space string) (Membership, error) {
 	id, found, err := spaceIDByName(ctx, q, space)
 	if err != nil {
 		return Membership{}, err

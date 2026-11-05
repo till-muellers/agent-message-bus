@@ -2,12 +2,12 @@ package spaces
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
 // Revoke removes member name from space, if present, and runs the revocation hooks,
@@ -15,7 +15,7 @@ import (
 // Leader targets are refused before any hook runs.
 func (s *Service) Revoke(ctx context.Context, p auth.Principal, space, name string) (bool, error) {
 	var deleted bool
-	err := s.ib.Deliver(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
+	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
 		entries, removed, err := s.revokeTx(ctx, tx, p, space, name)
 		deleted = removed
 		return entries, err
@@ -27,8 +27,8 @@ func (s *Service) Revoke(ctx context.Context, p auth.Principal, space, name stri
 }
 
 // revokeTx authorizes leader p, checks the target, runs the hooks and removes the participant.
-func (s *Service) revokeTx(ctx context.Context, tx *sql.Tx, p auth.Principal, space, name string) ([]inbox.Entry, bool, error) {
-	m, err := s.r.ResolveTx(ctx, tx, p, space)
+func (s *Service) revokeTx(ctx context.Context, tx db.DBTX, p auth.Principal, space, name string) ([]inbox.Entry, bool, error) {
+	m, err := s.r.Resolve(ctx, tx, p, space)
 	if err != nil {
 		return nil, false, err
 	}
@@ -54,7 +54,7 @@ func (s *Service) revokeTx(ctx context.Context, tx *sql.Tx, p auth.Principal, sp
 }
 
 // runRevocationHooks runs every revocation hook and reports whether any removed something.
-func (s *Service) runRevocationHooks(ctx context.Context, tx *sql.Tx, spaceID int64, name string) (bool, error) {
+func (s *Service) runRevocationHooks(ctx context.Context, tx db.DBTX, spaceID int64, name string) (bool, error) {
 	var cancelled bool
 	for _, h := range s.hooks.Revocation {
 		removed, err := h.OnRevoke(ctx, tx, spaceID, name)
@@ -68,7 +68,7 @@ func (s *Service) runRevocationHooks(ctx context.Context, tx *sql.Tx, spaceID in
 
 // revocableMember looks up participant name in the space of m. Admins may also revoke
 // leaders; nobody revokes an admin with it.
-func revocableMember(ctx context.Context, tx *sql.Tx, m Membership, name string) (Membership, bool, error) {
+func revocableMember(ctx context.Context, tx db.DBTX, m Membership, name string) (Membership, bool, error) {
 	id, role, found, err := participantByName(ctx, tx, m.SpaceID, name)
 	if err != nil || !found {
 		return Membership{}, false, err

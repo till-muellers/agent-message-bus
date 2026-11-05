@@ -9,7 +9,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
-	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 // ThreadInfo summarizes a thread on a blackboard.
@@ -52,7 +51,7 @@ type RecentThread struct {
 
 // ListThreads returns a board's threads ordered by latest post, newest first.
 func (s *Service) ListThreads(ctx context.Context, p auth.Principal, space, name string) ([]ThreadInfo, error) {
-	m, err := s.spaces.Resolve(ctx, p, space)
+	m, err := s.spaces.Resolve(ctx, s.db, p, space)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +65,7 @@ func (s *Service) ListThreads(ctx context.Context, p auth.Principal, space, name
 // RecentThreads returns at most limit threads across all boards of space, latest post
 // first, each with whether the caller is subscribed.
 func (s *Service) RecentThreads(ctx context.Context, p auth.Principal, space string, limit int) ([]RecentThread, error) {
-	m, err := s.spaces.Resolve(ctx, p, space)
+	m, err := s.spaces.Resolve(ctx, s.db, p, space)
 	if err != nil {
 		return nil, err
 	}
@@ -82,29 +81,30 @@ func (s *Service) CreateThread(ctx context.Context, p auth.Principal, space, nam
 		return 0, err
 	}
 	var id int64
-	err := s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	err := db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		m, err := s.spaces.Resolve(ctx, tx, p, space)
+		if err != nil {
+			return err
+		}
 		b, err := mustFindBoard(ctx, tx, m.SpaceID, name)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		at := db.Timestamp(s.now())
 		if id, err = insertThread(ctx, tx, b.id, title, m.AgentID, at); err != nil {
-			return nil, err
+			return err
 		}
-		if _, err = insertPost(ctx, tx, id, m.AgentID, body, at); err != nil {
-			return nil, err
+		if _, err = insertPost(ctx, tx, id, m.AgentID, body, at); err != nil || !m.Joined() {
+			return err // only participants are subscribed; an admin that has not joined is not
 		}
-		if !m.Joined() {
-			return nil, nil // only participants are subscribed; an admin that has not joined is not
-		}
-		return nil, subscribe(ctx, tx, id, m.AgentID)
+		return subscribe(ctx, tx, id, m.AgentID)
 	})
 	return id, err
 }
 
 // ReadThread returns a thread with its posts ordered by id.
 func (s *Service) ReadThread(ctx context.Context, p auth.Principal, space string, id int64) (Thread, error) {
-	m, err := s.spaces.Resolve(ctx, p, space)
+	m, err := s.spaces.Resolve(ctx, s.db, p, space)
 	if err != nil {
 		return Thread{}, err
 	}
@@ -124,7 +124,11 @@ func (s *Service) ReadThread(ctx context.Context, p auth.Principal, space string
 
 // RemoveThread deletes a thread (creator or leader), notifying subscribers except the caller.
 func (s *Service) RemoveThread(ctx context.Context, p auth.Principal, space string, id int64) error {
-	return s.inSpace(ctx, p, space, func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error) {
+	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
+		m, err := s.spaces.Resolve(ctx, tx, p, space)
+		if err != nil {
+			return nil, err
+		}
 		t, err := mustFindThread(ctx, tx, m.SpaceID, id)
 		if err != nil {
 			return nil, err
@@ -142,6 +146,7 @@ func (s *Service) RemoveThread(ctx context.Context, p auth.Principal, space stri
 		proto := inbox.Entry{Type: inbox.ThreadRemoved, Blackboard: t.board, ThreadID: id, ThreadTitle: t.title}
 		return m.Notify(ids, proto), nil
 	})
+	return err
 }
 
 func mustFindThread(ctx context.Context, q db.DBTX, spaceID, id int64) (thread, error) {

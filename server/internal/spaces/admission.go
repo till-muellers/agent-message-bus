@@ -9,7 +9,7 @@ import (
 
 // AuthorizeInvite checks that leader p may invite member name into space and returns the space id.
 func (s *Service) AuthorizeInvite(ctx context.Context, tx db.DBTX, p auth.Principal, space, name string) (int64, error) {
-	m, err := s.r.ResolveTx(ctx, tx, p, space)
+	m, err := s.r.Resolve(ctx, tx, p, space)
 	if err != nil {
 		return 0, err
 	}
@@ -25,7 +25,7 @@ func (s *Service) AuthorizeInvite(ctx context.Context, tx db.DBTX, p auth.Princi
 // AuthorizeInvites checks that p may list or cancel the invites of space (its leaders and
 // admins) and returns the space id.
 func (s *Service) AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Principal, space string) (int64, error) {
-	m, err := s.r.ResolveTx(ctx, q, p, space)
+	m, err := s.r.Resolve(ctx, q, p, space)
 	if err != nil {
 		return 0, err
 	}

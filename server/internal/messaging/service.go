@@ -15,46 +15,27 @@ import (
 )
 
 type membershipResolver interface {
-	Resolve(ctx context.Context, p auth.Principal, space string) (spaces.Membership, error)
-	ResolveTx(ctx context.Context, q db.DBTX, p auth.Principal, space string) (spaces.Membership, error)
+	Resolve(ctx context.Context, q db.DBTX, p auth.Principal, space string) (spaces.Membership, error)
 	ParticipantID(ctx context.Context, q db.DBTX, spaceID int64, name string) (int64, bool, error)
 	ParticipantIDs(ctx context.Context, q db.DBTX, spaceID int64) ([]int64, error)
 }
 
-type inboxDeliverer interface {
-	DeliverReceipts(ctx context.Context, fn func(tx *sql.Tx) ([]inbox.Entry, error)) ([]inbox.Receipt, error)
+type inboxStager interface {
+	Stage(ctx context.Context, tx db.DBTX, es []inbox.Entry) (inbox.Staged, error)
+	Publish(st inbox.Staged) []inbox.Receipt
 }
 
 // Service handles direct messages and topics.
 type Service struct {
 	db     *sql.DB
 	spaces membershipResolver
-	ib     inboxDeliverer
+	ib     inboxStager
 	now    func() time.Time
 }
 
 // NewService returns a messaging Service.
-func NewService(conn *sql.DB, r membershipResolver, ib inboxDeliverer, now func() time.Time) *Service {
+func NewService(conn *sql.DB, r membershipResolver, ib inboxStager, now func() time.Time) *Service {
 	return &Service{db: conn, spaces: r, ib: ib, now: now}
-}
-
-// inSpace resolves p in space and runs fn in one delivering transaction.
-func (s *Service) inSpace(ctx context.Context, p auth.Principal, space string,
-	fn func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error)) error {
-	_, err := s.inSpaceReceipts(ctx, p, space, fn)
-	return err
-}
-
-// inSpaceReceipts is inSpace returning a receipt per recipient (inbox.DeliverReceipts).
-func (s *Service) inSpaceReceipts(ctx context.Context, p auth.Principal, space string,
-	fn func(tx *sql.Tx, m spaces.Membership) ([]inbox.Entry, error)) ([]inbox.Receipt, error) {
-	return s.ib.DeliverReceipts(ctx, func(tx *sql.Tx) ([]inbox.Entry, error) {
-		m, err := s.spaces.ResolveTx(ctx, tx, p, space)
-		if err != nil {
-			return nil, err
-		}
-		return fn(tx, m)
-	})
 }
 
 func checkMessage(m spaces.Membership, body string, critical bool) error {

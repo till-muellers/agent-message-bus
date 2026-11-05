@@ -35,7 +35,7 @@ func TestResolverParticipants(t *testing.T) {
 	dbtest.SeedSpace(t, conn, 10, "alpha", 1)
 	dbtest.SeedParticipant(t, conn, 10, 2, "member")
 	dbtest.SeedParticipant(t, conn, 10, 1, "leader")
-	r, ctx := NewResolver(conn), context.Background()
+	r, ctx := NewResolver(), context.Background()
 
 	ids, err := r.ParticipantIDs(ctx, conn, 10)
 	if err != nil || !reflect.DeepEqual(ids, []int64{1, 2}) {

@@ -10,7 +10,7 @@ Feature: "You have mail" notice (edge-triggered)
   # (bus_inbox_ack deletes entries, see inbox.feature).
   #
   # A notice is due on the edge empty -> non-empty of a scope: the delivery
-  # (inbox.Deliver transaction) that stores the first entry into an empty scope.
+  # (inbox staging transaction, inbox.Stage) that stores the first entry into an empty scope.
   # The edge is derived from the stored rows inside that transaction and stored on
   # the entry (columns edge and noticed of the inbox table, migration 0003_inbox_notice),
   # so it survives restarts. Later deliveries into a non-empty scope are not edges. Once

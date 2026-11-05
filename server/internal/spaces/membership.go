@@ -69,13 +69,7 @@ type Hooks struct {
 	Revocation []RevocationHook
 }
 
-// Notify copies proto once per recipient, stamping recipient, space and sender m.
+// Notify copies proto once per recipient, sent by m in its space.
 func (m Membership) Notify(recipients []int64, proto inbox.Entry) []inbox.Entry {
-	es := make([]inbox.Entry, 0, len(recipients))
-	for _, id := range recipients {
-		e := proto
-		e.AgentID, e.SpaceID, e.Space, e.From = id, m.SpaceID, m.SpaceName, m.AgentName
-		es = append(es, e)
-	}
-	return es
+	return inbox.Sender{SpaceID: m.SpaceID, Space: m.SpaceName, Name: m.AgentName}.Notify(recipients, proto)
 }

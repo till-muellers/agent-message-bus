@@ -37,7 +37,7 @@ Conventions and working method for contributors and coding agents in this repo.
   - `service.go`: business logic
   - `repository.go`: all SQL of the feature (interfaces defined where they are used)
   - `*_test.go`: table-driven tests next to the code, real SQLite via `internal/platform/db/dbtest`
-- **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`, `spaces.RevocationHook`, passed together in the `spaces.Hooks` parameter object) and service methods, inside the caller's transaction. `internal/overview` is a read composition: it owns no table, reads only through the spaces, messaging and blackboards services, and only `internal/tools` and the `internal/server` wiring import it.
+- **Features own their tables.** Each feature writes only its own tables. Cross-feature effects go through hooks (`spaces.CreationHook`, `spaces.DepartureHook`, `spaces.RevocationHook`, passed together in the `spaces.Hooks` parameter object) and service methods, inside the caller's transaction: the feature that runs the operation opens it (`db.InTx`, or `inbox.InTx` when it produces inbox entries) and passes it on as `db.DBTX`. `internal/overview` is a read composition: it owns no table, reads only through the spaces, messaging and blackboards services, and only `internal/tools` and the `internal/server` wiring import it.
 - Transports are thin: `internal/tools` (the handler layer: one registry of `bus_*` tools), `internal/rpc`, `internal/mcpserver`, `internal/admin`, `internal/web` (the web GUI backend: embedded app, cookie sessions re-validated per request; served only on its own listener `AMB_WEB_ADDR`, never on the API listener); `internal/server` composes everything (`Build` returns the API and GUI handlers, `Routes`/`WebRoutes`, `Run` serves both listeners, `Serve` builds, opens the listeners, publishes the instance and runs).
 - `internal/guide`: the agent guide (`guide.md`, embedded, ≤ 4000 characters, the same for every token). It is served as the MCP `instructions`, as `GET /v1/guide` and as the TOOLS.md section "Working on the bus"; edit `guide.md`, then regenerate TOOLS.md.
 - `internal/domain/`: business rules shared by features (names, body and title limits).
@@ -51,7 +51,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Ask if requirements are unclear.
 - Map the specs on the codebase. Try to answer these questions:
 	- WHAT do I have to change or extend? Is this a new feature?
-	- Is there an EXTENSION SEAM meant for my task (e.g. `spaces.CreationHook`/`DepartureHook`/`RevocationHook` via `spaces.Hooks`, the tool registry, `inbox.Deliver`)?
+	- Is there an EXTENSION SEAM meant for my task (e.g. `spaces.CreationHook`/`DepartureHook`/`RevocationHook` via `spaces.Hooks`, the tool registry, `inbox.InTx` with `inbox.Sender`)?
 		- What pattern does it follow (strategy, hook, decorator, ...)?
 		- Was it really made for tasks like mine? Is there an alternative?
 		- Does it provide the required abstractions, or does it have to be expanded?

@@ -24,12 +24,12 @@ func TestResolveAdmin(t *testing.T) {
 	lead := leader(t, e, 1, "lead")
 	mustCreate(t, e, lead, "alpha")
 	ops := opsAdmin(t, e)
-	got, err := e.svc.r.Resolve(context.Background(), ops, "alpha")
+	got, err := e.svc.r.Resolve(context.Background(), e.db, ops, "alpha")
 	want := Membership{SpaceID: got.SpaceID, SpaceName: "alpha", AgentID: 9, AgentName: "ops", Admin: true}
 	if err != nil || got != want || got.SpaceID == 0 || got.Joined() || !got.Leads() {
 		t.Fatalf("Resolve(ops) = %+v, %v; want %+v", got, err, want)
 	}
-	_, err = e.svc.r.Resolve(context.Background(), ops, "ghost")
+	_, err = e.svc.r.Resolve(context.Background(), e.db, ops, "ghost")
 	apperrtest.WantKind(t, err, apperr.NotFound, "space ghost not found")
 }
 
