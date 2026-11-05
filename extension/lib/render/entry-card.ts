@@ -28,6 +28,8 @@ function where(e: Entry): string {
 			return ended ? `${e.blackboard} / ${e.threadId} removed` : `${e.blackboard} / ${e.threadId} "${title}"`;
 		case "blackboard":
 			return `${e.blackboard} removed`;
+		case "other":
+			return printable(e.type.replace(/\s+/g, " "));
 	}
 }
 

@@ -224,7 +224,7 @@ describe("extension layout", () => {
 	});
 
 	test("only bus/entry.ts and render/entry-label.ts name the entry types", () => {
-		const types = /["'](direct_message|topic_message|topic_closed|thread_post|thread_removed|blackboard_removed)["']/;
+		const types = /\b(direct_message|topic_message|topic_closed|thread_post|thread_removed|blackboard_removed)\b/;
 		const offenders = MODULES.filter(module => module.rel !== "lib/bus/entry.ts" && module.rel !== "lib/render/entry-label.ts")
 			.filter(module => types.test(readFileSync(module.path, "utf8")))
 			.map(module => module.rel);

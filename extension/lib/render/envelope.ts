@@ -20,10 +20,12 @@ function where(e: Entry): string {
 			return ended ? `thread ${e.threadId} "${title}" removed` : `thread ${e.threadId} "${title}" on ${e.blackboard}`;
 		case "blackboard":
 			return `blackboard ${e.blackboard} removed`;
+		case "other":
+			return escapeTitle(e.type);
 	}
 }
 
-/** How to answer the entry; lifecycle notices have nothing to answer. */
+/** How to answer the entry; lifecycle notices and entries of an unknown type have nothing to answer. */
 function replyHint(e: Entry): string | undefined {
 	const { about, ended } = labelOf(e);
 	if (ended) return undefined;
@@ -38,6 +40,7 @@ function replyHint(e: Entry): string | undefined {
 		case "thread":
 			return `Full thread: bus_read_thread {space: "${e.space}", threadId: ${e.threadId}}. Answer: bus_add_post {space: "${e.space}", threadId: ${e.threadId}}.`;
 		case "blackboard":
+		case "other":
 			return undefined;
 	}
 }

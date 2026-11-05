@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Entry } from "../../extension/lib/bus/entry.ts";
+import type { Entry, EntryType } from "../../extension/lib/bus/entry.ts";
 import { type CardTheme, entryCard } from "../../extension/lib/render/entry-card.ts";
 import { busMessage } from "../../extension/lib/render/details.ts";
 import { entry, fakeComponents, type FakeComponent } from "../fakes.ts";
@@ -22,6 +22,7 @@ describe("the entry card", () => {
 			[{ type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "Rollout" }, 'plan / 7 "Rollout"'],
 			[{ type: "thread_removed", blackboard: "plan", threadId: 7 }, "plan / 7 removed"],
 			[{ type: "blackboard_removed", blackboard: "plan", body: undefined }, "plan removed"],
+			[{ type: "space_renamed" as string as EntryType }, "space_renamed"],
 		];
 		for (const [fields, where] of cases) expect(texts(card(entry(1, fields)))[0]).toBe(`<accent>*lead* → you · demo · ${where}</accent>`);
 	});

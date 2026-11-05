@@ -28,7 +28,7 @@ interface Thread {
 	posts: Post[];
 }
 
-function isPost(value: unknown): value is Post {
+function isPostRecord(value: unknown): value is Post {
 	const post = value as Partial<Post> | null;
 	return typeof post?.author === "string" && typeof post.body === "string" && typeof post.createdAt === "string";
 }
@@ -38,7 +38,7 @@ function parseThread(text: string): Thread | undefined {
 	try {
 		const thread = JSON.parse(text) as Partial<Thread> | null;
 		const valid = typeof thread?.title === "string" && typeof thread.blackboard === "string" && typeof thread.id === "number";
-		return valid && Array.isArray(thread.posts) && thread.posts.every(isPost) ? (thread as Thread) : undefined;
+		return valid && Array.isArray(thread.posts) && thread.posts.every(isPostRecord) ? (thread as Thread) : undefined;
 	} catch {
 		return undefined;
 	}

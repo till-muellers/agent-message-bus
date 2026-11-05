@@ -1,5 +1,6 @@
 /** The model-facing envelope of an inbox entry (`client.md` §4.2, `omp-rendering.feature` rule 3). */
 import { describe, expect, test } from "bun:test";
+import type { EntryType } from "../../extension/lib/bus/entry.ts";
 import { envelope, postNotice } from "../../extension/lib/render/envelope.ts";
 import { entry } from "../fakes.ts";
 
@@ -50,6 +51,11 @@ describe("envelope", () => {
 			['[agent-bus] demo · thread 7 "T" removed · from lead'],
 			["[agent-bus] demo · blackboard bb removed · from lead"],
 		]);
+	});
+
+	test("an entry of a type the extension does not know names its type and has no reply hint", () => {
+		const text = envelope(entry(7, { type: "space_renamed" as string as EntryType, body: "demo is now prod" }));
+		expect(text.split("\n").slice(1, -1)).toEqual(["[agent-bus] demo · space_renamed · from lead", "demo is now prod"]);
 	});
 });
 

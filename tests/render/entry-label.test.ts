@@ -18,12 +18,17 @@ describe("the entry label", () => {
 		for (const [type, label] of LABELS) expect({ type, label: labelOf(entry(1, { type })) }).toEqual({ type, label });
 	});
 
+	test("a type the extension does not know is about something else and ends nothing", () => {
+		expect(labelOf(entry(1, { type: "space_renamed" as string as EntryType }))).toEqual({ about: "other", ended: false });
+	});
+
 	test("a post is a thread entry of a class that is not deferred, whatever its type", () => {
 		const thread = { blackboard: "plan", threadId: 7 };
 		expect(isPost(entry(1, { type: "thread_post", ...thread }))).toBe(true);
 		expect(isPost(entry(2, { type: "thread_post", ...thread, class: "interrupt", critical: true }))).toBe(true);
 		expect(isPost(entry(3, { type: "thread_post", ...thread, class: undefined }))).toBe(true);
 		expect(isPost(entry(4, { type: "thread_post", ...thread, class: "deferred" }))).toBe(false);
+		expect(isPost(entry(7, { type: "thread_removed", ...thread, class: "queue" }))).toBe(true);
 		expect(isPost(entry(5, { type: "thread_removed", ...thread, class: "deferred" }))).toBe(false);
 		expect(isPost(entry(6, { type: "direct_message" }))).toBe(false);
 	});

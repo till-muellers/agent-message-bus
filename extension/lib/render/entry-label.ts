@@ -6,8 +6,11 @@
 import { type Entry, type EntryType, parseDeliveryClass } from "../bus/entry.ts";
 
 export interface EntryLabel {
-	/** What the entry is about: a direct message, a topic, a blackboard thread or a whole blackboard. */
-	readonly about: "direct" | "topic" | "thread" | "blackboard";
+	/**
+	 * What the entry is about: a direct message, a topic, a blackboard thread, a whole blackboard, or something else: a
+	 * type a newer server added, which the extension still delivers by its class (`delivery-class.feature`).
+	 */
+	readonly about: "direct" | "topic" | "thread" | "blackboard" | "other";
 	/** A lifecycle notice: the topic was closed, the thread or the board removed. */
 	readonly ended: boolean;
 }
@@ -21,9 +24,11 @@ const LABELS: Readonly<Record<EntryType, EntryLabel>> = {
 	blackboard_removed: { about: "blackboard", ended: true },
 };
 
-/** The label of an entry. */
+const OTHER: EntryLabel = { about: "other", ended: false };
+
+/** The label of an entry; the wire may carry a type this extension does not know. */
 export function labelOf(e: Entry): EntryLabel {
-	return LABELS[e.type];
+	return Object.hasOwn(LABELS, e.type) ? LABELS[e.type] : OTHER;
 }
 
 /** Whether an entry is a post: a thread entry of a class other than deferred (lifecycle notices are deferred). */
