@@ -55,7 +55,7 @@ export interface ConnectionDeps {
 	sleep?: InboxLoopOptions["sleep"];
 	/** Tools this extension registers itself (`bus_spawn_worker`); they are switched on and off with the server tools. */
 	localTools: readonly string[];
-	/** Awaited after a successful membership tool (`tools/membership-refresh.ts`). */
+	/** Awaited after a successful membership tool (the `refreshesMembership` rows of `tools/tool-policy.ts`). */
 	membershipChanged?: () => Promise<void>;
 	/** Awaited on every restart once it is known whether the server was connected, before the inbox stream opens. */
 	connected?: (connected: boolean) => Promise<void>;

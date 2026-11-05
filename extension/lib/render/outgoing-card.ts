@@ -9,12 +9,8 @@
 import type { CardComponents, CardTheme } from "./entry-card.ts";
 import { bodyLines, printable } from "./quote.ts";
 
-const SEND_TOOLS = ["bus_send_direct", "bus_send_topic"] as const;
-export type SendTool = (typeof SEND_TOOLS)[number];
-
-export function isSendTool(name: string): name is SendTool {
-	return (SEND_TOOLS as readonly string[]).includes(name);
-}
+/** What a send tool sends (`tools/tool-policy.ts` names the tools): a direct message or a topic message. */
+export type SendKind = "direct" | "topic";
 
 export interface OutgoingMessage {
 	/** The session's bus agent; undefined while unknown. */
@@ -35,10 +31,10 @@ export function argText(args: unknown, key: string): string | undefined {
 	return typeof value === "string" ? printable(value) : undefined;
 }
 
-/** The message a send tool's arguments describe. */
-export function sentMessage(tool: SendTool, args: unknown, from: string | undefined): OutgoingMessage {
+/** The message the arguments of a send of this kind describe. */
+export function sentMessage(kind: SendKind, args: unknown, from: string | undefined): OutgoingMessage {
 	const common = { from, space: argText(args, "space"), body: argText(args, "body"), critical: (args as { critical?: unknown } | null)?.critical === true };
-	if (tool === "bus_send_direct") return { ...common, to: argText(args, "to"), where: "direct" };
+	if (kind === "direct") return { ...common, to: argText(args, "to"), where: "direct" };
 	const topic = argText(args, "topic");
 	return { ...common, to: topic === undefined ? undefined : `#${topic}`, where: "topic" };
 }

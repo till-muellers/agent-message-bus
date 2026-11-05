@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { attribute, ATTRIBUTED_TOOLS } from "../../extension/lib/tools/attribution.ts";
+import { attribute } from "../../extension/lib/tools/attribution.ts";
 
 describe("attribute", () => {
 	test("the body of a post gets the attribution line of the subagent in front", () => {
@@ -20,9 +20,5 @@ describe("attribute", () => {
 
 	test("a call without a body stays as it is", () => {
 		expect(attribute({ space: "demo" }, "0-Explore")).toEqual({ space: "demo" });
-	});
-
-	test("the attributed tools are the ones that write a body", () => {
-		expect(ATTRIBUTED_TOOLS).toEqual(["bus_add_post", "bus_create_thread"]);
 	});
 });

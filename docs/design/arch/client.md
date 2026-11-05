@@ -24,7 +24,7 @@ Companion files: `gui.md` (web GUI), `pipeline.md` (CI/release/build), `slices-c
 | Renderer | `registerMessageRenderer("agent-bus")` built from `pi.pi.Text/Container/Markdown` (no deep import) | §4.3 |
 | Context block | One `context` handler prepends a non-stored `agent-bus-context` custom message; identity cached, guide fetched once | §5 |
 | Subagents | Allow-list of 5 tools at registration; local tools registered only in main sessions; `[via subagent <id>]` prefix | §6 |
-| Tool presentation | Extension-local table: `loadMode` + `approval`; unknown tools → `discoverable` + `write`; `bus_inbox_ack` never registered; no `bus_cancel_invite` exists | §7 (PO-2, PO-3) |
+| Tool presentation | One extension-local policy table keyed by tool name (`tools/tool-policy.ts`, R7): `loadMode` + `approval`; unknown tools → `discoverable` + `write`; `bus_inbox_ack` never registered; no `bus_cancel_invite` exists | §7 (PO-2, PO-3) |
 | Protocol gate | `GET /healthz` header `Agent-Bus-Protocol` ≥ `MIN_SERVER_PROTOCOL` before redeeming or activating; worker skew check S1 at spawn | §8 (PO-11) |
 | Skill | `skills/` deleted, `package.json` `files` updated, docs moved to guide + README | §9 |
 
@@ -58,7 +58,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/bus/` | HTTP wire to the server: client, SSE parser, JSON-schema→zod, error wording, the `Entry` wire type, the `ActiveCredentials` wire shape (`credentials.ts`, with `trimUrl`), `/healthz` probe | `shared/` |
 | `lib/session/` | Who this session is: credential store, env, the single credential owner, accepted identity + its file, root-identity registry, `createSession` | `bus/`, `shared/` |
 | `lib/connection/` | Connect/disconnect: restart, tool on/off, server-protocol gate | `session/`, `tools/`, `delivery/`, `bus/`, `version/` |
-| `lib/tools/` | Mirroring server tools: selection (allow-list/excludes), presentation (loadMode/approval), remote tool definition, local `bus_wait`, subagent attribution, tool-result shape | `bus/`, `delivery/` (wait only), `render/` (tool renderers) |
+| `lib/tools/` | Mirroring server tools: the tool policy table (selection, presentation, attribution, membership refresh, send kind), remote tool definition, local `bus_wait`, subagent attribution, tool-result shape | `bus/`, `delivery/` (wait only), `render/` (tool renderers) |
 | `lib/delivery/` | Inbox → omp: stream loop, runner, 409 warning, dispatcher, delivery policy, ack watermark, acker, consumption observer, post-notice coalescing, `pi.events` publishing | `bus/`, `render/` |
 | `lib/render/` | What the model and the user see: envelope text, escaping, message details, card renderer, tool call/result renderers, status line | `bus/` (types only) |
 | `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `delivery/` (consumption observer is composed here) |
@@ -101,11 +101,11 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/spawn-tool.ts` | `lib/spawn/spawn-tool.ts` | findings item 2 |
 | `lib/sse.ts` | `lib/bus/sse.ts` | |
 | `lib/tool-result.ts` | `lib/tools/tool-result.ts` | |
-| `lib/tools.ts` | `lib/tools/remote-tools.ts` | `INBOX_TOOLS` replaced by `tool-selection.ts` (E3) |
+| `lib/tools.ts` | `lib/tools/remote-tools.ts` | `INBOX_TOOLS` replaced by `tool-selection.ts` (E3; since R7 `tool-policy.ts`) |
 | `lib/launch/*` (15) | `lib/launch/*` | `run.ts` import `../runner.ts` → `../process/runner.ts` |
 | `lib/shared/*` (2) | `lib/shared/*` | unchanged |
 
-New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a), `bus/credentials.ts` (R5); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/delivery-start.ts` (bug 0de.23); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
+New files (by slice): `bus/entry.ts` (P1a), `bus/health.ts` (E9a), `bus/credentials.ts` (R5); `session/session.ts`, `session/session-credentials.ts` (E4a), `session/root-identities.ts` (E4b); `connection/server-gate.ts` (E9a); `tools/tool-selection.ts` (E3), `tools/attribution.ts` (E3), `tools/presentation.ts` (E7), `tools/wait-tool.ts` (E6), `tools/membership-refresh.ts` (E8b), `tools/tool-policy.ts` (R7: replaces `tool-selection.ts`, `presentation.ts` and `membership-refresh.ts`); `delivery/dispatcher.ts` (E1), `delivery/ack-watermark.ts`, `delivery/acker.ts`, `delivery/consumption.ts`, `context/context-handler.ts` (E2), `delivery/post-notices.ts` (E10a), `delivery/bus-events.ts` (E10c), `delivery/delivery-start.ts` (bug 0de.23); `render/escape.ts`, `render/details.ts` (E5a), `render/entry-card.ts` (E5b), `render/thread-view.ts`, `render/status-line.ts`, `render/quote.ts` (E10b), `render/send-receipt.ts`, `render/outgoing-card.ts` (E10d); `context/identity-cache.ts`, `context/guide.ts`, `context/context-block.ts`, `context/bus-context.ts` (E8b); `spawn/worker-version.ts` (P2a); `version/server-protocol.ts` (E9a), `version/plugin-version.ts`, `version/installed-plugin.ts` (P2a).
 
 Tests mirror the folders: `tests/<folder>/<file>.test.ts` (today flat `tests/*.test.ts`; `tests/launch/` already mirrors). `tests/fakes.ts` stays the shared double and grows `events`, `registerMessageRenderer`, `on("context")` dispatch and an `isIdle` switch on the fake ctx.
 
@@ -379,7 +379,7 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 }): ToolDefinition;
 ```
 
-- Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, description and `inputSchema` from `GET /v1/tools`); `tool-selection.ts` excludes the server tool from mirroring. Subagents never register it.
+- Registered only in **main** sessions, by `registerRemoteTools` in place of the server's `bus_wait` (same name, description and `inputSchema` from `GET /v1/tools`); its `shadowed` row in `tool-policy.ts` excludes the server tool from mirroring. Subagents never register it.
 - Order: `takeHeld(filter)` → non-empty returns at once (E10a); else `waitNext(filter, timeoutSeconds*1000, signal)`. Entries already handed to omp are never returned (omp has no retraction API for extensions: `AgentSession.clearQueue` is not on `ExtensionAPI`, `CA/session/agent-session.ts:9876`). An entry a waiter takes counts as handed over (replay dedupe, `handedUpTo`).
 - Without an open stream (409 conflict, or stream not open; `inbox-runner.ts` reports it from the loop's `onStream`) → `forward` to `POST /v1/tools/bus_wait` with a transport timeout of `timeoutSeconds*1000 + 10 s` (`client.callTool` `{signal, timeoutMs}`); the server acks nothing (claimed entries are acked when this start's stream delivers them, below). The same value goes into Bun's `fetch` `timeout` (its socket idle timer, 5 min by default): the server sends nothing until the wait ends, so a 300 s wait would otherwise be cut.
 - Race with the session's own stream (0de.24): what a forwarded call returns goes through `Dispatcher.claim`. An entry the stream already handed over is left out of the result. The rest count as handed over, so the stream skips them when it delivers them (and `handedUpTo` passes them). They are also marked consumed: the watermark acks them only after this start's stream received them, so an entry another session streams is never acked here. When the stream delivers a claimed entry, the dispatcher consumes it again (`deps.consume`, the start's `createConsumer`), so the ack follows at once instead of waiting for a model request (0de.25).
@@ -491,7 +491,7 @@ export function createContextHandler(deps: {
 - omp API: `pi.on("context", handler)` returning `{messages}` (`CA/extensibility/extensions/types.ts:1515-1517, 1673`); fired before each LLM call, session messages unchanged (`CA/extensibility/shared-events.ts:184-196`; runner `CA/extensibility/extensions/runner.ts:2101-2166`). Precedent: `CA/../examples/extensions/plan-mode.ts:330`.
 - **One handler** does two things in order: report consumed entry ids (§3.3), then return `[blockMessage, ...event.messages]`. It must return the **original message objects** after the block: the runner maps history indexes by object identity/position and marks changed messages as per-call (`runner.ts:2129-2160`); cloning them would defeat its bookkeeping and the provider prompt cache.
 - Block message: `{role: "custom", customType: "agent-bus-context", content, display: false, timestamp}`; `display` does not affect model conversion (`core/compaction/messages.ts:214-227`), so it reaches the model as a developer message and is never stored or compacted.
-- The handler is synchronous in effect (cache lookups only); runner handlers run under a timeout (`CA/extensibility/extensions/runner.ts:134-167`, `extensionHandlerTimeoutMs`), so no network call happens inside it. Refreshes run on connection restart and after a successful `bus_create_space`, `bus_join_space`, `bus_leave_space`, `bus_delete_space` (`tools/membership-refresh.ts` names them; `remote-tools.ts` awaits the refresh before the tool returns, not a `tool_result` subscription, so it is testable without omp events). A failed refresh keeps the last identity (`session-context.feature:227-232`); `unauthenticated` (a revoked token) drops it. The identity is kept with the token it was read with, so other or no credentials show no block until the next refresh. The same block text keeps the same message object (stable prefix for the prompt cache). The guide is escaped like an entry body, so it cannot close the block.
+- The handler is synchronous in effect (cache lookups only); runner handlers run under a timeout (`CA/extensibility/extensions/runner.ts:134-167`, `extensionHandlerTimeoutMs`), so no network call happens inside it. Refreshes run on connection restart and after a successful `bus_create_space`, `bus_join_space`, `bus_leave_space`, `bus_delete_space` (their `refreshesMembership` rows in `tools/tool-policy.ts`; `remote-tools.ts` awaits the refresh before the tool returns, not a `tool_result` subscription, so it is testable without omp events). A failed refresh keeps the last identity (`session-context.feature:227-232`); `unauthenticated` (a revoked token) drops it. The identity is kept with the token it was read with, so other or no credentials show no block until the next refresh. The same block text keeps the same message object (stable prefix for the prompt cache). The guide is escaped like an entry body, so it cannot close the block.
 - Why not `before_agent_start`: it is emitted only while preparing a user prompt (`CA/session/agent-session.ts:8283`; guidance spec cites `:8177-8206` for the surrounding preparation); bus-started turns skip it (guidance analysis T6).
 - Subagents: `subagentBlock` (no guide) when the subagent has tools (§6); none otherwise.
 - Server dependencies: whoami/participants/list_spaces shapes after slice 4 and `GET /v1/guide` after slice 11 (contracts.md §guide: bearer, `text/markdown`, 404 on old servers).
@@ -505,14 +505,13 @@ export function createContextHandler(deps: {
 omp enables every tool a subagent's own extension instance registers unless it is `defaultInactive`/`hidden` (`CA/sdk.ts:4235-4248`, later registrations `CA/sdk.ts:5013-5045`, per omp-parity §2.6); `filterActiveTools` only strips `todo` (`CA/task/executor.ts:4787, 4886`). So withholding happens at registration:
 
 ```ts
-// lib/tools/tool-selection.ts — pure
-export const SUBAGENT_TOOLS: readonly string[] = ["bus_list_blackboards", "bus_list_threads", "bus_read_thread", "bus_create_thread", "bus_add_post"];
-export const SHADOWED_TOOLS: readonly string[] = ["bus_wait"];      // local tool in omp (E6)
-export const WITHHELD_TOOLS: readonly string[] = ["bus_inbox_ack"]; // extension owns the ack (E7)
+// lib/tools/tool-policy.ts — pure (R7: one table keyed by tool name, §7)
+export interface ToolPolicy extends Presentation { subagent?: true; shadowed?: true; attributed?: true; refreshesMembership?: true; send?: SendKind; }
+export const TOOL_POLICY: Readonly<Record<string, ToolPolicy | "withheld">>; // bus_wait: shadowed (local tool in omp, E6); bus_inbox_ack: "withheld" (extension owns the ack, E7)
 export function selectTools(remote: readonly RemoteTool[], kind: "main" | "sub"): RemoteTool[];
 ```
 
-- Main: everything except `SHADOWED_TOOLS` and `WITHHELD_TOOLS`. Sub: exactly `SUBAGENT_TOOLS ∩ remote` (an allow-list, so a future server tool stays main-only).
+- Main: everything except the `shadowed` and the `"withheld"` rows. Sub: exactly the `subagent` rows ∩ remote (`bus_list_blackboards`, `bus_list_threads`, `bus_read_thread`, `bus_create_thread`, `bus_add_post`; an allow-list, so a future server tool stays main-only).
 - **Local tools** never reach a subagent instance (`omp-subagents.feature:39-75` requires "does not register", not just "inactive"): `bus_spawn_worker` moves from load time (`extension/index.ts:202`) to the first `session_start` with `ctx.agent.kind === "main"` (`types.ts:522-540`); the local `bus_wait` is registered by `registerRemoteTools` in main sessions only (§3.4). Flags stay registered at load (omp parses them before `session_start`).
 - Restricted subagents (seance) bind no extension tools at all (`CA/sdk.ts:3546, 5062`); nothing to do.
 
@@ -524,8 +523,7 @@ export function selectTools(remote: readonly RemoteTool[], kind: "main" | "sub")
 ### 6.3 Attribution
 
 ```ts
-// lib/tools/attribution.ts — pure
-export const ATTRIBUTED_TOOLS = ["bus_add_post", "bus_create_thread"] as const;
+// lib/tools/attribution.ts — pure; the `attributed` rows of `tool-policy.ts` (bus_add_post, bus_create_thread) name the tools
 export function attribute(args: Record<string, unknown>, agentId: string): Record<string, unknown>; // body → "[via subagent <id>]\n" + body
 ```
 
@@ -536,15 +534,17 @@ Applied in the remote tool's `execute` for subagent sessions only; `agentId` = `
 ## 7. loadMode and approval tiers (E7; `omp-tools.feature` rules 1-2; PO-2 approved, PO-3)
 
 ```ts
-// lib/tools/presentation.ts — pure table
+// lib/tools/tool-policy.ts — pure table, one row per known tool (no ESSENTIAL_TOOLS list; the essential five are the rows with loadMode "essential")
 export interface Presentation { loadMode: "essential" | "discoverable"; approval: "read" | "write" | "exec"; }
-export const TOOL_PRESENTATION: Readonly<Record<string, Presentation>>; // one row per known tool (E7: no ESSENTIAL_TOOLS list; the essential five are the rows with loadMode "essential")
-export function presentationOf(toolName: string): Presentation;   // unknown tool → {discoverable, write}
+export function policyOf(toolName: string): ToolPolicy;          // unknown or withheld tool → {discoverable, write}, no flag
+export function presentationOf(toolName: string): Presentation;  // the two ToolDefinition fields of the row
 ```
 
+- One coverage test (`tests/tools/tool-policy.test.ts`) reads the server registry from the index of the generated `server/TOOLS.md`: every server tool and `bus_spawn_worker` has a row, no row is without a tool, and each flag sits on the tools of the design.
+- The send tools carry `send: "direct" | "topic"`; `remote-tools.ts` passes that kind to `render/outgoing-card.ts` (call card) and `render/send-receipt.ts` (result text), so `render/` names no send tool.
 - Fields: `loadMode?: ToolLoadMode` and `approval?: ToolApproval` on `ToolDefinition` (`CA/extensibility/extensions/types.ts:898-907`); `ToolLoadMode = "essential" | "discoverable"`, tiers `"read" | "write" | "exec"` (`core/types.ts:1045-1054`). Omitted approval means `exec`, omitted loadMode means `discoverable` for extension tools (`types.ts:898, 904-906`).
 - The tier table is the one in `omp-tools.feature:81-120` **minus `bus_cancel_invite`**, which does not exist (PO-3: the server registry ends at 34 tools; invite cancel is a web endpoint only); the same row is dropped from the discoverable list (`omp-tools.feature:63`) and the subagent "never gets" list (`omp-subagents.feature:74`). `bus_spawn_worker` is `exec`. An unknown (future) server tool gets `discoverable` + `write`, so "every registered bus tool has an explicit tier" holds and nothing new runs unprompted as `read`.
-- Kept in the extension, not in server metadata: `loadMode` is omp-only, and one table next to `SUBAGENT_TOOLS` is simpler than a new server field. (omp-parity S4 suggested server annotations for approval; not needed for any spec scenario.)
+- Kept in the extension, not in server metadata: `loadMode` is omp-only, and one table that also holds the subagent allow-list is simpler than a new server field. (omp-parity S4 suggested server annotations for approval; not needed for any spec scenario.)
 - Subagents use the same table (their `bus_read_thread`/`bus_add_post` are essential).
 
 ---

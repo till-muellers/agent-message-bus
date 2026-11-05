@@ -6,24 +6,23 @@ const sent = (...receipts: { to: string; delivery: string }[]) => ({ ok: true, r
 
 describe("the send receipt text", () => {
 	test.each([
-		["bus_send_direct", sent({ to: "peer", delivery: "live" }), "Delivered to peer."],
-		["bus_send_direct", sent({ to: "peer", delivery: "queued" }), "Queued for peer; it is not connected right now."],
-		["bus_send_topic", sent({ to: "lead", delivery: "queued" }, { to: "peer", delivery: "live" }), "Delivered to 2 subscriber(s): peer live, lead queued."],
-		["bus_send_topic", sent(), "Delivered to 0 subscriber(s)."],
-	])("%s with %j reads %p", (tool, result, text) => {
-		expect(receiptText(tool, result)).toBe(text);
+		["direct", sent({ to: "peer", delivery: "live" }), "Delivered to peer."],
+		["direct", sent({ to: "peer", delivery: "queued" }), "Queued for peer; it is not connected right now."],
+		["topic", sent({ to: "lead", delivery: "queued" }, { to: "peer", delivery: "live" }), "Delivered to 2 subscriber(s): peer live, lead queued."],
+		["topic", sent(), "Delivered to 0 subscriber(s)."],
+	] as const)("%s with %j reads %p", (kind, result, text) => {
+		expect(receiptText(kind, result)).toBe(text);
 	});
 
 	test("unknown fields of the result and of a receipt are ignored", () => {
 		const result = { ok: true, extra: 1, receipts: [{ to: "peer", delivery: "live", since: "now" }] };
-		expect(receiptText("bus_send_direct", result)).toBe("Delivered to peer.");
+		expect(receiptText("direct", result)).toBe("Delivered to peer.");
 	});
 
-	test("a result without valid receipts, or of another tool, has no receipt text", () => {
-		expect(receiptText("bus_send_direct", { ok: true })).toBeUndefined();
-		expect(receiptText("bus_send_direct", sent())).toBeUndefined();
-		expect(receiptText("bus_send_direct", sent({ to: "peer", delivery: "parked" }))).toBeUndefined();
-		expect(receiptText("bus_send_topic", null)).toBeUndefined();
-		expect(receiptText("bus_add_post", { postId: 7, ...sent({ to: "peer", delivery: "live" }) })).toBeUndefined();
+	test("a result without valid receipts has no receipt text", () => {
+		expect(receiptText("direct", { ok: true })).toBeUndefined();
+		expect(receiptText("direct", sent())).toBeUndefined();
+		expect(receiptText("direct", sent({ to: "peer", delivery: "parked" }))).toBeUndefined();
+		expect(receiptText("topic", null)).toBeUndefined();
 	});
 });

@@ -4,14 +4,12 @@ import type { BusClient, RemoteTool } from "../bus/client.ts";
 import type { ActiveCredentials } from "../bus/credentials.ts";
 import { errorMessage, NOT_LOGGED_IN } from "../bus/errors.ts";
 import { toZod } from "../bus/schema.ts";
-import { fixedSender, isSendTool, outgoingCard, sentMessage } from "../render/outgoing-card.ts";
+import { fixedSender, outgoingCard, sentMessage } from "../render/outgoing-card.ts";
 import { receiptText } from "../render/send-receipt.ts";
 import { THREAD_TOOL, threadView } from "../render/thread-view.ts";
 import { toolResult } from "./tool-result.ts";
-import { attribute, ATTRIBUTED_TOOLS } from "./attribution.ts";
-import { changesMembership } from "./membership-refresh.ts";
-import { presentationOf } from "./presentation.ts";
-import { selectTools } from "./tool-selection.ts";
+import { attribute } from "./attribution.ts";
+import { policyOf, presentationOf, selectTools } from "./tool-policy.ts";
 import { WAIT_TOOL, type WaitToolDeps, waitToolDefinition } from "./wait-tool.ts";
 
 /** Per-session registration: tools are fetched and registered once; logout does not reset it. */
@@ -28,7 +26,7 @@ export interface RemoteToolsOptions {
 	state: RegistrationState;
 	/** Reports a tool that could not be registered; the other tools still register. */
 	warn: (message: string) => void;
-	/** The kind of the session: a subagent gets the allow-list of `tool-selection.ts`. */
+	/** The kind of the session: a subagent gets the allow-list of `tool-policy.ts`. */
 	kind: "main" | "sub";
 	/** The id of the subagent that writes through this session; undefined in a main session. */
 	agentId?: string;
@@ -62,10 +60,11 @@ async function callRemote(tool: RemoteTool, params: Record<string, unknown>, opt
 	const { client, getActive, kind, agentId } = options;
 	const current = getActive();
 	if (!current) throw new Error(NOT_LOGGED_IN);
-	const attributed = kind === "sub" && agentId && ATTRIBUTED_TOOLS.includes(tool.name) ? attribute(params, agentId) : params;
-	const result = await client.callTool(current.url, current.token, tool.name, attributed);
+	const { attributed, refreshesMembership } = policyOf(tool.name);
+	const args = kind === "sub" && agentId && attributed ? attribute(params, agentId) : params;
+	const result = await client.callTool(current.url, current.token, tool.name, args);
 	if (tool.name === THREAD_TOOL && typeof params.space === "string" && typeof params.threadId === "number") options.threadRead?.(params.space, params.threadId);
-	if (changesMembership(tool.name)) await options.membershipChanged?.();
+	if (refreshesMembership) await options.membershipChanged?.();
 	return result;
 }
 
@@ -75,12 +74,14 @@ type Rendering = Pick<Parameters<ExtensionAPI["registerTool"]>[0], "renderCall" 
 function rendering(pi: ExtensionAPI, tool: RemoteTool, self: RemoteToolsOptions["self"]): Rendering {
 	const { name } = tool;
 	if (name === THREAD_TOOL) return { renderResult: (result, { expanded }, theme) => threadView(pi.pi, result, expanded, theme) };
-	if (!isSendTool(name)) return {};
+	const { send } = policyOf(name);
+	if (!send) return {};
 	const sender = fixedSender(self ?? (() => undefined));
-	return { renderCall: (args, { expanded, isPartial }, theme) => outgoingCard(pi.pi, sentMessage(name, args, sender(args, isPartial)), expanded, theme) };
+	return { renderCall: (args, { expanded, isPartial }, theme) => outgoingCard(pi.pi, sentMessage(send, args, sender(args, isPartial)), expanded, theme) };
 }
 
 function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, options: RemoteToolsOptions): Parameters<ExtensionAPI["registerTool"]>[0] {
+	const { send } = policyOf(tool.name);
 	return {
 		name: tool.name,
 		label: tool.name,
@@ -88,7 +89,8 @@ function toolDefinition(pi: ExtensionAPI, tool: RemoteTool, options: RemoteTools
 		parameters: toZod(tool.inputSchema, pi.zod),
 		...presentationOf(tool.name),
 		...rendering(pi, tool, options.self),
-		execute: (_toolCallId: string, params: Record<string, unknown>) => toolResult(() => callRemote(tool, params, options), value => receiptText(tool.name, value)),
+		execute: (_toolCallId: string, params: Record<string, unknown>) =>
+			toolResult(() => callRemote(tool, params, options), value => (send ? receiptText(send, value) : undefined)),
 	};
 }
 
