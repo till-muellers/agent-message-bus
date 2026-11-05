@@ -2,9 +2,10 @@
  * Layout fitness: the extension's module folders and the import graph between them (`docs/design/arch/client.md` §1).
  *
  * Every module file under `extension/lib/` must live in one of the feature folders, the import graph must stay
- * acyclic, `bus/` and `process/` must stay leaves, `render/` must not reach into `delivery/` and only the wiring
- * root may see the whole graph. The allowed edges are the ones `client.md` §1.3 lists plus the edges the
- * not-yet-refactored code still has; each of those disappears with the slice that moves the module holding it.
+ * acyclic, `bus/` and `process/` must stay leaves, `render/` must not reach into `delivery/`, only
+ * `render/entry-label.ts` interprets the entry types (§4.2) and only the wiring root may see the whole graph. The
+ * allowed edges are the ones `client.md` §1.3 lists plus the edges the not-yet-refactored code still has; each of
+ * those disappears with the slice that moves the module holding it.
  * Test files mirror those folders, and only `fakes.ts` (`useTempDirs`, which removes them) makes temp dirs.
  */
 import { describe, expect, test } from "bun:test";
@@ -219,6 +220,14 @@ describe("extension layout", () => {
 		const offenders = EDGES.filter(edge => BY_PATH.get(edge.from)?.folder === "render" && BY_PATH.get(edge.to)?.folder === "delivery").map(
 			edge => `${relative(EXTENSION, edge.from)} -> ${relative(EXTENSION, edge.to)}`,
 		);
+		expect(offenders).toEqual([]);
+	});
+
+	test("only bus/entry.ts and render/entry-label.ts name the entry types", () => {
+		const types = /\b(direct_message|topic_message|topic_closed|thread_post|thread_removed|blackboard_removed)\b/;
+		const offenders = MODULES.filter(module => module.rel !== "lib/bus/entry.ts" && module.rel !== "lib/render/entry-label.ts")
+			.filter(module => types.test(readFileSync(module.path, "utf8")))
+			.map(module => module.rel);
 		expect(offenders).toEqual([]);
 	});
 

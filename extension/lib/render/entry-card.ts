@@ -7,6 +7,7 @@
 import type { ExtensionAPI, MessageRenderer, Theme } from "@oh-my-pi/pi-coding-agent";
 import type { Entry } from "../bus/entry.ts";
 import { BUS_MESSAGE_TYPE, type BusMessageDetails } from "./details.ts";
+import { labelOf } from "./entry-label.ts";
 import { bodyLines, printable } from "./quote.ts";
 
 /** The TUI components a card is built from (`pi.pi`). */
@@ -16,20 +17,19 @@ type Card = InstanceType<CardComponents["Container"]>;
 export type CardTheme = Pick<Theme, "fg" | "bold">;
 
 function where(e: Entry): string {
+	const { about, ended } = labelOf(e);
 	const title = printable((e.threadTitle ?? "").replace(/\s+/g, " ")).replaceAll('"', '\\"');
-	switch (e.type) {
-		case "direct_message":
+	switch (about) {
+		case "direct":
 			return "direct";
-		case "topic_message":
-			return `#${e.topic}`;
-		case "topic_closed":
-			return `#${e.topic} closed`;
-		case "thread_post":
-			return `${e.blackboard} / ${e.threadId} "${title}"`;
-		case "thread_removed":
-			return `${e.blackboard} / ${e.threadId} removed`;
-		case "blackboard_removed":
+		case "topic":
+			return ended ? `#${e.topic} closed` : `#${e.topic}`;
+		case "thread":
+			return ended ? `${e.blackboard} / ${e.threadId} removed` : `${e.blackboard} / ${e.threadId} "${title}"`;
+		case "blackboard":
 			return `${e.blackboard} removed`;
+		case "other":
+			return printable(e.type.replace(/\s+/g, " "));
 	}
 }
 

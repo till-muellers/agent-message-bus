@@ -5,39 +5,42 @@
  * criticality come from the entry's fields, never from its body.
  */
 import type { Entry } from "../bus/entry.ts";
+import { labelOf } from "./entry-label.ts";
 import { escapeBody, escapeTitle } from "./escape.ts";
 
 function where(e: Entry): string {
+	const { about, ended } = labelOf(e);
 	const title = escapeTitle(e.threadTitle ?? "");
-	switch (e.type) {
-		case "direct_message":
+	switch (about) {
+		case "direct":
 			return "direct";
-		case "topic_message":
-			return `topic #${e.topic}`;
-		case "topic_closed":
-			return `topic #${e.topic} closed`;
-		case "thread_post":
-			return `thread ${e.threadId} "${title}" on ${e.blackboard}`;
-		case "thread_removed":
-			return `thread ${e.threadId} "${title}" removed`;
-		case "blackboard_removed":
+		case "topic":
+			return ended ? `topic #${e.topic} closed` : `topic #${e.topic}`;
+		case "thread":
+			return ended ? `thread ${e.threadId} "${title}" removed` : `thread ${e.threadId} "${title}" on ${e.blackboard}`;
+		case "blackboard":
 			return `blackboard ${e.blackboard} removed`;
+		case "other":
+			return escapeTitle(e.type);
 	}
 }
 
-/** How to answer the entry; lifecycle notices have nothing to answer. */
+/** How to answer the entry; lifecycle notices and entries of an unknown type have nothing to answer. */
 function replyHint(e: Entry): string | undefined {
+	const { about, ended } = labelOf(e);
+	if (ended) return undefined;
 	const direct = `bus_send_direct {space: "${e.space}", to: "${e.from}"}`;
-	switch (e.type) {
-		case "direct_message":
+	switch (about) {
+		case "direct":
 			return `Reply: ${direct}.`;
-		case "topic_message":
+		case "topic":
 			// Members cannot send to `all`: a broadcast is answered directly.
 			if (e.topic === "all") return `Reply: ${direct}.`;
 			return `Reply: bus_send_topic {space: "${e.space}", topic: "${e.topic}"}, or ${direct}.`;
-		case "thread_post":
+		case "thread":
 			return `Full thread: bus_read_thread {space: "${e.space}", threadId: ${e.threadId}}. Answer: bus_add_post {space: "${e.space}", threadId: ${e.threadId}}.`;
-		default:
+		case "blackboard":
+		case "other":
 			return undefined;
 	}
 }

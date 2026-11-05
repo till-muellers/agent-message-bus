@@ -1,6 +1,6 @@
 /** The inbox ledger: delivery state and acks of one connection start (`client.md` §3.3–§3.5). */
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test";
-import type { Entry } from "../../extension/lib/bus/entry.ts";
+import type { Entry, EntryType } from "../../extension/lib/bus/entry.ts";
 import type { Mechanism, SessionPhase } from "../../extension/lib/delivery/delivery-class.ts";
 import { createInboxLedger, type InboxLedger } from "../../extension/lib/delivery/inbox-ledger.ts";
 import type { BusMessage } from "../../extension/lib/render/details.ts";
@@ -273,6 +273,14 @@ describe("the inbox ledger: blackboard notices", () => {
 		const { it, notices } = ledger("interactive-busy");
 		it.deliver(entry(1, { type: "thread_removed", threadId: 7, class: "deferred", body: undefined }));
 		expect(notices()).toEqual([[[1], "nextTurn"]]);
+	});
+
+	test("a new entry type needs no client change: it is delivered by its class and acked once consumed", () => {
+		const { it, notices, acks } = ledger("interactive-idle");
+		it.deliver(entry(1, { type: "space_renamed" as string as EntryType, class: "deferred", body: "demo is now prod" }));
+		expect(notices()).toEqual([[[1], "nextTurn"]]);
+		it.consumed([1]);
+		expect(acks).toEqual([1]);
 	});
 
 	test("held entries are returned at once by takeHeld, consumed, and never handed to omp afterwards", () => {
