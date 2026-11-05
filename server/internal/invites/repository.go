@@ -113,6 +113,9 @@ func selectPending(ctx context.Context, q db.DBTX, spaceID, now int64) ([]Pendin
 // countOpen counts, per space of spaceIDs, the invites still open at now (unix seconds) in
 // one query; spaces without open invites are absent.
 func countOpen(ctx context.Context, q db.DBTX, spaceIDs []int64, now int64) (map[int64]int, error) {
+	if len(spaceIDs) == 0 {
+		return map[int64]int{}, nil
+	}
 	list, err := json.Marshal(spaceIDs)
 	if err != nil {
 		return nil, fmt.Errorf("encoding space ids: %w", err)
