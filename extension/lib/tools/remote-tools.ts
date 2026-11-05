@@ -6,11 +6,11 @@ import { errorMessage, NOT_LOGGED_IN } from "../bus/errors.ts";
 import { toZod } from "../bus/schema.ts";
 import { fixedSender, outgoingCard, sentMessage } from "../render/outgoing-card.ts";
 import { receiptText } from "../render/send-receipt.ts";
-import { THREAD_TOOL, threadView } from "../render/thread-view.ts";
+import { threadView } from "../render/thread-view.ts";
 import { toolResult } from "./tool-result.ts";
 import { attribute } from "./attribution.ts";
 import { policyOf, presentationOf, selectTools } from "./tool-policy.ts";
-import { WAIT_TOOL, type WaitToolDeps, waitToolDefinition } from "./wait-tool.ts";
+import { type WaitToolDeps, waitToolDefinition } from "./wait-tool.ts";
 
 /** Per-session registration: tools are fetched and registered once; logout does not reset it. */
 export interface RegistrationState {
@@ -32,7 +32,7 @@ export interface RemoteToolsOptions {
 	agentId?: string;
 	/** What the local `bus_wait` of a main session waits with; a subagent has none. */
 	wait?: WaitToolDeps;
-	/** Told after every successful `bus_read_thread`: the thread was read. */
+	/** Told after every successful thread read (a `readsThread` tool): the thread was read. */
 	threadRead?: (space: string, threadId: number) => void;
 	/** Awaited after every successful membership tool: the session's spaces changed. */
 	membershipChanged?: () => Promise<void>;
@@ -46,13 +46,16 @@ interface Registration {
 	define(): Parameters<ExtensionAPI["registerTool"]>[0];
 }
 
-/** The tools this session registers: the selected server tools and, in a main session, the local `bus_wait` on the server's schema. */
+/**
+ * The tools this session registers: the selected server tools and, in a main session, the local `bus_wait` in place of
+ * the shadowed server tool, on its name and schema (`bus_wait` is the only shadowed row).
+ */
 function registrations(pi: ExtensionAPI, tools: readonly RemoteTool[], options: RemoteToolsOptions): Registration[] {
 	const { kind, wait } = options;
-	const shadow = kind === "main" && wait ? tools.find(tool => tool.name === WAIT_TOOL) : undefined;
+	const shadow = kind === "main" && wait ? tools.find(tool => policyOf(tool.name).shadowed) : undefined;
 	const remote = selectTools(tools, kind).map(tool => ({ name: tool.name, define: () => toolDefinition(pi, tool, options) }));
 	if (!shadow || !wait) return remote;
-	return [...remote, { name: WAIT_TOOL, define: () => waitToolDefinition(pi, shadow, wait) }];
+	return [...remote, { name: shadow.name, define: () => waitToolDefinition(pi, shadow, wait) }];
 }
 
 /** Calls the server tool with the current credentials; a subagent says which subagent wrote a post. */
@@ -60,21 +63,20 @@ async function callRemote(tool: RemoteTool, params: Record<string, unknown>, opt
 	const { client, getActive, kind, agentId } = options;
 	const current = getActive();
 	if (!current) throw new Error(NOT_LOGGED_IN);
-	const { attributed, refreshesMembership } = policyOf(tool.name);
+	const { attributed, refreshesMembership, readsThread } = policyOf(tool.name);
 	const args = kind === "sub" && agentId && attributed ? attribute(params, agentId) : params;
 	const result = await client.callTool(current.url, current.token, tool.name, args);
-	if (tool.name === THREAD_TOOL && typeof params.space === "string" && typeof params.threadId === "number") options.threadRead?.(params.space, params.threadId);
+	if (readsThread && typeof params.space === "string" && typeof params.threadId === "number") options.threadRead?.(params.space, params.threadId);
 	if (refreshesMembership) await options.membershipChanged?.();
 	return result;
 }
 
 type Rendering = Pick<Parameters<ExtensionAPI["registerTool"]>[0], "renderCall" | "renderResult">;
 
-/** `bus_read_thread` renders its result as a thread; a send renders its call as an outgoing card. */
+/** A thread read renders its result as the thread view; a send renders its call as an outgoing card. */
 function rendering(pi: ExtensionAPI, tool: RemoteTool, self: RemoteToolsOptions["self"]): Rendering {
-	const { name } = tool;
-	if (name === THREAD_TOOL) return { renderResult: (result, { expanded }, theme) => threadView(pi.pi, result, expanded, theme) };
-	const { send } = policyOf(name);
+	const { send, readsThread } = policyOf(tool.name);
+	if (readsThread) return { renderResult: (result, { expanded }, theme) => threadView(pi.pi, result, expanded, theme) };
 	if (!send) return {};
 	const sender = fixedSender(self ?? (() => undefined));
 	return { renderCall: (args, { expanded, isPartial }, theme) => outgoingCard(pi.pi, sentMessage(send, args, sender(args, isPartial)), expanded, theme) };

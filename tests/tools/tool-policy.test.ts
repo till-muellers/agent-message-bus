@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { RemoteTool } from "../../extension/lib/bus/client.ts";
 import { SPAWN_TOOL } from "../../extension/lib/spawn/spawn-tool.ts";
-import { policyOf, presentationOf, selectTools, TOOL_POLICY, type ToolPolicy } from "../../extension/lib/tools/tool-policy.ts";
+import { policyOf, presentationOf, selectTools, subagentTools, TOOL_POLICY, type ToolPolicy } from "../../extension/lib/tools/tool-policy.ts";
 
 /** The server registry: the index of the generated ledger, which a Go golden test keeps in sync with it. */
 const LEDGER = resolve(import.meta.dir, "..", "..", "server", "TOOLS.md");
@@ -53,7 +53,7 @@ const PRESENTATION: [string, ToolPolicy["loadMode"], Tier][] = [
 	["bus_spawn_worker", "discoverable", "exec"],
 ];
 
-type Flag = "subagent" | "shadowed" | "attributed" | "refreshesMembership";
+type Flag = "subagent" | "shadowed" | "attributed" | "refreshesMembership" | "readsThread";
 
 /** The tools that carry each flag (`client.md` §5, §6.1, §6.3). */
 const FLAGGED: Record<Flag, string[]> = {
@@ -61,6 +61,7 @@ const FLAGGED: Record<Flag, string[]> = {
 	shadowed: ["bus_wait"],
 	attributed: ["bus_add_post", "bus_create_thread"],
 	refreshesMembership: ["bus_create_space", "bus_join_space", "bus_leave_space", "bus_delete_space"],
+	readsThread: ["bus_read_thread"],
 };
 
 const rows = (): [string, ToolPolicy][] => Object.keys(TOOL_POLICY).flatMap(name => (TOOL_POLICY[name] === "withheld" ? [] : [[name, policyOf(name)]]));
@@ -103,6 +104,10 @@ describe("the tool policy table", () => {
 
 	test("the presentation of a tool is only its load mode and approval", () => {
 		expect(presentationOf("bus_add_post")).toEqual({ loadMode: "essential", approval: "read" });
+	});
+
+	test("the subagent tools are named in the order the subagent's block lists them", () => {
+		expect(subagentTools()).toEqual(["bus_list_blackboards", "bus_list_threads", "bus_read_thread", "bus_create_thread", "bus_add_post"]);
 	});
 });
 

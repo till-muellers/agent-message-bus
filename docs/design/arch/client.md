@@ -58,7 +58,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/bus/` | HTTP wire to the server: client, SSE parser, JSON-schema→zod, error wording, the `Entry` wire type, the `ActiveCredentials` wire shape (`credentials.ts`, with `trimUrl`), `/healthz` probe | `shared/` |
 | `lib/session/` | Who this session is: credential store, env, the single credential owner, accepted identity + its file, root-identity registry, `createSession` | `bus/`, `shared/` |
 | `lib/connection/` | Connect/disconnect: restart, the session's identity and its root publication, the inbox of a connection start, tool on/off, server-protocol gate | `session/`, `tools/`, `delivery/`, `bus/`, `version/`, `render/` (status line) |
-| `lib/tools/` | Mirroring server tools: the tool policy table (selection, presentation, attribution, membership refresh, send kind), remote tool definition, local `bus_wait`, subagent attribution, tool-result shape | `bus/`, `delivery/` (wait only), `render/` (tool renderers) |
+| `lib/tools/` | Mirroring server tools: the tool policy table (selection, presentation, attribution, membership refresh, send kind, thread read), remote tool definition, local `bus_wait`, subagent attribution, tool-result shape | `bus/`, `delivery/` (wait only), `render/` (tool renderers) |
 | `lib/delivery/` | Inbox → omp: stream loop, runner, 409 warning, inbox ledger (delivery state and ack watermark of one start), entry routing, delivery policy, acker, consumption observer, post-notice coalescing, `pi.events` publishing | `bus/`, `render/` |
 | `lib/render/` | What the model and the user see: entry labels, envelope text, escaping, message details, card renderer, tool call/result renderers, status line | `bus/` (the entry and its delivery class) |
 | `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `delivery/` (consumption observer is composed here) |
@@ -479,9 +479,9 @@ export interface IdentityCache {
 export function createGuide(fetchGuide: () => Promise<string>, warn: (m: string) => void): { text(): string | undefined; load(): Promise<void> };
 // lib/context/context-block.ts — pure text
 export function mainBlock(id: BusIdentity, guide: string | undefined): string;
-export function subagentBlock(id: BusIdentity, agentId: string): string;
+export function subagentBlock(id: BusIdentity, agentId: string, tools: readonly string[]): string; // tools: `subagentTools()` of §6.1, passed in by session/session.ts (context/ does not import tools/)
 // lib/context/bus-context.ts — identity cache + guide → block text; built by session/session.ts: the connection's `connected(ok)` hook refreshes it on every restart before the inbox stream opens (so a turn a streamed entry starts has the block) and clears it when the server is not connected; logout clears it
-export function createBusContext(deps: { client: BusClient; getActive(): ActiveCredentials | undefined; warn(m: string): void; isSub(): boolean; agentId(): string | undefined }):
+export function createBusContext(deps: { client: BusClient; getActive(): ActiveCredentials | undefined; warn(m: string): void; isSub(): boolean; agentId(): string | undefined; subagentTools: readonly string[] }):
 	{ refresh(): Promise<void>; refreshIdentity(): Promise<void>; clear(): void; block(): string | undefined };
 // lib/context/context-handler.ts
 export function createContextHandler(deps: {
@@ -508,12 +508,13 @@ omp enables every tool a subagent's own extension instance registers unless it i
 
 ```ts
 // lib/tools/tool-policy.ts — pure (R7: one table keyed by tool name, §7)
-export interface ToolPolicy extends Presentation { subagent?: true; shadowed?: true; attributed?: true; refreshesMembership?: true; send?: SendKind; }
-export const TOOL_POLICY: Readonly<Record<string, ToolPolicy | "withheld">>; // bus_wait: shadowed (local tool in omp, E6); bus_inbox_ack: "withheld" (extension owns the ack, E7)
+export interface ToolPolicy extends Presentation { subagent?: true; shadowed?: true; attributed?: true; refreshesMembership?: true; send?: SendKind; readsThread?: true; }
+export const TOOL_POLICY: Readonly<Record<string, ToolPolicy | "withheld">>; // bus_wait: shadowed (local tool in omp, E6); bus_read_thread: readsThread (thread view, status line); bus_inbox_ack: "withheld" (extension owns the ack, E7)
 export function selectTools(remote: readonly RemoteTool[], kind: "main" | "sub"): RemoteTool[];
+export function subagentTools(): string[]; // the `subagent` rows in table order, for the subagent's block (§5)
 ```
 
-- Main: everything except the `shadowed` and the `"withheld"` rows. Sub: exactly the `subagent` rows ∩ remote (`bus_list_blackboards`, `bus_list_threads`, `bus_read_thread`, `bus_create_thread`, `bus_add_post`; an allow-list, so a future server tool stays main-only).
+- Main: everything except the `shadowed` and the `"withheld"` rows; `registerRemoteTools` puts the local `bus_wait` in place of the `shadowed` server tool. Sub: exactly the `subagent` rows ∩ remote (`bus_list_blackboards`, `bus_list_threads`, `bus_read_thread`, `bus_create_thread`, `bus_add_post`; an allow-list, so a future server tool stays main-only). A `readsThread` row renders its result as the thread view (`render/thread-view.ts`) and a successful call clears the thread in the status line (§3.5).
 - **Local tools** never reach a subagent instance (`omp-subagents.feature:39-75` requires "does not register", not just "inactive"): `bus_spawn_worker` moves from load time (`extension/index.ts:202`) to the first `session_start` with `ctx.agent.kind === "main"` (`types.ts:522-540`); the local `bus_wait` is registered by `registerRemoteTools` in main sessions only (§3.4). Flags stay registered at load (omp parses them before `session_start`).
 - Restricted subagents (seance) bind no extension tools at all (`CA/sdk.ts:3546, 5062`); nothing to do.
 

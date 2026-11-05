@@ -1,9 +1,9 @@
 /**
  * The extension's policy per bus tool, one row per tool it knows (`docs/design/arch/client.md` §5-7, `omp-tools.feature`
  * rules 1-2, PO-2): how omp presents it, whether a subagent gets it, whether omp's own local tool shadows it, whether a
- * subagent's body is attributed, whether it changes the session's spaces and whether it sends a message. The messaging
- * and blackboard core are top-level (`essential`), the rest is found through tool search; reads, sends, posts and thread
- * creation need `read` approval, management `write`, starting a worker `exec`.
+ * subagent's body is attributed, whether it changes the session's spaces, whether it sends a message and whether it
+ * reads a thread. The messaging and blackboard core are top-level (`essential`), the rest is found through tool search;
+ * reads, sends, posts and thread creation need `read` approval, management `write`, starting a worker `exec`.
  */
 import type { RemoteTool } from "../bus/client.ts";
 import type { SendKind } from "../render/outgoing-card.ts";
@@ -25,6 +25,8 @@ export interface ToolPolicy extends Presentation {
 	refreshesMembership?: true;
 	/** It sends a message: its call renders as an outgoing card, its result as a delivery receipt of this kind. */
 	send?: SendKind;
+	/** It returns one thread: its result renders as the thread view, and a successful call marks the thread read. */
+	readsThread?: true;
 }
 
 /** A server tool the extension never registers: it owns the acknowledgement, which follows the consumption. */
@@ -40,15 +42,16 @@ export const TOOL_POLICY: Readonly<Record<string, ToolPolicy | Withheld>> = {
 	bus_send_direct: essential("read", { send: "direct" }),
 	bus_send_topic: essential("read", { send: "topic" }),
 	bus_wait: essential("read", { shadowed: true }),
-	bus_read_thread: essential("read", { subagent: true }),
+	// The blackboard tools, a subagent's allow-list, in the order the subagent's context block names them.
+	bus_list_blackboards: discoverable("read", { subagent: true }),
+	bus_list_threads: discoverable("read", { subagent: true }),
+	bus_read_thread: essential("read", { subagent: true, readsThread: true }),
+	bus_create_thread: discoverable("read", { subagent: true, attributed: true }),
 	bus_add_post: essential("read", { subagent: true, attributed: true }),
 	bus_whoami: discoverable("read"),
 	bus_list_spaces: discoverable("read"),
 	bus_list_participants: discoverable("read"),
 	bus_list_topics: discoverable("read"),
-	bus_list_blackboards: discoverable("read", { subagent: true }),
-	bus_list_threads: discoverable("read", { subagent: true }),
-	bus_create_thread: discoverable("read", { subagent: true, attributed: true }),
 	bus_inbox_read: discoverable("read"),
 	bus_inbox_ack: "withheld",
 	bus_list_admins: discoverable("read"),
@@ -87,6 +90,11 @@ export function policyOf(name: string): ToolPolicy {
 export function presentationOf(name: string): Presentation {
 	const { loadMode, approval } = policyOf(name);
 	return { loadMode, approval };
+}
+
+/** The names of the subagent's allow-list in table order, for the subagent's context block (§6.1). */
+export function subagentTools(): string[] {
+	return Object.keys(TOOL_POLICY).filter(name => policyOf(name).subagent);
 }
 
 /**

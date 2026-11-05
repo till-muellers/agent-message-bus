@@ -2,11 +2,14 @@
 import { describe, expect, test } from "bun:test";
 import { mainBlock, subagentBlock } from "../../extension/lib/context/context-block.ts";
 import type { BusIdentity } from "../../extension/lib/context/identity-cache.ts";
+import { subagentTools } from "../../extension/lib/tools/tool-policy.ts";
 
 const URL = "http://127.0.0.1:8080";
 const member: BusIdentity = { kind: "member", name: "worker", url: URL, spaces: [{ name: "demo", role: "member" }], space: "demo", leadersOfSpace: ["lead"] };
 const leader: BusIdentity = { kind: "leader", name: "lead", url: URL, spaces: [{ name: "demo", role: "leader" }, { name: "beta", role: "leader" }] };
 const admin: BusIdentity = { kind: "admin", name: "ops", url: URL, spaces: [{ name: "demo", role: "admin" }], allSpaces: ["demo", "beta"] };
+/** The subagent's tools as the session passes them: the allow-list of the tool policy table. */
+const TOOLS = subagentTools();
 
 describe("the main session's block", () => {
 	test("a member sees its identity, its space, its leaders and the guide, fenced", () => {
@@ -57,7 +60,7 @@ describe("the main session's block", () => {
 
 describe("the subagent's block", () => {
 	test("it explains what the subagent may do and as whom, without the guide", () => {
-		expect(subagentBlock(member, "0-Sub")).toBe(
+		expect(subagentBlock(member, "0-Sub", TOOLS)).toBe(
 			[
 				"<agent-bus-context>",
 				"You are a subagent of the main session that acts as member `worker` in space `demo` on the agent message bus.",
@@ -70,7 +73,11 @@ describe("the subagent's block", () => {
 	});
 
 	test("a leader's subagent sees the leader's spaces; an admin's names the admin", () => {
-		expect(subagentBlock(leader, "s")).toContain("\nYou are a subagent of the main session that acts as leader `lead` in spaces `beta`, `demo` on the agent message bus.\n");
-		expect(subagentBlock(admin, "s")).toContain("\nYou are a subagent of the main session that acts as admin `ops` on the agent message bus.\n");
+		expect(subagentBlock(leader, "s", TOOLS)).toContain("\nYou are a subagent of the main session that acts as leader `lead` in spaces `beta`, `demo` on the agent message bus.\n");
+		expect(subagentBlock(admin, "s", TOOLS)).toContain("\nYou are a subagent of the main session that acts as admin `ops` on the agent message bus.\n");
+	});
+
+	test("it names the tools it is given, in their order", () => {
+		expect(subagentBlock(member, "s", ["bus_read_thread", "bus_add_post"])).toContain("\nOn the bus you may only read and post on blackboards: bus_read_thread, bus_add_post.\n");
 	});
 });
