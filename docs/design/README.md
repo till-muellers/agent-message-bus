@@ -12,4 +12,6 @@ This folder holds the design inputs of the bus. It was committed in slice 0 so t
 
 `arch/contracts.md` and `arch/BACKLOG.md` stay **living**: they change only by pull request, when a slice changes a contract or the backlog changes. The other files are edited only when the design itself changes.
 
+`arch/review-2026-11.md` is a point-in-time architecture review (snapshot `668f73d`); it is not kept current, and accepted findings move to beads.
+
 Paths inside these documents: spec paths without a prefix (e.g. `admin/analysis.md`) are relative to `docs/design/specs/`; contract sections are `docs/design/arch/contracts.md` §n.
