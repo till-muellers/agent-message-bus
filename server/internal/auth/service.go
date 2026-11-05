@@ -13,7 +13,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-// Service authenticates bearer tokens and mints admin, leader and member tokens.
+// Service authenticates bearer tokens, mints admin, leader and member tokens and revokes them.
 type Service struct {
 	db          *sql.DB
 	adminHash   atomic.Pointer[string]

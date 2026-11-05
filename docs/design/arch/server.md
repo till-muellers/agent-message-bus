@@ -204,7 +204,7 @@ func (s *Service) Leave(ctx, p, space) error  // !m.Joined() → forbidden "not 
 //   n := countParticipants(tx, spaceID); n == 0 → deleteSpace(tx, spaceID) and drop the hook entries.
 func (s *Service) RevokeAdmin(ctx context.Context, p auth.Principal, name string) (bool, error) // admins.go [6b]
 
-type accounts interface { // Service's view of auth [R11: 2 methods, was 5]
+type accounts interface { // Service's view of auth [R11: 2 methods, was 5; spaces uses 4 auth methods in all, 2 here + 2 in memberAccounts]
     AdminAgent(ctx context.Context, q db.DBTX, name string) (id int64, found, bootstrap bool, err error) // RevokeAdmin's lookup
     Revoke(ctx context.Context, q db.DBTX, agentID int64, scope auth.Scope) (int64, error)               // InSpace on departure, Everywhere on RevokeAdmin
 }
