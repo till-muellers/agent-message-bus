@@ -14,6 +14,7 @@ import (
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/guide"
+	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
@@ -24,7 +25,7 @@ var errInternal = errors.New("internal error")
 // NewHandler returns a bearer-authenticated, stateless MCP HTTP handler serving reg. A
 // successful tool result gains a trailing "You have mail" text block when notices has one.
 // Every client receives the agent guide as the server instructions.
-func NewHandler(reg *tools.Registry, a *auth.Service, notices Noticer) http.Handler {
+func NewHandler(reg *tools.Registry, a *auth.Service, notices inbox.Noticer) http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "agent-message-bus", Version: "1"},
 		&mcp.ServerOptions{Instructions: guide.Text})
 	for _, t := range reg.List() {
@@ -36,7 +37,7 @@ func NewHandler(reg *tools.Registry, a *auth.Service, notices Noticer) http.Hand
 	return mw(h)
 }
 
-func handler(reg *tools.Registry, name string, notices Noticer) mcp.ToolHandler {
+func handler(reg *tools.Registry, name string, notices inbox.Noticer) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		p, ok := principalOf(req.Extra.TokenInfo)
 		if !ok {

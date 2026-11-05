@@ -36,7 +36,7 @@ func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, boo
 	var n Notice
 	var due bool
 	err := db.InTx(ctx, s.db, func(tx *sql.Tx) error {
-		marked, err := markNoticed(ctx, tx, p.AgentID, spaceFilter(p))
+		marked, err := markScopeNoticed(ctx, tx, p.AgentID, spaceFilter(p))
 		if err != nil || marked == 0 {
 			return err
 		}
@@ -50,18 +50,10 @@ func (s *Service) TakeNotice(ctx context.Context, p auth.Principal) (Notice, boo
 	return n, due, nil
 }
 
-// ReadMarking is Read for the agent itself (bus_inbox_read): looking counts as being told,
-// so the edges it returns are marked noticed. The web GUI uses Read, which never marks.
-func (s *Service) ReadMarking(ctx context.Context, p auth.Principal, after int64, limit int) ([]Entry, error) {
-	es, err := s.Read(ctx, p, after, limit)
-	if err != nil {
-		return nil, err
-	}
-	return es, s.markSeen(ctx, p.AgentID, es)
-}
-
-// markSeen marks the unnoticed edges among es, which agentID has just been shown, noticed.
-func (s *Service) markSeen(ctx context.Context, agentID int64, es []Entry) error {
+// MarkNoticed marks the unnoticed edges among es, which p has just been shown, noticed: an
+// agent looking at its own entries counts as told (bus_inbox_read reads, then marks;
+// bus_wait and the stream mark what they return). The web GUI only reads, so it never marks.
+func (s *Service) MarkNoticed(ctx context.Context, p auth.Principal, es []Entry) error {
 	if len(es) == 0 {
 		return nil
 	}
@@ -69,5 +61,5 @@ func (s *Service) markSeen(ctx context.Context, agentID int64, es []Entry) error
 	for i, e := range es {
 		ids[i] = e.ID
 	}
-	return markEntriesNoticed(ctx, s.db, agentID, ids)
+	return markEntriesNoticed(ctx, s.db, p.AgentID, ids)
 }

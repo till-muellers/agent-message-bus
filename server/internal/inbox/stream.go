@@ -44,7 +44,7 @@ func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, la
 			}
 			lastSent = e.ID
 		}
-		if err := s.markSeen(ctx, p.AgentID, page); err != nil {
+		if err := s.MarkNoticed(ctx, p, page); err != nil {
 			return lastSent, err
 		}
 	}

@@ -11,8 +11,13 @@ var looks = map[string]func(t *testing.T, w *world, after int64) []string{
 	"Read": func(t *testing.T, w *world, after int64) []string {
 		return mustEntries(t, "Read")(w.svc.Read(t.Context(), w.principals["memberA"], after, 0))
 	},
-	"ReadMarking": func(t *testing.T, w *world, after int64) []string {
-		return mustEntries(t, "ReadMarking")(w.svc.ReadMarking(t.Context(), w.principals["memberA"], after, 0))
+	"Read+MarkNoticed": func(t *testing.T, w *world, after int64) []string {
+		p := w.principals["memberA"]
+		es, err := w.svc.Read(t.Context(), p, after, 0)
+		if err == nil {
+			err = w.svc.MarkNoticed(t.Context(), p, es)
+		}
+		return mustEntries(t, "Read+MarkNoticed")(es, err)
 	},
 	"Wait": func(t *testing.T, w *world, after int64) []string {
 		q := WaitQuery{After: after, Timeout: time.Second}
@@ -41,7 +46,7 @@ func mustEntries(t *testing.T, what string) func([]Entry, error) []string {
 }
 
 // TestWebReadDoesNotMark: Read (the web GUI's listing) leaves the edge unnoticed, while
-// the marking paths (bus_inbox_read, bus_wait, the SSE stream) mark the edge they return.
+// the marking paths (bus_inbox_read: Read+MarkNoticed, bus_wait, the SSE stream) mark the edge they return.
 func TestWebReadDoesNotMark(t *testing.T) {
 	t.Parallel()
 	for name, look := range looks {
@@ -60,7 +65,7 @@ func TestWebReadDoesNotMark(t *testing.T) {
 // TestMarkingOnlyReturnedEdges: a look that does not return the edge leaves it unnoticed.
 func TestMarkingOnlyReturnedEdges(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"ReadMarking", "Wait", "stream"} {
+	for _, name := range []string{"Read+MarkNoticed", "Wait", "stream"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			w := emptyWorld(t)
