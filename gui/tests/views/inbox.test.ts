@@ -10,15 +10,16 @@ function shown(node: VChild): string {
 	return typeof node === "string" ? node : node.children.map(shown).join("");
 }
 
+const ops = { kind: "admin", name: "ops" } as const;
+
 function rowsOf(list: Entry[]): string[][] {
-	return findAll(inboxView({ kind: "admin", name: "ops" }, list), byTag("tr")).map((tr) => tr.children.map(shown));
+	return findAll(inboxView(ops, list, 500), byTag("tr")).map((tr) => tr.children.map(shown));
 }
 
 const base: Entry = { id: 1, space: "demo", type: "topic_closed", from: "lead", critical: false, class: "deferred", createdAt: "2026-11-04T20:00:00Z" };
 
 describe("the inbox page", () => {
-	const ops = { kind: "admin", name: "ops" } as const;
-	const view = inboxView(ops, entries);
+	const view = inboxView(ops, entries, 500);
 
 	test("names the agent it belongs to", () => {
 		expect(findAll(view, byTag("h1")).map(textOf)).toEqual(["Inbox of admin ops"]);
@@ -39,13 +40,13 @@ describe("the inbox page", () => {
 			{ ...base, id: 3, type: "blackboard_removed", blackboard: "b" },
 		];
 		expect(rowsOf(list).slice(1).map((r) => r[3])).toEqual(["topic closed on notes", "thread removed on old", "blackboard removed on b"]);
-		expect(findAll(inboxView({ kind: "admin", name: "ops" }, list), byTag("a"))).toEqual([]);
+		expect(findAll(inboxView(ops, list, 500), byTag("a"))).toEqual([]);
 	});
 
-	test("says when the list is cut at the read limit", () => {
-		const many = Array.from({ length: 500 }, (_, i) => ({ ...base, id: i + 1 }));
-		expect(textOf(inboxView({ kind: "admin", name: "ops" }, many))).toContain("Showing the oldest 500 entries");
-		expect(textOf(view)).not.toContain("Showing the oldest");
+	test("says when the list is cut at the server's read limit", () => {
+		const three = Array.from({ length: 3 }, (_, i) => ({ ...base, id: i + 1 }));
+		expect(textOf(inboxView(ops, three, 3))).toContain("Showing the oldest 3 entries");
+		expect(textOf(inboxView(ops, three, 500))).not.toContain("Showing the oldest");
 	});
 
 	test("links a thread entry to its thread", () => {
@@ -57,7 +58,7 @@ describe("the inbox page", () => {
 	});
 
 	test("an empty inbox shows no entry", () => {
-		expect(findAll(inboxView(ops, []), byTag("tr"))).toEqual([]);
-		expect(textOf(inboxView(ops, []))).toContain("No entries.");
+		expect(findAll(inboxView(ops, [], 500), byTag("tr"))).toEqual([]);
+		expect(textOf(inboxView(ops, [], 500))).toContain("No entries.");
 	});
 });

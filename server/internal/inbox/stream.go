@@ -31,7 +31,7 @@ func (s *Service) stream(ctx context.Context, w http.ResponseWriter, p auth.Prin
 // page noticed (the stream told the agent) and returns the last id sent.
 func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, lastSent int64) (int64, error) {
 	for {
-		page, err := s.Read(ctx, p, lastSent, maxLimit)
+		page, err := s.Read(ctx, p, lastSent, MaxLimit)
 		if err != nil {
 			return lastSent, fmt.Errorf("reading inbox after %d: %w", lastSent, err)
 		}

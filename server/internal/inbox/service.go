@@ -12,9 +12,11 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
+// MaxLimit is the most entries one read returns.
+const MaxLimit = 500
+
 const (
 	defaultLimit     = 100
-	maxLimit         = 500
 	defaultHeartbeat = 20 * time.Second
 )
 
@@ -106,8 +108,8 @@ func pageSize(limit int) (int, error) {
 	if limit == 0 {
 		return defaultLimit, nil
 	}
-	if limit < 1 || limit > maxLimit {
-		return 0, apperr.New(apperr.Invalid, "limit must be 1..%d", maxLimit)
+	if limit < 1 || limit > MaxLimit {
+		return 0, apperr.New(apperr.Invalid, "limit must be 1..%d", MaxLimit)
 	}
 	return limit, nil
 }

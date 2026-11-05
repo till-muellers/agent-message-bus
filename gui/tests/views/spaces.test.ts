@@ -22,9 +22,15 @@ describe("the space list", () => {
 		expect(links).toEqual(["#/spaces/demo", "#/spaces/other"]);
 	});
 
-	test("without leader rights there is no invites column", () => {
-		const list = { ...spaceList, spaces: spaceList.spaces.map(({ invites: _, ...rest }) => rest) };
+	test("without leader rights there is no invites column, even with invite counts in the state", () => {
+		const list = { ...spaceList, spaces: spaceList.spaces.map((space) => ({ ...space, mayManage: false })) };
 		expect(rows(list)[0]).toEqual(["Space", "Leaders", "Admins", "Members"]);
+	});
+
+	test("a space the session may not manage has an empty invites cell, even with a count in the state", () => {
+		const spaces = spaceList.spaces.map((space) => (space.name === "other" ? { ...space, mayManage: false, invites: 3 } : space));
+		const list = { ...spaceList, spaces };
+		expect(rows(list).map((r) => r[4])).toEqual(["Open invites", "1", ""]);
 	});
 
 	test("rows are keyed by space name, in the server's order", () => {
@@ -34,7 +40,7 @@ describe("the space list", () => {
 	});
 
 	test("no space says so", () => {
-		const view = spacesView({ spaces: [], inboxWaiting: 0 });
+		const view = spacesView({ spaces: [], inboxWaiting: 0, maxInboxLimit: 500 });
 		expect(findAll(view, byTag("table"))).toEqual([]);
 		expect(textOf(view)).toContain("No spaces");
 	});

@@ -16,7 +16,7 @@ export function loadView(reads: Reads, route: Route): Promise<ViewData> | undefi
 		case "thread":
 			return reads.thread(route.space, route.threadId).then((thread) => ({ kind: "thread", space: route.space, thread }));
 		case "inbox":
-			return reads.inbox().then((entries) => ({ kind: "inbox", entries }));
+			return reads.inbox().then((read) => ({ kind: "inbox", ...read }));
 		case "admins":
 			return reads.admins().then((admins) => ({ kind: "admins", admins }));
 		case "not-found":

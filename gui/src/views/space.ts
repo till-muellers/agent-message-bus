@@ -27,9 +27,10 @@ function button(key: string, label: string, click: () => void): VNode {
 	return h("button", { type: "button", key, on: { click } }, label);
 }
 
-/** Admins cannot be revoked from a space; members can, and leaders by an admin, after a confirmation. */
+/** Members can be revoked, and leaders by an admin, after a confirmation; admins and roles the GUI does not know cannot. */
 function revokeButton(page: Page, p: Participant): ChildArg {
-	if (!page.lead || p.role === "admin" || (p.role === "leader" && !page.admin)) return null;
+	const revocable = p.role === "member" || (p.role === "leader" && page.admin);
+	if (!page.lead || !revocable) return null;
 	return button(`revoke-${p.name}`, "Revoke", () => page.intents.ask({ kind: "revoke", space: page.space, name: p.name, role: p.role }));
 }
 
@@ -75,10 +76,10 @@ function deletion(page: Page): VNode {
 	return h("section", { key: "delete" }, h("h2", null, "Delete the space"), button("delete-space", "Delete space", ask));
 }
 
-/** A space: participants, topics with the send form and, with leader rights, invites, revoke and delete. */
+/** A space: participants, topics with the send form and, with leader rights (mayManage), invites, revoke and delete. */
 export function spaceView(detail: SpaceDetail, intents: SpaceViewIntents, admin: boolean): VNode {
 	const o = detail.overview;
-	const page: Page = { space: o.space, lead: detail.invites !== undefined, admin, intents };
+	const page: Page = { space: o.space, lead: detail.mayManage, admin, intents };
 	return h(
 		"div",
 		{ key: `space-${o.space}` },
@@ -87,6 +88,6 @@ export function spaceView(detail: SpaceDetail, intents: SpaceViewIntents, admin:
 		topics(o, page),
 		blackboards(o),
 		recentThreads(o),
-		detail.invites === undefined ? null : [invites(detail.invites, page), deletion(page)],
+		page.lead ? [invites(detail.invites ?? [], page), deletion(page)] : null,
 	);
 }

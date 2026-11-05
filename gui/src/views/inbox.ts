@@ -1,4 +1,3 @@
-import { INBOX_LIMIT } from "../api/decode-inbox.ts";
 import type { Entry, Identity } from "../api/types.ts";
 import { hrefOf } from "../router/routes.ts";
 import { type ChildArg, h, type VNode } from "../view/h.ts";
@@ -21,14 +20,14 @@ function kind(e: Entry): ChildArg[] {
 	return about === undefined ? [label] : [`${label} on `, about];
 }
 
-function entries(list: readonly Entry[]): ChildArg {
+function entries(list: readonly Entry[], limit: number): ChildArg {
 	if (list.length === 0) return h("p", null, "No entries.");
 	const rows = list.map((e) => ({ key: String(e.id), cells: [time(e.createdAt), e.space, e.from, kind(e), e.body ?? ""] }));
-	const cut = list.length >= INBOX_LIMIT ? h("p", null, `Showing the oldest ${INBOX_LIMIT} entries; newer ones are not shown.`) : null;
+	const cut = list.length >= limit ? h("p", null, `Showing the oldest ${limit} entries; newer ones are not shown.`) : null;
 	return [table(["Time", "Space", "From", "Kind", "Message"], rows), cut];
 }
 
-/** The signed-in agent's own inbox, read-only: no acknowledge, entries stay for the agent session. */
-export function inboxView(identity: Identity, list: readonly Entry[]): VNode {
-	return h("section", { key: "inbox" }, h("h1", null, `Inbox of ${identity.kind} ${identity.name}`), entries(list));
+/** The signed-in agent's own inbox, read-only: no acknowledge, entries stay for the agent session; limit is the server's read limit. */
+export function inboxView(identity: Identity, list: readonly Entry[], limit: number): VNode {
+	return h("section", { key: "inbox" }, h("h1", null, `Inbox of ${identity.kind} ${identity.name}`), entries(list, limit));
 }

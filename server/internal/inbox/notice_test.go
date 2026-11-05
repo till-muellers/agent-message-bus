@@ -42,7 +42,7 @@ func (w *world) deliver(t *testing.T, fail bool, es ...Entry) {
 	if fail {
 		return
 	}
-	stored, rerr := selectEntries(t.Context(), w.db, es[0].AgentID, 0, 0, maxLimit)
+	stored, rerr := selectEntries(t.Context(), w.db, es[0].AgentID, 0, 0, MaxLimit)
 	if rerr != nil {
 		t.Fatalf("reading delivered entries: %v", rerr)
 	}

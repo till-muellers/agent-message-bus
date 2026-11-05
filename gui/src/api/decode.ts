@@ -1,5 +1,5 @@
 import { ApiError } from "./api-error.ts";
-import { AGENT_KINDS, type SessionInfo } from "./types.ts";
+import type { SessionInfo } from "./types.ts";
 
 /** Narrows a parsed JSON body to T or throws ApiError(0, "invalid_response"). */
 export type Decoder<T> = (json: unknown) => T;
@@ -45,12 +45,6 @@ export function optionalCount(obj: Fields, key: string, what: string): number | 
 	return obj[key] === undefined ? undefined : count(obj, key, what);
 }
 
-export function oneOf<T extends string>(obj: Fields, key: string, allowed: readonly T[], what: string): T {
-	const match = allowed.find((value) => value === obj[key]);
-	if (match === undefined) throw invalid(`${what}.${key} is not one of ${allowed.join(", ")}`);
-	return match;
-}
-
 /** obj[key] as a list, each element narrowed by item (which gets the element's path for messages). */
 export function list<T>(obj: Fields, key: string, what: string, item: (json: unknown, what: string) => T): T[] {
 	return listOf(obj[key], `${what}.${key}`, item);
@@ -70,7 +64,7 @@ export function textItem(json: unknown, what: string): string {
 export const decodeSession: Decoder<SessionInfo> = (json) => {
 	const body = fields(json, "session");
 	const space = optionalText(body, "space", "session");
-	const kind = oneOf(body, "kind", AGENT_KINDS, "session");
+	const kind = text(body, "kind", "session");
 	const name = text(body, "name", "session");
 	return { identity: space === undefined ? { kind, name } : { kind, name, space }, csrf: text(body, "csrf", "session") };
 };

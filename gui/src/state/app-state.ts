@@ -1,5 +1,5 @@
 import type { ApiError } from "../api/api-error.ts";
-import type { Identity, Role } from "../api/types.ts";
+import type { Identity } from "../api/types.ts";
 import type { ViewData } from "./view-data.ts";
 
 export type Route =
@@ -36,7 +36,7 @@ export interface AppState {
 	confirm?: PendingConfirm;
 }
 
-export type PendingConfirm = { kind: "revoke"; space: string; name: string; role: Role } | { kind: "delete-space"; space: string };
+export type PendingConfirm = { kind: "revoke"; space: string; name: string; role: string } | { kind: "delete-space"; space: string };
 
 export interface ShownOnce {
 	label: string;

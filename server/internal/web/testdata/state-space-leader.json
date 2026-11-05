@@ -10,6 +10,7 @@
 			"name": "new"
 		}
 	],
+	"mayManage": true,
 	"overview": {
 		"blackboards": [
 			{

@@ -73,7 +73,7 @@ function viewOf(route: Route, data: ViewData | undefined, identity: Identity, in
 		case "thread":
 			return threadView(data.space, data.thread, intents);
 		case "inbox":
-			return inboxView(identity, data.entries);
+			return inboxView(identity, data.entries, data.limit);
 		case "admins":
 			return adminsView(data.admins, intents);
 	}

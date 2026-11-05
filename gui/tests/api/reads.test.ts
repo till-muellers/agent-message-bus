@@ -8,14 +8,14 @@ const emptyOverview = { space: "a b", you: { name: "admin", role: null }, partic
 
 describe("the state reads", () => {
 	test("the space list reads GET /web/api/state", async () => {
-		const fake = fakeFetch(json(200, { you, spaces: [], inbox: { waiting: 0 } }));
+		const fake = fakeFetch(json(200, { you, spaces: [], inbox: { waiting: 0 }, maxInboxLimit: 500 }));
 		const reads = createReads(createHttp({ fetchFn: fake.fetchFn, csrf: () => undefined }));
-		expect(await reads.spaces()).toEqual({ spaces: [], inboxWaiting: 0 });
+		expect(await reads.spaces()).toEqual({ spaces: [], inboxWaiting: 0, maxInboxLimit: 500 });
 		expect(fake.requests[0]).toMatchObject({ method: "GET", path: "/web/api/state" });
 	});
 
 	test("a space reads GET /web/api/state?space= with the name encoded", async () => {
-		const fake = fakeFetch(json(200, { you, overview: emptyOverview, inbox: { waiting: 0 } }));
+		const fake = fakeFetch(json(200, { you, overview: emptyOverview, mayManage: false, inbox: { waiting: 0 } }));
 		const reads = createReads(createHttp({ fetchFn: fake.fetchFn, csrf: () => undefined }));
 		await reads.space("a b");
 		expect(fake.requests[0]?.path).toBe("/web/api/state?space=a%20b");
@@ -35,11 +35,14 @@ describe("the state reads", () => {
 		expect(fake.requests[0]?.path).toBe("/web/api/spaces/demo/threads/7");
 	});
 
-	test("the inbox reads GET /web/api/inbox and never a stream or an ack", async () => {
-		const fake = fakeFetch(json(200, []));
+	test("the inbox reads as many entries as the state allows, and never a stream or an ack", async () => {
+		const fake = fakeFetch(json(200, { you, spaces: [], inbox: { waiting: 0 }, maxInboxLimit: 250 }), json(200, []));
 		const reads = createReads(createHttp({ fetchFn: fake.fetchFn, csrf: () => undefined }));
-		expect(await reads.inbox()).toEqual([]);
-		expect(fake.requests).toEqual([expect.objectContaining({ method: "GET", path: "/web/api/inbox?limit=500" })]);
+		expect(await reads.inbox()).toEqual({ entries: [], limit: 250 });
+		expect(fake.requests).toEqual([
+			expect.objectContaining({ method: "GET", path: "/web/api/state" }),
+			expect.objectContaining({ method: "GET", path: "/web/api/inbox?limit=250" }),
+		]);
 	});
 
 	test("the admin list reads GET /web/api/admins", async () => {

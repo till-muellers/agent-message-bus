@@ -29,7 +29,4 @@ function entry(json: unknown, what: string): Entry {
 	};
 }
 
-/** The most entries one read returns; the server's maximum (contracts.md §10.2). */
-export const INBOX_LIMIT = 500;
-
 export const decodeEntries: Decoder<Entry[]> = (json) => listOf(json, "inbox", entry);

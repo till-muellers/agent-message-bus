@@ -8,11 +8,13 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
-// SpaceRow is one space of the GUI list; Invites, the open-invite count, only where the
-// caller may see invites (spaces.Membership.MaySeeInvites).
+// SpaceRow is one space of the GUI list: MayManage is the caller's leader rights in it
+// (spaces.Membership.Leads); Invites, the open-invite count, only where the caller may
+// see invites (spaces.Membership.MaySeeInvites).
 type SpaceRow struct {
 	spaces.SpaceInfo
-	Invites *int `json:"invites,omitempty"`
+	MayManage bool `json:"mayManage"`
+	Invites   *int `json:"invites,omitempty"`
 }
 
 // ListState is the GUI state without a space: the caller, the spaces it sees and how many
@@ -23,13 +25,15 @@ type ListState struct {
 	Waiting int
 }
 
-// SpaceState is the GUI state of one space: the caller, the space's overview, its open
-// invites only where the caller may see them, and the waiting entries.
+// SpaceState is the GUI state of one space: the caller, the space's overview, whether the
+// caller may manage the space, its open invites only where the caller may see them, and
+// the waiting entries.
 type SpaceState struct {
-	You      spaces.WhoamiResult
-	Overview Overview
-	Invites  *[]invites.Pending
-	Waiting  int
+	You       spaces.WhoamiResult
+	Overview  Overview
+	MayManage bool
+	Invites   *[]invites.Pending
+	Waiting   int
 }
 
 // ListState composes the GUI space list for p, counting the open invites of every space
@@ -64,7 +68,7 @@ func (s *Service) rows(ctx context.Context, listed []spaces.Listed) ([]SpaceRow,
 	}
 	rows := make([]SpaceRow, 0, len(listed))
 	for _, l := range listed {
-		row := SpaceRow{SpaceInfo: l.SpaceInfo}
+		row := SpaceRow{SpaceInfo: l.SpaceInfo, MayManage: l.Caller.Leads()}
 		if l.Caller.MaySeeInvites() {
 			n := counts[l.Caller.SpaceID]
 			row.Invites = &n
@@ -88,7 +92,7 @@ func (s *Service) SpaceState(ctx context.Context, p auth.Principal, space string
 	if err != nil {
 		return SpaceState{}, err
 	}
-	st := SpaceState{You: you, Overview: o, Waiting: waiting}
+	st := SpaceState{You: you, Overview: o, MayManage: m.Leads(), Waiting: waiting}
 	if m.MaySeeInvites() {
 		pending, err := s.inv.ListOpen(ctx, m.SpaceID)
 		if err != nil {

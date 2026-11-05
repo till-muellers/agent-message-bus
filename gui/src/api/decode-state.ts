@@ -1,16 +1,5 @@
-import { count, type Decoder, type Fields, fields, flag, list, oneOf, optionalCount, text, textItem } from "./decode.ts";
-import {
-	type Blackboard,
-	type Overview,
-	type Participant,
-	type PendingInvite,
-	ROLES,
-	type RecentThread,
-	type SpaceDetail,
-	type SpaceList,
-	type SpaceSummary,
-	type Topic,
-} from "./types.ts";
+import { count, type Decoder, type Fields, fields, flag, list, optionalCount, text, textItem } from "./decode.ts";
+import type { Blackboard, Overview, Participant, PendingInvite, RecentThread, SpaceDetail, SpaceList, SpaceSummary, Topic } from "./types.ts";
 
 // Decoders of GET /web/api/state (contracts.md §10.2). "you" is not decoded: the session names the operator.
 
@@ -23,13 +12,14 @@ function summary(json: unknown, what: string): SpaceSummary {
 		admins: list(o, "admins", what, textItem),
 		members: count(o, "members", what),
 		joined: flag(o, "joined", what),
+		mayManage: flag(o, "mayManage", what),
 	};
 	return invites === undefined ? row : { ...row, invites };
 }
 
 function participant(json: unknown, what: string): Participant {
 	const o = fields(json, what);
-	return { name: text(o, "name", what), role: oneOf(o, "role", ROLES, what), connected: flag(o, "connected", what) };
+	return { name: text(o, "name", what), role: text(o, "role", what), connected: flag(o, "connected", what) };
 }
 
 function topic(json: unknown, what: string): Topic {
@@ -82,11 +72,19 @@ function inboxWaiting(body: Fields): number {
 
 export const decodeSpaceList: Decoder<SpaceList> = (json) => {
 	const body = fields(json, "state");
-	return { spaces: list(body, "spaces", "state", summary), inboxWaiting: inboxWaiting(body) };
+	return {
+		spaces: list(body, "spaces", "state", summary),
+		inboxWaiting: inboxWaiting(body),
+		maxInboxLimit: count(body, "maxInboxLimit", "state"),
+	};
 };
 
 export const decodeSpaceDetail: Decoder<SpaceDetail> = (json) => {
 	const body = fields(json, "state");
-	const detail: SpaceDetail = { overview: overview(body.overview, "state.overview"), inboxWaiting: inboxWaiting(body) };
+	const detail: SpaceDetail = {
+		overview: overview(body.overview, "state.overview"),
+		mayManage: flag(body, "mayManage", "state"),
+		inboxWaiting: inboxWaiting(body),
+	};
 	return body.invites === undefined ? detail : { ...detail, invites: list(body, "invites", "state", pendingInvite) };
 };

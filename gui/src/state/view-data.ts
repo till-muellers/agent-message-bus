@@ -6,5 +6,5 @@ export type ViewData =
 	| { kind: "space"; detail: SpaceDetail }
 	| { kind: "board"; space: string; board: string; threads: ThreadInfo[] }
 	| { kind: "thread"; space: string; thread: Thread }
-	| { kind: "inbox"; entries: Entry[] }
+	| { kind: "inbox"; entries: Entry[]; limit: number }
 	| { kind: "admins"; admins: AdminInfo[] };
