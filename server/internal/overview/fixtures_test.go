@@ -100,11 +100,7 @@ func (w *world) thread(t *testing.T, p auth.Principal, board, title string) int6
 // overview calls bus_space_overview as p with raw JSON args.
 func (w *world) overview(ctx context.Context, t *testing.T, p auth.Principal, args string) (any, error) {
 	t.Helper()
-	tool, found := w.reg.Get("bus_space_overview")
-	if !found {
-		t.Fatal("bus_space_overview is not registered")
-	}
-	return tool.Call(ctx, p, json.RawMessage(args))
+	return w.reg.Call(ctx, p, tools.BusSpaceOverview, json.RawMessage(args))
 }
 
 // stepClock returns a clock that starts at 2026-01-01 and advances one second per call.

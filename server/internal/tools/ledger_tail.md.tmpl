@@ -15,7 +15,7 @@ A failed RPC call returns the HTTP status for its code and this envelope:
 | `conflict` | 409 | The name is taken, or the current state forbids the change (for example, the last leader leaving, or a second inbox stream for the same agent). |
 | `internal` | 500 | An unexpected server failure. The message is always `internal error`. |
 
-Over MCP, a failed call returns a tool result with `isError: true` and the text `<code>: <message>`, for example `forbidden: only leaders may send to all`. Unexpected server failures surface as a JSON-RPC error instead. The omp extension shows errors in the same `<code>: <message>` form. The rule behind each error is specified per feature in [`spec/`](spec/README.md).
+Over MCP, a failed call returns a tool result with `isError: true` and the text `<code>: <message>`, for example `forbidden: only leaders may send to all`. Unexpected server failures surface as a JSON-RPC error with the message `internal error` instead; a tool name the server doesn't serve is a JSON-RPC error raised by the MCP library. The omp extension shows errors in the same `<code>: <message>` form. The rule behind each error is specified per feature in [`spec/`](spec/README.md).
 
 ## omp extension
 

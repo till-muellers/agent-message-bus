@@ -20,13 +20,16 @@ type toolInfo struct {
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
-// NewHandler serves GET /v1/tools and POST /v1/tools/{name}; it expects auth.Middleware to run first.
-// A successful call result gains the "mail" sibling when notices has one for the caller.
-func NewHandler(reg *tools.Registry, notices Noticer) http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/tools", func(w http.ResponseWriter, _ *http.Request) { listTools(w, reg) })
-	mux.HandleFunc("POST /v1/tools/{name}", func(w http.ResponseWriter, r *http.Request) { callTool(w, r, reg, notices) })
-	return mux
+// ListTools serves GET /v1/tools: every tool's name, description and input schema.
+func ListTools(reg *tools.Registry) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { listTools(w, reg) })
+}
+
+// CallTool serves POST /v1/tools/{name} behind auth.Middleware, which has already rejected
+// a request without a principal. A successful call result gains the "mail" sibling when
+// notices has one for the caller.
+func CallTool(reg *tools.Registry, notices Noticer) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { callTool(w, r, reg, notices) })
 }
 
 func listTools(w http.ResponseWriter, reg *tools.Registry) {
@@ -39,23 +42,13 @@ func listTools(w http.ResponseWriter, reg *tools.Registry) {
 }
 
 func callTool(w http.ResponseWriter, r *http.Request, reg *tools.Registry, notices Noticer) {
-	p, ok := auth.FromContext(r.Context())
-	if !ok {
-		httpx.WriteError(w, apperr.New(apperr.Unauthenticated, "bearer token required"))
-		return
-	}
-	name := r.PathValue("name")
-	t, found := reg.Get(name)
-	if !found {
-		httpx.WriteError(w, apperr.New(apperr.NotFound, "tool %s not found", name))
-		return
-	}
+	p, _ := auth.FromContext(r.Context())
 	args, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
 	if err != nil {
 		httpx.WriteError(w, bodyError(err))
 		return
 	}
-	result, err := t.Call(r.Context(), p, args)
+	result, err := reg.Call(r.Context(), p, r.PathValue("name"), args)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return

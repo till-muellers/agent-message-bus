@@ -9,7 +9,7 @@ import (
 
 func overviewTools(o *overview.Service) []Tool {
 	return []Tool{
-		define("bus_space_overview", accessParticipantsRead,
+		define(BusSpaceOverview, accessParticipantsRead,
 			"Shows one space at a glance: you and your role, the participants, open topics with your subscriptions, "+
 				"blackboards and the 10 most recently active threads.",
 			"{space, you: {name, role}, participants: [{name, role, connected}], topics: [{name, createdBy, subscribed}], "+

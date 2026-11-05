@@ -20,9 +20,8 @@ func groupOrder() []string {
 	return []string{GroupAdmin, GroupSpaces, GroupMessaging, GroupBlackboards, GroupInbox}
 }
 
-// RenderMarkdown renders reg as the deterministic Markdown tool ledger (TOOLS.md).
-func RenderMarkdown(reg *Registry) string {
-	ts := reg.List()
+// RenderMarkdown renders ts (Metadata) as the deterministic Markdown tool ledger (TOOLS.md).
+func RenderMarkdown(ts []Meta) string {
 	groups := groupTools(ts)
 	var b strings.Builder
 	b.WriteString(strings.ReplaceAll(ledgerHead, "{{count}}", strconv.Itoa(len(ts))))
@@ -55,15 +54,15 @@ func guideSection(text string) string {
 }
 
 // groupTools buckets ts by group, keeping the registry's name order.
-func groupTools(ts []Tool) map[string][]Tool {
-	groups := map[string][]Tool{}
+func groupTools(ts []Meta) map[string][]Meta {
+	groups := map[string][]Meta{}
 	for _, tl := range ts {
 		groups[tl.Group] = append(groups[tl.Group], tl)
 	}
 	return groups
 }
 
-func writeIndex(b *strings.Builder, groups map[string][]Tool) {
+func writeIndex(b *strings.Builder, groups map[string][]Meta) {
 	b.WriteString("## Index\n\n| Tool | Group | Access | Summary |\n| :--- | :--- | :--- | :--- |\n")
 	for _, g := range groupOrder() {
 		for _, tl := range groups[g] {
@@ -75,7 +74,7 @@ func writeIndex(b *strings.Builder, groups map[string][]Tool) {
 	b.WriteString("\n")
 }
 
-func writeToolSection(b *strings.Builder, tl Tool) {
+func writeToolSection(b *strings.Builder, tl Meta) {
 	fmt.Fprintf(b, "### %s\n\n%s\n\n", tl.Name, tl.Description)
 	b.WriteString(argTable(tl.Schema))
 	fmt.Fprintf(b, "\n**Result:** `%s`\n\n", tl.Result)

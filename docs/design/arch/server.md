@@ -346,21 +346,28 @@ Consumers: `mcpserver.NewHandler(reg, a, guide.Text())` → `mcp.ServerOptions{I
 ### 3.7 `internal/tools` [3, …]
 
 ```go
-type Tool struct {
-    Name        string
-    Description string // full text served over MCP and GET /v1/tools: purpose first, contains Access
-    Access      string // exact access sentence; TOOLS.md "Access" column [3]
+type Meta struct {                 // what agents and the ledger see [R14]
+    Name        string             // one exported constant per tool: tools.BusWait, tools.BusListThreads, …
+    Description string             // full text served over MCP and GET /v1/tools: purpose first, contains Access
+    Access      string             // exact access sentence; TOOLS.md "Access" column [3]
     Result      string
     Group       string
     Schema      map[string]any
-    Call        func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error)
+    argsType    reflect.Type       // the struct Call decodes into; must match Schema [R2]
 }
+type Tool struct { Meta; Call func(ctx context.Context, p auth.Principal, args json.RawMessage) (any, error) }
+func (r *Registry) List() []Meta
+func (r *Registry) Call(ctx context.Context, p auth.Principal, name string, args json.RawMessage) (any, error)
+                                   // unknown name → not_found "tool <name> not found" [R14]
+func Metadata() []Meta             // no services: cmd/tooldoc and the golden test [R14]
+func New(d Deps) *Registry         // the runtime registry
+func Decode[T any](args json.RawMessage) (T, error) // invalid "invalid arguments: …"; web bodies too [R14]
 func define[A any](name, access, desc, result string, required []string, props map[string]any,
     call func(ctx context.Context, p auth.Principal, a A) (any, error)) Tool // access added [3]
 type Deps struct { Auth; Spaces; Messaging; Blackboards; Inbox; Invites; Overview *overview.Service /*[8]*/ }
 ```
 
-Registry test (table-driven) asserts for every tool: `Access != ""`, `strings.Contains(Description, Access)`, Description does not start with Access **[AD-3]**. `splitDescription` (`doc.go:70-77`) is deleted.
+Registry test (table-driven) asserts for every tool: `Access != ""`, `strings.Contains(Description, Access)`, Description does not start with Access **[AD-3]**. `splitDescription` (`doc.go:70-77`) is deleted. `schema_decoder_test.go` asserts that every tool's schema properties, types and `required` match its argument struct [R2].
 
 ### 3.8 Transports
 
@@ -368,8 +375,8 @@ Registry test (table-driven) asserts for every tool: `Access != ""`, `strings.Co
 |---|---|
 | `server` | `Build(ctx, streamRoot, conn, adminToken, shutdown) (api, web http.Handler, error)` — calls `authSvc.Bootstrap(ctx)` [4a]; `web` is the GUI mux (only `/web/*`) [W1a]. `protocol.go`: `const Protocol = 2`; `healthz` sets `Agent-Bus-Protocol` [7]. `httpserver.go`: `NewHTTPServer(h http.Handler) *http.Server` with only `ReadHeaderTimeout: 10s`, so `bus_wait` and streams are never cut by a write/idle timeout (CR-7, `contracts.md` §2.5) [9]; reused for the GUI server [W1a]. `run.go`: `Run` serves the API and the GUI server on their own listeners via `httpserver.Serve` and shuts both down gracefully; the first error stops both [W1a]. `GET /v1/guide` [11]. |
 | `admin` | token-swap handler requires `p.Bootstrap` else `forbidden "only the bootstrap admin may replace the instance admin token"`; shutdown: any admin [6a] |
-| `rpc` | success body `{"result": …, "mail"?: Notice}` via `inbox.TakeNotice` [13b] |
-| `mcpserver` | `NewHandler(reg, a, instructions string)` [11]; trailing hint `TextContent` [13b] |
+| `rpc` | success body `{"result": …, "mail"?: Notice}` via `inbox.TakeNotice` [13b]; `ListTools(reg)` and `CallTool(reg, notices)` are mounted by `server.Routes` behind `auth.Middleware`, with no route table or principal check of their own [R14] |
+| `mcpserver` | `NewHandler(reg, a, instructions string)` [11]; trailing hint `TextContent` [13b]; tools run through `reg.Call`; an error without kind is logged and fails the call as the protocol error `internal error`, without its detail, like the HTTP 500 [R14] |
 | `web` (new) | see §5 |
 
 ---
@@ -441,7 +448,7 @@ Rules kept: no feature imports a transport; `invites` still does not import `spa
 | `mutations.go` | invite / revoke (confirm) / post / send / delete space (confirm) via registry; one `slog.Info "web mutation"` line each (PO-1, PO-4) [W3] |
 | `invites.go` | `GET /web/api/spaces/{space}/invites` → `invites.ListPending`; `DELETE /web/api/spaces/{space}/invites/{id}` → `invites.Cancel` (PO-3: the only cancel path; no tool) [10] |
 
-The web transport calls the registry in-process (`reg.Get(name).Call(ctx, p, args)`), so rules, decoding and error kinds are identical to `/v1/tools`, and the `mail` sibling (added only by `rpc`) never reaches the GUI. It never touches `GET /v1/inbox/stream` and never acks. Mutating methods on any `/web/*` route return 405 until W2/W3 register them.
+The web transport calls the registry in-process (`reg.Call(ctx, p, tools.BusX, args)`), so rules, decoding and error kinds are identical to `/v1/tools`: an unregistered tool is `404 not_found`, and a request body decodes with `tools.Decode`, so a bad body fails `invalid "invalid arguments: …"` [R14]. The `mail` sibling (added only by `rpc`) never reaches the GUI. It never touches `GET /v1/inbox/stream` and never acks. Mutating methods on any `/web/*` route return 405 until W2/W3 register them.
 
 ---
 

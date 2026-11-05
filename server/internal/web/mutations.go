@@ -1,14 +1,13 @@
 package web
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
 
 // inviteBody is POST /web/api/spaces/{space}/invites.
@@ -51,7 +50,7 @@ func (g *Web) invite(r *http.Request, p auth.Principal) (any, error) {
 	if in.Task != nil {
 		args["task"] = *in.Task
 	}
-	return g.mutate(r, p, "bus_invite_member", args, mutationLog{"invite", space, in.Name})
+	return g.mutate(r, p, tools.BusInviteMember, args, mutationLog{"invite", space, in.Name})
 }
 
 // revoke answers POST /web/api/spaces/{space}/revoke as bus_revoke_member once the body
@@ -65,7 +64,7 @@ func (g *Web) revoke(r *http.Request, p auth.Principal) (any, error) {
 	if in.Confirm != space+"/"+in.Name {
 		return nil, apperr.New(apperr.Invalid, "confirm the revoke of %s in space %s", in.Name, space)
 	}
-	return g.mutate(r, p, "bus_revoke_member", map[string]any{"space": space, "name": in.Name},
+	return g.mutate(r, p, tools.BusRevokeMember, map[string]any{"space": space, "name": in.Name},
 		mutationLog{"revoke", space, in.Name})
 }
 
@@ -81,7 +80,7 @@ func (g *Web) post(r *http.Request, p auth.Principal) (any, error) {
 	}
 	space := r.PathValue("space")
 	args := map[string]any{"space": space, "threadId": id, "body": in.Body}
-	return g.mutate(r, p, "bus_add_post", args, mutationLog{"post", space, strconv.FormatInt(id, 10)})
+	return g.mutate(r, p, tools.BusAddPost, args, mutationLog{"post", space, strconv.FormatInt(id, 10)})
 }
 
 // send answers POST /web/api/spaces/{space}/topics/{topic}/messages as bus_send_topic.
@@ -92,7 +91,7 @@ func (g *Web) send(r *http.Request, p auth.Principal) (any, error) {
 	}
 	space, topic := r.PathValue("space"), r.PathValue("topic")
 	args := map[string]any{"space": space, "topic": topic, "body": in.Body, "critical": in.Critical}
-	return g.mutate(r, p, "bus_send_topic", args, mutationLog{"send", space, topic})
+	return g.mutate(r, p, tools.BusSendTopic, args, mutationLog{"send", space, topic})
 }
 
 // deleteSpace answers DELETE /web/api/spaces/{space} as bus_delete_space once the body
@@ -106,7 +105,7 @@ func (g *Web) deleteSpace(r *http.Request, p auth.Principal) (any, error) {
 	if in.Confirm != space {
 		return nil, apperr.New(apperr.Invalid, "confirm the deletion of space %s", space)
 	}
-	return g.mutate(r, p, "bus_delete_space", map[string]any{"space": space},
+	return g.mutate(r, p, tools.BusDeleteSpace, map[string]any{"space": space},
 		mutationLog{"delete-space", space, space})
 }
 
@@ -130,20 +129,13 @@ func (g *Web) logMutation(ctx context.Context, p auth.Principal, l mutationLog) 
 	g.log.InfoContext(ctx, "web mutation", "actor", p.AgentName, "action", l.action, "space", l.space, "target", l.target)
 }
 
-// decodeBody strictly decodes r's JSON body into T; an empty body is the zero value.
+// decodeBody strictly decodes r's JSON body into T like tool arguments (tools.Decode): an
+// empty body is the zero value, a bad one invalid "invalid arguments: …".
 func decodeBody[T any](r *http.Request) (T, error) {
-	var v T
 	raw, err := readArgs(r)
 	if err != nil {
-		return v, err
+		var zero T
+		return zero, err
 	}
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return v, nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&v); err != nil {
-		return v, apperr.New(apperr.Invalid, "invalid request body: %v", err)
-	}
-	return v, nil
+	return tools.Decode[T](raw)
 }

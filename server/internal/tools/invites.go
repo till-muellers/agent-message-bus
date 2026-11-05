@@ -23,7 +23,7 @@ func inviteTools(inv *invites.Service) []Tool {
 		"inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes.",
 		int(invites.TTL/time.Minute))
 	return []Tool{
-		define("bus_invite_member", accessSpaceLeaders, desc, "{name, space, code, expires_at}",
+		define(BusInviteMember, accessSpaceLeaders, desc, "{name, space, code, expires_at}",
 			memberReq(), inviteProps(), func(ctx context.Context, p auth.Principal, a inviteArgs) (any, error) {
 				i, err := inv.Create(ctx, p, a.Space, a.Name, a.Task)
 				if err != nil {

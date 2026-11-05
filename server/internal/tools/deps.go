@@ -21,8 +21,8 @@ type Deps struct {
 	Overview    *overview.Service
 }
 
-// New builds the registry of every bus tool. Services are only used inside
-// Call, so zero-value Deps suffice to list or document the tools.
+// New builds the callable registry of every bus tool over the services d; documentation
+// uses Metadata instead.
 func New(d Deps) *Registry {
 	var ts []Tool
 	ts = append(ts, inGroup(GroupAdmin, adminTools(d.Auth, d.Spaces))...)

@@ -3,6 +3,7 @@ package mcpserver_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,11 +33,11 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 func testRegistry() *tools.Registry {
 	schema := map[string]any{"type": "object"}
 	return tools.NewRegistry([]tools.Tool{
-		{Name: "whoami", Description: "who", Schema: schema,
+		{Meta: tools.Meta{Name: "whoami", Description: "who", Schema: schema},
 			Call: func(_ context.Context, p auth.Principal, _ json.RawMessage) (any, error) {
 				return map[string]any{"kind": string(p.Kind)}, nil
 			}},
-		{Name: "forbid", Description: "no", Schema: schema,
+		{Meta: tools.Meta{Name: "forbid", Description: "no", Schema: schema},
 			Call: func(context.Context, auth.Principal, json.RawMessage) (any, error) {
 				return nil, apperr.New(apperr.Forbidden, "nope")
 			}},
@@ -50,7 +51,7 @@ func (noNotice) TakeNotice(context.Context, auth.Principal) (inbox.Notice, bool,
 	return inbox.Notice{}, false, nil
 }
 
-func setup(t *testing.T) (string, string) {
+func setup(t *testing.T, reg *tools.Registry) (string, string) {
 	t.Helper()
 	ctx := context.Background()
 	a := auth.NewService(dbtest.Open(t), "admin-tok", time.Now)
@@ -58,7 +59,7 @@ func setup(t *testing.T) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(mcpserver.NewHandler(testRegistry(), a, noNotice{}))
+	srv := httptest.NewServer(mcpserver.NewHandler(reg, a, noNotice{}))
 	t.Cleanup(srv.Close)
 	return srv.URL, tok
 }
@@ -72,7 +73,7 @@ func connect(ctx context.Context, url, token string) (*mcp.ClientSession, error)
 
 func mustConnect(t *testing.T) *mcp.ClientSession {
 	t.Helper()
-	url, tok := setup(t)
+	url, tok := setup(t, testRegistry())
 	s, err := connect(context.Background(), url, tok)
 	if err != nil {
 		t.Fatal(err)
@@ -123,8 +124,25 @@ func TestCallTool(t *testing.T) {
 	}
 }
 
+func TestInternalFailureIsAProtocolErrorWithoutDetail(t *testing.T) {
+	crash := tools.Tool{Meta: tools.Meta{Name: "crash", Description: "fails", Schema: map[string]any{"type": "object"}},
+		Call: func(context.Context, auth.Principal, json.RawMessage) (any, error) {
+			return nil, errors.New("secret db detail")
+		}}
+	url, tok := setup(t, tools.NewRegistry([]tools.Tool{crash}))
+	s, err := connect(context.Background(), url, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	_, err = s.CallTool(context.Background(), &mcp.CallToolParams{Name: "crash"})
+	if err == nil || !strings.Contains(err.Error(), "internal error") || strings.Contains(err.Error(), "secret") {
+		t.Fatalf("err = %v, want a protocol error \"internal error\" without the detail", err)
+	}
+}
+
 func TestNoTokenRejected(t *testing.T) {
-	url, _ := setup(t)
+	url, _ := setup(t, testRegistry())
 	s, err := connect(context.Background(), url, "")
 	if err == nil {
 		_, err = s.ListTools(context.Background(), nil)
