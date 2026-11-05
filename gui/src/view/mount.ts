@@ -1,37 +1,28 @@
 import type { Handlers, VChild, VNode } from "./h.ts";
+import { planPatch } from "./plan-patch.ts";
 
 /** The tree each DOM node was last rendered from. */
 const rendered = new WeakMap<Node, VChild>();
-
-/** Whether a node rendered from previous may be patched into next instead of being replaced. */
-export function samePlace(previous: VChild | undefined, next: VChild): boolean {
-	if (previous === undefined) return false;
-	if (typeof previous === "string" || typeof next === "string") return typeof previous === typeof next;
-	return previous.tag === next.tag && previous.key === next.key;
-}
 
 /** Renders tree into root, reusing the nodes of the last render (focus and typed input survive). */
 export function mount(root: Element, tree: VChild): void {
 	patchChildren(root, [tree]);
 }
 
-/** Matches first and removes the leftovers before placing, so removals move no kept node (a moved node loses focus). */
+/** Applies planPatch: removes the leftovers before placing, so removals move no kept node (a moved node loses focus). */
 function patchChildren(parent: Node, next: readonly VChild[]): void {
-	const pool = Array.from(parent.childNodes);
-	const nodes = next.map((child) => {
-		const reuse = takeMatch(pool, child);
-		return reuse ? patch(reuse, child) : create(child);
+	const existing = Array.from(parent.childNodes);
+	const plan = planPatch(existing.map((node) => rendered.get(node)), next);
+	const nodes = next.map((child, i) => {
+		const index = plan.reuse[i];
+		const reused = index === undefined ? undefined : existing[index];
+		return reused ? patch(reused, child) : create(child);
 	});
-	for (const stale of pool) parent.removeChild(stale);
+	for (const index of plan.remove) existing[index]?.remove();
 	nodes.forEach((node, index) => {
 		const at = parent.childNodes[index] ?? null;
 		if (at !== node) parent.insertBefore(node, at);
 	});
-}
-
-function takeMatch(pool: Node[], child: VChild): Node | undefined {
-	const index = pool.findIndex((node) => samePlace(rendered.get(node), child));
-	return index < 0 ? undefined : pool.splice(index, 1)[0];
 }
 
 function create(child: VChild): Node {

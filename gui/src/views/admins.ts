@@ -1,12 +1,10 @@
 import type { AdminInfo } from "../api/types.ts";
 import { takeField } from "../view/form-field.ts";
 import { type ChildArg, h, type Handler, type VNode } from "../view/h.ts";
+import type { Intents } from "./intents.ts";
 import { type Row, table } from "./table.ts";
 
-export interface AdminAreaIntents {
-	mintAdmin(name: string): void;
-	revokeAdmin(name: string): void;
-}
+type AdminAreaIntents = Pick<Intents, "mintAdmin" | "revokeAdmin">;
 
 /** The bootstrap admin is revoked by rotating the instance token on the host, not here. */
 function revokeButton(admin: AdminInfo, intents: AdminAreaIntents): ChildArg {

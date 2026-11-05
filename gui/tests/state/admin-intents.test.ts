@@ -13,14 +13,14 @@ const api: AdminsApi = { mint: async (name) => ({ name, token: "amb_admin_x" }),
 describe("the admin intents", () => {
 	test("a minted token is shown once with the admin it belongs to", async () => {
 		const { actions, admin } = intents(api);
-		await admin.mint("ops");
+		await admin.mintAdmin("ops");
 		expect(actions).toEqual([{ type: "secret/shown", label: "Token of admin ops", secret: "amb_admin_x" }]);
 	});
 
 	test("a revoke says what it removed", async () => {
 		const { actions, admin } = intents(api);
-		await admin.revoke("ops");
-		await admin.revoke("ghost");
+		await admin.revokeAdmin("ops");
+		await admin.revokeAdmin("ghost");
 		expect(actions).toEqual([
 			{ type: "notice/shown", message: "Admin ops revoked.", alert: false },
 			{ type: "notice/shown", message: "Nothing was removed: admin ghost has no token and joined no space.", alert: false },
