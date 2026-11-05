@@ -6,6 +6,12 @@ import { buildGui } from "../scripts/build.ts";
 
 const outDirs: string[] = [];
 
+/**
+ * A build waits for the bundler and the file system, which can take seconds on a busy machine: these tests wait for it
+ * instead of racing bun's per-test timeout (5 s by default).
+ */
+const NO_TIMEOUT = { timeout: 0 };
+
 function tempOut(): string {
 	const dir = mkdtempSync(join(tmpdir(), "amb-gui-build-"));
 	outDirs.push(dir);
@@ -24,7 +30,7 @@ describe("the GUI build", () => {
 		const src = html.match(/<script type="module" src="\/web\/assets\/(main-[^"]+\.js)"><\/script>/)?.[1];
 		expect(src).toBeDefined();
 		expect(existsSync(join(out, "assets", src ?? ""))).toBe(true);
-	});
+	}, NO_TIMEOUT);
 
 	test("index.html links the hashed stylesheet it wrote", async () => {
 		const out = tempOut();
@@ -33,7 +39,7 @@ describe("the GUI build", () => {
 		const href = html.match(/<link rel="stylesheet" href="\/web\/assets\/(style-[^"]+\.css)">/)?.[1];
 		expect(href).toBeDefined();
 		expect(existsSync(join(out, "assets", href ?? ""))).toBe(true);
-	});
+	}, NO_TIMEOUT);
 
 	test("stale assets of an earlier build are removed", async () => {
 		const out = tempOut();
@@ -43,19 +49,19 @@ describe("the GUI build", () => {
 		const files = readdirSync(join(out, "assets"));
 		expect(files).not.toContain("main-stale.js");
 		expect(files).toHaveLength(2);
-	});
+	}, NO_TIMEOUT);
 
 	test("files next to the assets, such as the embed placeholder, are kept", async () => {
 		const out = tempOut();
 		writeFileSync(join(out, ".gitkeep"), "");
 		await buildGui(out);
 		expect(existsSync(join(out, ".gitkeep"))).toBe(true);
-	});
+	}, NO_TIMEOUT);
 
 	test("the command line builds into the directory given by --out", () => {
 		const out = tempOut();
 		const run = Bun.spawnSync([process.execPath, join(import.meta.dir, "..", "scripts", "build.ts"), "--out", out]);
 		expect(run.exitCode).toBe(0);
 		expect(existsSync(join(out, "index.html"))).toBe(true);
-	});
+	}, NO_TIMEOUT);
 });
