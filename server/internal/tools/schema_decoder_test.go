@@ -2,7 +2,6 @@ package tools
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -16,7 +15,7 @@ func TestSchemaMatchesDecoder(t *testing.T) {
 			if tl.argsType == nil {
 				t.Fatal("argument type unknown: build the tool with define")
 			}
-			fields := jsonFields(t, tl.argsType)
+			fields := fieldTypes(t, tl.argsType)
 			props, _ := tl.Schema["properties"].(map[string]any)
 			required, _ := tl.Schema["required"].([]string)
 			checkFieldsInSchema(t, fields, props)
@@ -58,26 +57,20 @@ func checkRequiredNotPointer(t *testing.T, fields map[string]reflect.Type, requi
 	}
 }
 
-// jsonFields maps each JSON name to the type of the exported field it decodes into; argument
+// fieldTypes maps each JSON name to the type of the exported field it decodes into; argument
 // structs are flat, so an embedded field fails the test instead of being flattened here.
-func jsonFields(t *testing.T, st reflect.Type) map[string]reflect.Type {
+func fieldTypes(t *testing.T, st reflect.Type) map[string]reflect.Type {
 	t.Helper()
-	fields := map[string]reflect.Type{}
 	for i := range st.NumField() {
-		f := st.Field(i)
-		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
-		if f.Anonymous {
+		if f := st.Field(i); f.Anonymous {
 			t.Errorf("argument struct %s embeds %s; keep argument structs flat", st, f.Type)
 		}
-		if !f.IsExported() || name == "-" {
-			continue
-		}
-		if name == "" {
-			name = f.Name
-		}
-		fields[name] = f.Type
 	}
-	return fields
+	types := map[string]reflect.Type{}
+	for name, f := range jsonFields(st) {
+		types[name] = f.Type
+	}
+	return types
 }
 
 // schemaType is the JSON Schema type a value decoding into ft must have; kinds outside the

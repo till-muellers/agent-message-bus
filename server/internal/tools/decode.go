@@ -12,13 +12,18 @@ import (
 )
 
 // Decode strictly unmarshals args into T; empty or null args yield the zero value, anything
-// else that does not fit T fails with invalid "invalid arguments: …". Transports decode
-// their own JSON request bodies with it, so a bad body fails like a bad tool argument.
+// else that does not fit T fails with invalid "invalid arguments: …". A key of a struct T
+// must match a field's JSON name exactly (encoding/json alone also accepts other cases).
+// Transports decode their own JSON request bodies with it, so a bad body fails like a bad
+// tool argument.
 func Decode[T any](args json.RawMessage) (T, error) {
 	var v T
 	trimmed := bytes.TrimSpace(args)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return v, nil
+	}
+	if err := requireExactKeys(reflect.TypeFor[T](), trimmed); err != nil {
+		return v, err
 	}
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.DisallowUnknownFields()

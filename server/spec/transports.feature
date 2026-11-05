@@ -122,7 +122,8 @@ Feature: Transports
 
   Rule: Tool arguments are decoded strictly
 
-    # Unknown fields and wrong types are checked before required fields.
+    # Unknown fields and wrong types are checked before required fields. Keys match the
+    # schema's property names exactly: a key that differs only in case is unknown.
 
     Scenario Outline: Arguments that decode (<case>)
       When a tool with optional arguments "space" (string) and "n" (integer) is called with <body>
@@ -141,6 +142,7 @@ Feature: Transports
       Examples:
         | case          | body       | message                                                                     |
         | unknown field | {"x":1}    | invalid arguments: json: unknown field "x"                                  |
+        | key case      | {"N":3}    | invalid arguments: json: unknown field "N"                                  |
         | wrong type    | {"n":"x"}  | invalid arguments: json: cannot unmarshal string into Go struct field ... |
         | malformed     | {          | invalid arguments: unexpected EOF                                           |
 
