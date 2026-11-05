@@ -6,7 +6,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Server: Go (`server/`), SQLite embedded via pure-Go `modernc.org/sqlite`, MCP via `github.com/modelcontextprotocol/go-sdk`. One static binary, `CGO_ENABLED=0`.
 - omp plugin: TypeScript on Bun (`extension/`), typechecked with `tsc --noEmit`.
 - Web GUI: strict TypeScript on Bun without a framework (`gui/`, its own `package.json` and `tsconfig.json`), bundled into `server/internal/web/dist/` and embedded by the server.
-- Python: release tooling only (`scripts/build.py`).
+- Python: release tooling only (`scripts/build.py`, `scripts/release_version.py`, `scripts/release_ci_gate.py`).
 - CI: GitHub Actions (`.github/workflows/ci.yml`, `release.yml`).
 
 ## Layout
@@ -15,9 +15,10 @@ Conventions and working method for contributors and coding agents in this repo.
 |---|---|
 |`server/`|Go server. `main.go`, `cmd/tooldoc/`, `internal/`, `migrations/`, `spec/`.|
 |`extension/`|omp extension (TypeScript). `index.ts` wires `lib/<feature>/`; `lib/shared/` holds helpers that are not tied to the bus.|
-|`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_build.py` (pytest).|
+|`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_*.py` (pytest) for `scripts/`.|
 |`gui/`|Web GUI: `src/` (browser code), `tests/` (bun), `scripts/build.ts` (bundles into `server/internal/web/dist/`), `index.html` (shell template).|
 |`scripts/build.py`|Release build: builds the GUI (`--skip-gui` to skip), cross-compiles the server and writes `SHA256SUMS`.|
+|`scripts/release_*.py`|Release gates run first by `release.yml`: `release_ci_gate.py` (a `ci` run of the tagged commit passed), `release_version.py` (tag matches the `package.json` version).|
 |`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only by PR.|
 |`.omp/`|This guide and the hard rules (`RULES.md`).|
 
@@ -27,7 +28,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - Go lint/format: `gofmt -l .`, `go vet ./...`, `golangci-lint run ./...`
 - TS: `bun test tests/`, `bun run typecheck`
 - GUI: `cd gui && bun test && bun run typecheck`; build into the embed dir with `bun run build:gui` (repo root). Go builds and tests work without it (fallback page at `/web/`).
-- Python: `pytest tests`, `ruff format --check .`, `ruff check .` (settings in `ruff.toml`; `ruff format .` to fix)
+- Python: `pytest tests`, `ruff format --check .`, `ruff check .` (settings in `ruff.toml`, which requires ruff 0.17.3 like CI, e.g. `uvx ruff@0.17.3 check .`; `ruff format .` to fix)
 - Tool ledger: `cd server && go run ./cmd/tooldoc > TOOLS.md`
 
 ## Architecture

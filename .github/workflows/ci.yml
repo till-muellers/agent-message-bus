@@ -42,6 +42,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
 
       - name: Install
         run: bun install --frozen-lockfile
@@ -75,12 +77,10 @@ jobs:
         working-directory: gui
 
       - name: Test GUI
-        run: bun test
-        working-directory: gui
+        run: bun run test:gui
 
       - name: Build GUI into the embed dir
-        run: bun run build
-        working-directory: gui
+        run: bun run build:gui
 
       - name: Go build and web tests with the real bundle
         run: go build ./... && go test ./internal/web/...
@@ -104,4 +104,4 @@ jobs:
           ruff check .
 
       - name: Test
-        run: python -m pytest tests/test_build.py tests/test_release_version.py
+        run: python -m pytest tests/test_build.py tests/test_release_version.py tests/test_release_ci_gate.py

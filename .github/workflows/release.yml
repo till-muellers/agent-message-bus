@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
@@ -16,6 +17,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
+
+      - name: ci passed for the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100" \
+            | python scripts/release_ci_gate.py --sha "$GITHUB_SHA"
 
       - name: Tag matches package version
         run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"

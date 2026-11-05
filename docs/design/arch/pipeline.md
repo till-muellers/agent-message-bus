@@ -32,6 +32,7 @@ The Go binary embeds `server/internal/web/dist/` (Arch-server owns `embed.go`, `
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with: { bun-version-file: gui/package.json }
       - uses: actions/setup-go@v7
         with: { go-version-file: server/go.mod, cache-dependency-path: server/go.sum }
       - name: Install GUI
@@ -41,18 +42,17 @@ The Go binary embeds `server/internal/web/dist/` (Arch-server owns `embed.go`, `
         run: bun run typecheck
         working-directory: gui
       - name: Test GUI
-        run: bun test
-        working-directory: gui
+        run: bun run test:gui
       - name: Build GUI into the embed dir
-        run: bun run build
-        working-directory: gui
+        run: bun run build:gui
       - name: Go build and web tests with the real bundle
         run: go build ./... && go test ./internal/web/...
         working-directory: server
 ```
 
-- Existing `typescript` job (:39-53) is unchanged except for one new test file (§3.3, `tests/version/protocol-sync.test.ts`), which runs inside `bun test tests/`.
-- Existing `python` job (:55-68): `python -m pytest tests/test_build.py tests/test_release_version.py`.
+- The `web` job runs the GUI tests and build through the root scripts `test:gui` and `build:gui` (§5), so the commands contributors run locally are the ones CI runs.
+- `typescript` job: pins bun like `web` and `release.yml` (`bun-version-file: gui/package.json`, Q-P3); `bun test tests/` includes `tests/version/protocol-sync.test.ts` (§3.3).
+- `python` job: installs `ruff==0.17.3`, the version `ruff.toml` requires (`required-version`, so a local ruff of another version refuses to run instead of formatting differently); `python -m pytest tests/test_build.py tests/test_release_version.py tests/test_release_ci_gate.py`.
 - `.omp/AGENTS.md` "Definition of done" gains `cd gui && bun test && bun run typecheck` and the PR's required checks gain `web` (repo settings, outside the code: ask the owner).
 
 ---
@@ -99,15 +99,24 @@ def main(argv: list[str] | None = None) -> int:   # --tag "$GITHUB_REF_NAME"
 ### 4.1 Workflow (`release.yml`)
 
 ```yaml
+permissions:
+  contents: write
+  actions: read          # list the ci runs of the tagged commit
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: { python-version: '3.x' }
+      - name: ci passed for the tagged commit
+        env: { GH_TOKEN: ${{ github.token }} }
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100" \
+            | python scripts/release_ci_gate.py --sha "$GITHUB_SHA"
       - name: Tag matches package version
         run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"
       - uses: actions/setup-go@v7
         with: { go-version-file: server/go.mod, cache-dependency-path: server/go.sum }
       - uses: oven-sh/setup-bun@v2
+        with: { bun-version-file: gui/package.json }
       - name: Test
         working-directory: server
         run: go test ./...
@@ -117,12 +126,15 @@ def main(argv: list[str] | None = None) -> int:   # --tag "$GITHUB_REF_NAME"
         run: gh release create … (unchanged, notes gain the "delete pre-release databases" line of REVIEW P2 for the reset release)
 ```
 
-The version check runs first, so a mismatched tag fails in seconds and publishes nothing.
+The two checks run first, so a bad tag fails in seconds and publishes nothing:
+
+- **CI gate** (`scripts/release_ci_gate.py`, pytest `tests/test_release_ci_gate.py`): the release only runs `go test`, so it requires a `push` run of the `ci` workflow for the tagged commit (all jobs: `go`, `typescript`, `web`, `python`) that concluded `success`. `pull_request` runs do not count: they test the merge with the base branch, not the tagged tree. The script also drops runs of other commits, so a broken query cannot pass the gate. One successful run is enough: the tag push starts its own `ci` run of the same commit, which is still running while the release checks the run of the `main` push. No run, only failed runs or only running runs → exit 1 with the commit and the listed runs; re-run the release workflow once `ci` passed. This does not depend on which checks the branch protection requires (Q-P2).
+- **Version check** (`scripts/release_version.py`): the tag matches the `package.json` version.
 
 ### 4.2 Release procedure (documented in the root `README.md` "Release" section)
 
 1. Branch `release/vX.Y.Z`: bump `package.json` `version` (R1); if a server contract the extension needs changed in this release, check `protocol.go` and `MIN_SERVER_PROTOCOL` agree (the fitness test enforces ≤). PR → green CI → merge (`main` is protected).
-2. Tag the merge commit `vX.Y.Z` and push the tag → `release.yml` checks, builds GUI + 6 server binaries + `SHA256SUMS`, publishes the GitHub Release.
+2. Wait until the `ci` run of the merge commit on `main` is green, then tag the merge commit `vX.Y.Z` and push the tag → `release.yml` checks ci and the version, builds GUI + 6 server binaries + `SHA256SUMS`, publishes the GitHub Release.
 3. Users: `omp plugin upgrade @till-muellers/omp-agent-message-bus` (the targeted form; findings R4) and replace the server binary. README states both.
 4. Plugin and server of one tag always match (`protocol-sync` test). Mixed pairs are caught at runtime by the extension's protocol gate (`client.md` §8.1) and the spawn skew check (§8.2).
 
@@ -136,7 +148,7 @@ No npm publish, no registry token. The plugin needs no build step (Bun loads `.t
 |---|---|---|
 | `version` (:3) | bumped per release (0.1.0 → 0.2.0 for the first release with these changes) | P2b |
 | `files` (:28-33) | drop `"skills"` | E8c (with the folder deletion; see `client.md` §9) |
-| `scripts` (:34-37) | add `"test:gui": "bun test --cwd gui"`, `"build:gui": "bun run --cwd gui build"` as conveniences; `test` and `typecheck` unchanged | GUI-1 |
+| `scripts` (:34-37) | add `"test:gui": "bun test --cwd gui"`, `"build:gui": "bun run --cwd gui build"`; `test` and `typecheck` unchanged. The `web` CI job runs `test:gui` and `build:gui`, so they cannot rot (§2) | GUI-1 |
 | `omp` (:23-27) | unchanged (`./extension/index.ts`) | — |
 | `devDependencies` | unchanged | — |
 
@@ -160,4 +172,4 @@ Consolidated in `QUESTIONS.md` (recommendation, rationale, what each blocks). De
 |---|---|---|
 | Q-P1 | Self-contained Docker GUI build with an `oven/bun:1` stage, or build the GUI before `docker build`? | Variant A: build the GUI on the host first, Dockerfile unchanged, no new image (PL-2 docs only). |
 | Q-P2 | Make `web` a required status check on `main`? | Yes (owner action in repo settings, after GUI-1). |
-| Q-P3 | Pin bun in CI (`bun-version`) to the version used locally? | Pin to the version in `gui/bun.lock`'s generator once the first lockfile exists (GUI-1). Done in GUI-1: `bun.lock` records no bun version, so the pin is `gui/package.json` `packageManager: "bun@1.4.2"` (the bun that wrote the first lockfile), read by `setup-bun` through `bun-version-file: gui/package.json` in the `web` job and `release.yml`. |
+| Q-P3 | Pin bun in CI (`bun-version`) to the version used locally? | Pin to the version in `gui/bun.lock`'s generator once the first lockfile exists (GUI-1). Done in GUI-1: `bun.lock` records no bun version, so the pin is `gui/package.json` `packageManager: "bun@1.4.2"` (the bun that wrote the first lockfile), read by `setup-bun` through `bun-version-file: gui/package.json` in the `typescript` and `web` jobs and `release.yml` (the `typescript` job since R3). |
