@@ -6,7 +6,9 @@ import { createSpaceIntents, type SpaceIntents } from "../../src/state/space-int
 
 const invite = { id: "3f9a0c1d2e4b5a67", name: "new", invitedBy: "lead", expiresAt: "x" };
 
-function intents(over: Partial<Mutations> = {}): { actions: Action[]; calls: string[]; space: SpaceIntents } {
+type Where = () => Route;
+
+function intents(over: Partial<Mutations> = {}, here: Where = () => ({ name: "space", space: "demo" })): { actions: Action[]; calls: string[]; space: SpaceIntents } {
 	const actions: Action[] = [];
 	const calls: string[] = [];
 	const api: Mutations = {
@@ -22,8 +24,8 @@ function intents(over: Partial<Mutations> = {}): { actions: Action[]; calls: str
 		...over,
 	};
 	const deps = { dispatch: (a: Action) => void actions.push(a), refresh: () => {} };
-	const go = (route: Route): void => void actions.push({ type: "navigate", route });
-	return { actions, calls, space: createSpaceIntents(api, deps, go) };
+	const nav = { current: here, go: (route: Route): void => void actions.push({ type: "navigate", route }) };
+	return { actions, calls, space: createSpaceIntents(api, deps, nav) };
 }
 
 describe("the space intents", () => {
@@ -67,6 +69,32 @@ describe("the space intents", () => {
 			{ type: "navigate", route: { name: "spaces" } },
 			{ type: "notice/shown", message: "Space demo deleted.", alert: false },
 		]);
+	});
+
+	const elsewhere: [string, Route, boolean][] = [
+		["a board of the deleted space", { name: "board", space: "demo", board: "b" }, true],
+		["a thread of the deleted space", { name: "thread", space: "demo", threadId: 1 }, true],
+		["another space", { name: "space", space: "other" }, false],
+		["the inbox", { name: "inbox" }, false],
+	];
+	for (const [where, route, leaves] of elsewhere) {
+		test(`a delete answered while the operator is on ${where} ${leaves ? "goes to the space list" : "keeps them there"}`, async () => {
+			const { actions, space } = intents({}, () => route);
+			await space.confirmed({ kind: "delete-space", space: "demo" });
+			expect(actions.filter((a) => a.type === "navigate")).toEqual(leaves ? [{ type: "navigate", route: { name: "spaces" } }] : []);
+			expect(actions.at(-1)).toEqual({ type: "notice/shown", message: "Space demo deleted.", alert: false });
+		});
+	}
+
+	test("an operator who opens another page while the delete runs stays there", async () => {
+		let here: Route = { name: "space", space: "demo" };
+		const answer = Promise.withResolvers<true>();
+		const { actions, space } = intents({ deleteSpace: () => answer.promise }, () => here);
+		const done = space.confirmed({ kind: "delete-space", space: "demo" });
+		here = { name: "inbox" };
+		answer.resolve(true);
+		await done;
+		expect(actions).toEqual([{ type: "confirm/close" }, { type: "notice/shown", message: "Space demo deleted.", alert: false }]);
 	});
 
 	test("a refused delete stays on the space", async () => {
