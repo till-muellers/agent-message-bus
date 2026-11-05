@@ -21,5 +21,16 @@
 		"id": 3,
 		"space": "demo",
 		"type": "direct_message"
+	},
+	{
+		"body": "heads up",
+		"class": "queue",
+		"createdAt": "2026-11-04T20:00:00Z",
+		"critical": false,
+		"from": "lead",
+		"id": 4,
+		"space": "demo",
+		"topic": "all",
+		"type": "topic_message"
 	}
 ]

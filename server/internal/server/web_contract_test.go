@@ -35,6 +35,7 @@ func contractWorld(t *testing.T) *webWorld {
 	callTool(t, w.api, w.worker, "bus_send_direct", `{"space":"demo","to":"lead","body":"need a decision"}`, nil)
 	callTool(t, w.api, w.lead, "bus_add_post", `{"space":"demo","threadId":1,"body":"reply"}`, nil)
 	callTool(t, w.api, w.lead, "bus_send_direct", `{"space":"demo","to":"worker","body":"stop","critical":true}`, nil)
+	callTool(t, w.api, w.lead, "bus_send_topic", `{"space":"demo","topic":"all","body":"heads up"}`, nil)
 	callTool(t, w.api, w.lead, "bus_invite_member", `{"space":"demo","name":"new"}`, nil)
 	callTool(t, w.api, w.lead, "bus_create_space", `{"space":"scratch"}`, nil)
 	return w
