@@ -61,7 +61,7 @@ Today `extension/lib/` is flat: 27 files plus `launch/` (15) and `shared/` (2) (
 | `lib/tools/` | Mirroring server tools: selection (allow-list/excludes), presentation (loadMode/approval), remote tool definition, local `bus_wait`, subagent attribution, tool-result shape | `bus/`, `delivery/` (wait only), `render/` (tool renderers) |
 | `lib/delivery/` | Inbox → omp: stream loop, runner, 409 warning, dispatcher, delivery policy, ack watermark, acker, consumption observer, post-notice coalescing, `pi.events` publishing | `bus/`, `render/` |
 | `lib/render/` | What the model and the user see: envelope text, escaping, message details, card renderer, tool call/result renderers, status line | `bus/` (types only) |
-| `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `session/` (types), `delivery/` (consumption observer is composed here) |
+| `lib/context/` | The `agent-bus-context` block: identity cache, guide fetch, block text, `context` handler | `bus/`, `delivery/` (consumption observer is composed here) |
 | `lib/commands/` | `/bus` command logic and its sub-actions (accept, invite flag, status) | `session/`, `connection/`, `local-server/`, `spawn/`, `version/` |
 | `lib/local-server/` | `/bus server start|stop|status`, binary resolution, release download | `process/`, `bus/` |
 | `lib/spawn/` | Worker start: invite + launch, `bus_spawn_worker` tool, forwarded plugin flags, worker plugin-version check (S1) | `launch/`, `bus/`, `version/`, `process/`, `render/` (outgoing card) |
@@ -132,7 +132,6 @@ flowchart TD
   context --> delivery
   context --> render
   context --> bus
-  context --> session
   tools --> delivery
   tools --> render
   tools --> bus
@@ -153,7 +152,7 @@ flowchart TD
   bus --> shared
 ```
 
-Rules: no cycles; `bus/` and `process/` are leaves (plus `shared/`); `render/` never imports `delivery/`; only `index.ts` and `session/session.ts` see the whole graph. A fitness test (`tests/layout.test.ts`, slice P1a) parses imports and fails on an edge not in this diagram. It still whitelists five edges as transitional: `commands>bus` and `commands>shared` (error wording, `CommandResult`), `local-server>session` and `local-server>shared` (the credential store and `CommandResult`), `spawn>tools` (tool result and presentation).
+Rules: no cycles; `bus/` and `process/` are leaves (plus `shared/`); `render/` never imports `delivery/`; only `index.ts` and `session/session.ts` see the whole graph. A fitness test (`tests/layout.test.ts`, slice P1a) parses imports and fails on an edge not in this diagram. It still whitelists five edges as transitional: `commands>bus` (`BusClient`, `trimUrl`, error wording), `commands>shared` and `local-server>shared` (`CommandResult`), `local-server>session` (the credential store) and `spawn>tools` (tool result and presentation).
 
 ---
 
