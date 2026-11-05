@@ -2,7 +2,6 @@ package tools
 
 import (
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -17,11 +16,12 @@ func TestSchemaMatchesDecoder(t *testing.T) {
 			if tl.argsType == nil {
 				t.Fatal("argument type unknown: build the tool with define")
 			}
-			fields := jsonFields(tl.argsType)
+			fields := jsonFields(t, tl.argsType)
 			props, _ := tl.Schema["properties"].(map[string]any)
+			required, _ := tl.Schema["required"].([]string)
 			checkFieldsInSchema(t, fields, props)
 			checkSchemaInFields(t, fields, props)
-			checkRequiredNotPointer(t, fields, tl.Schema["required"].([]string))
+			checkRequiredNotPointer(t, fields, required)
 		})
 	}
 }
@@ -44,7 +44,7 @@ func checkSchemaInFields(t *testing.T, fields map[string]reflect.Type, props map
 	t.Helper()
 	for name := range props {
 		if _, found := fields[name]; !found {
-			t.Errorf("schema property %q has no decoder field (the decoder rejects it)", name)
+			t.Errorf("schema property %q has no decoder field with exactly that JSON name", name)
 		}
 	}
 }
@@ -58,12 +58,17 @@ func checkRequiredNotPointer(t *testing.T, fields map[string]reflect.Type, requi
 	}
 }
 
-// jsonFields maps the JSON names encoding/json decodes into the exported fields of struct st.
-func jsonFields(st reflect.Type) map[string]reflect.Type {
+// jsonFields maps each JSON name to the type of the exported field it decodes into; argument
+// structs are flat, so an embedded field fails the test instead of being flattened here.
+func jsonFields(t *testing.T, st reflect.Type) map[string]reflect.Type {
+	t.Helper()
 	fields := map[string]reflect.Type{}
 	for i := range st.NumField() {
 		f := st.Field(i)
 		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if f.Anonymous {
+			t.Errorf("argument struct %s embeds %s; keep argument structs flat", st, f.Type)
+		}
 		if !f.IsExported() || name == "-" {
 			continue
 		}
@@ -75,19 +80,20 @@ func jsonFields(st reflect.Type) map[string]reflect.Type {
 	return fields
 }
 
-// schemaType is the JSON Schema type a value decoding into ft must have.
+// schemaType is the JSON Schema type a value decoding into ft must have; kinds outside the
+// allowed schema subset yield "unsupported Go kind <kind>".
 func schemaType(ft reflect.Type) string {
 	if ft.Kind() == reflect.Pointer {
 		ft = ft.Elem()
 	}
-	ints := []reflect.Kind{reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64}
-	switch {
-	case ft.Kind() == reflect.String:
+	switch ft.Kind() {
+	case reflect.String:
 		return "string"
-	case ft.Kind() == reflect.Bool:
+	case reflect.Bool:
 		return "boolean"
-	case slices.Contains(ints, ft.Kind()):
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return "integer"
+	default:
+		return "unsupported Go kind " + ft.Kind().String()
 	}
-	return ft.Kind().String()
 }
