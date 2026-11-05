@@ -24,13 +24,21 @@ function capitalized(word: string): string {
 	return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
+/** Where the operator is, and how to send them elsewhere. */
+export interface Navigation {
+	current(): Route;
+	go(route: Route): void;
+}
+
 /**
  * Runs the mutations of a space (invite code shown once, outcome as a notice); never rejects.
- * A deleted space goes to the space list first, so its notice stays there and the dead route is no longer polled.
+ * A deleted space sends an operator still on one of its pages to the space list first, so the notice stays there and
+ * the dead route is no longer polled; an operator who moved on while the delete ran stays where they are.
  */
-export function createSpaceIntents(api: Mutations, deps: MutationDeps, go: (route: Route) => void): SpaceIntents {
+export function createSpaceIntents(api: Mutations, deps: MutationDeps, nav: Navigation): SpaceIntents {
 	const spaceDeleted = (space: string): Action => {
-		go({ name: "spaces" });
+		const here = nav.current();
+		if ("space" in here && here.space === space) nav.go({ name: "spaces" });
 		return told(`Space ${space} deleted.`);
 	};
 	const run = (confirm: PendingConfirm): Promise<void> => {

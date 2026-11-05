@@ -53,7 +53,7 @@ gui/
       session-intents.ts signIn / restore / signOut: run the session calls, dispatch the outcome (never rejects)
       mutate.ts         mutate(deps, call, done): awaits a mutation, dispatches done(result) and refreshes; 401 → signed-out, else the server's message as an alert notice (never rejects)
       admin-intents.ts  (W2) mintAdmin → secret/shown, revokeAdmin → notice/shown
-      space-intents.ts  (W3) invite → secret/shown; cancel, post, send → notice; ask/dismiss open and close the confirmation, confirmed closes it and runs the revoke or delete; a successful delete navigates to the space list (store, then hash) before its notice, so the notice stays and the deleted space is not polled
+      space-intents.ts  (W3) invite → secret/shown; cancel, post, send → notice; ask/dismiss open and close the confirmation, confirmed closes it and runs the revoke or delete; a successful delete sends an operator still on a page of that space to the space list (store, then hash) before its notice, so the notice stays and the deleted space is not polled; one who moved on while it ran stays where they are
     router/
       routes.ts         parseRoute(hash) → Route; hrefOf(route) → "#/…" (pure)
       hash-source.ts    hashchange → dispatch(navigate)

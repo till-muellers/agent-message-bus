@@ -8,10 +8,10 @@ import { createPoller, type Poller } from "./poll/poller.ts";
 import { listenToHash } from "./router/hash-source.ts";
 import { hrefOf, parseRoute } from "./router/routes.ts";
 import { createAdminIntents } from "./state/admin-intents.ts";
-import type { AppState, Route } from "./state/app-state.ts";
+import type { AppState } from "./state/app-state.ts";
 import { initialState, reducer } from "./state/reducer.ts";
 import { createSessionIntents } from "./state/session-intents.ts";
-import { createSpaceIntents } from "./state/space-intents.ts";
+import { createSpaceIntents, type Navigation } from "./state/space-intents.ts";
 import { createStore, type Store } from "./state/store.ts";
 import { mount } from "./view/mount.ts";
 import type { Intents } from "./views/intents.ts";
@@ -33,10 +33,15 @@ function startPolling(store: Store, http: Http): Poller {
 	return poller;
 }
 
-/** Navigates the store first, so the hash change it causes is a no-op that keeps the notice that follows; replaces the history entry. */
-function goTo(store: Store, route: Route): void {
-	store.dispatch({ type: "navigate", route });
-	location.replace(hrefOf(route));
+/** The store's route; going navigates the store first, so the hash change it causes is a no-op that keeps the notice that follows, and replaces the history entry. */
+function navigation(store: Store): Navigation {
+	return {
+		current: () => store.getState().route,
+		go: (route) => {
+			store.dispatch({ type: "navigate", route });
+			location.replace(hrefOf(route));
+		},
+	};
 }
 
 function intentsOf(store: Store, http: Http, poller: Poller): { intents: Intents; restore(): Promise<void> } {
@@ -45,7 +50,7 @@ function intentsOf(store: Store, http: Http, poller: Poller): { intents: Intents
 	const intents: Intents = {
 		...session,
 		...createAdminIntents(createAdminsApi(http), deps),
-		...createSpaceIntents(createMutations(http), deps, (route) => goTo(store, route)),
+		...createSpaceIntents(createMutations(http), deps, navigation(store)),
 	};
 	return { intents, restore };
 }
