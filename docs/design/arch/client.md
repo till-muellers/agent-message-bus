@@ -337,8 +337,6 @@ export interface InboxLedger {
 	claimFromServer(entries: readonly Entry[]): Entry[];
 	/** A model request carried these ids; acks when the watermark moves. */
 	consumed(ids: readonly number[]): void;
-	/** The watermark: the highest id acked so far, 0 before the first ack. */
-	upTo(): number;
 	/** First-prompt bounded wait (E9b): resolves when every id <= `id` was handed over, or after `ms`. */
 	handedUpTo(id: number, ms: number): Promise<boolean>;
 	/** The start's stream stopped (E10a, 0de.23): held entries are dropped unhanded; waiting bus_wait calls return []. */
@@ -356,7 +354,7 @@ Consumers see narrow views: `inbox-loop.ts` an `EntrySink` (`deliver`), `inbox-r
 The invariants, stated in `inbox-ledger.ts` and tested in `tests/delivery/inbox-ledger.test.ts` (bugs #65, #66, #67):
 - **One ledger per connection start.** A restart (session switch/branch, login, promote, accept) creates a new ledger, so asides dropped by omp on a generation change (`agent-session.ts:9687`) are delivered again when the stream replays them, and ids the last start received but never saw consumed (posts held at the switch, an old identity's entries) cannot hold the next acks. `Connection.ledger()` and `consume` always reach the current start.
 - **Ids arrive ascending; replays are skipped.** A stream reconnect within the start replays unacked ids (`server/spec/inbox.feature:249-257`); a replayed id is skipped and changes nothing.
-- **Claimed ids are acked on arrival.** An id a forwarded `bus_wait` claimed counts as handed over and consumed; the stream skips it and the watermark acks it as soon as this start's stream delivers it, never before.
+- **Claimed ids are acked on arrival.** An id a forwarded `bus_wait` claimed counts as handed over and consumed; the stream skips it, and its arrival on this start's stream moves the watermark, so it is acked without a model request once every older delivered id is consumed, never before it arrived.
 
 ```ts
 // lib/delivery/acker.ts — calls bus_inbox_ack {upTo}; failures only warned (as today, lib/inbox.ts:58-66)
@@ -486,7 +484,7 @@ export function createBusContext(deps: { client: BusClient; getActive(): ActiveC
 	{ refresh(): Promise<void>; refreshIdentity(): Promise<void>; clear(): void; block(): string | undefined };
 // lib/context/context-handler.ts
 export function createContextHandler(deps: {
-	consume: Consume;                    // §3.3
+	consume(ids: readonly number[]): void; // §3.3
 	block(): string | undefined;         // undefined when not connected → no block
 }): (event: { messages }) => { messages: [ContextMessage, ...originals] } | undefined;
 ```

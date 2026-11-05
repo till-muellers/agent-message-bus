@@ -9,8 +9,8 @@
  *   a replayed id is skipped and changes nothing.
  * - The ack `upTo` is the highest delivered id such that every delivered id up to it is consumed. An id that was
  *   consumed but never delivered on this start's stream holds nothing and is never acked.
- * - An id a forwarded `bus_wait` claimed counts as handed over and consumed; the stream skips it, and it is acked as
- *   soon as the stream delivers it.
+ * - An id a forwarded `bus_wait` claimed counts as handed over and consumed; the stream skips it, and its arrival
+ *   moves the watermark, so it is acked without a model request once every older delivered id is consumed.
  */
 import type { Entry } from "../bus/entry.ts";
 import { createRouting, type RoutingDeps } from "./entry-routing.ts";
@@ -26,10 +26,8 @@ export interface InboxLedger {
 	awaitEntry(filter: WaitFilter, ms: number, signal?: AbortSignal): Promise<Entry[]>;
 	/** `bus_wait` forwarded to the server returned `entries`: the ones this start has not handed over are claimed and consumed; returns them. */
 	claimFromServer(entries: readonly Entry[]): Entry[];
-	/** A model request carried these ids; acks when that moves `upTo`. */
+	/** A model request carried these ids; acks when that moves the watermark. */
 	consumed(ids: readonly number[]): void;
-	/** The ack watermark: the highest id acked so far, 0 before the first ack. */
-	upTo(): number;
 	/** Resolves true when every entry up to `id` was handed over, false when `ms` ran out first. */
 	handedUpTo(id: number, ms: number): Promise<boolean>;
 	/** The start's stream stopped: the held entries are dropped unhanded and the waiting `bus_wait` calls return []. */
@@ -45,9 +43,8 @@ export interface InboxLedgerDeps extends RoutingDeps {
 interface Watermark {
 	/** Records a delivered id; a replayed one changes nothing. */
 	delivered(id: number): void;
-	/** Records consumed ids; true when `upTo` moved. */
-	consumed(ids: readonly number[]): boolean;
-	upTo(): number;
+	/** Records consumed ids; the new `upTo` when it moved, else undefined. */
+	consumed(ids: readonly number[]): number | undefined;
 }
 
 function createWatermark(): Watermark {
@@ -55,7 +52,6 @@ function createWatermark(): Watermark {
 	const known = new Set<number>();
 	const consumed = new Set<number>();
 	let next = 0;
-	let upTo = 0;
 	return {
 		delivered(id) {
 			if (known.has(id)) return;
@@ -65,23 +61,51 @@ function createWatermark(): Watermark {
 		consumed(ids) {
 			for (const id of ids) consumed.add(id);
 			const before = next;
-			while (next < order.length && consumed.has(order[next])) upTo = order[next++];
-			return next !== before;
+			while (next < order.length && consumed.has(order[next])) next++;
+			return next !== before ? order[next - 1] : undefined;
 		},
-		upTo: () => upTo,
+	};
+}
+
+/** The ids this start handed over, and which of them a forwarded `bus_wait` claimed. */
+interface HandOvers {
+	/** What the stream's delivery of `id` is: a new id (now handed over), a claimed one, or a replay. */
+	arrival(id: number): "new" | "claimed" | "replay";
+	/** The entries not handed over yet, now handed over as claimed. */
+	claim(entries: readonly Entry[]): Entry[];
+}
+
+function createHandOvers(): HandOvers {
+	const handedOver = new Set<number>();
+	const claimed = new Set<number>();
+	return {
+		arrival(id) {
+			if (claimed.has(id)) return "claimed";
+			if (handedOver.has(id)) return "replay";
+			handedOver.add(id);
+			return "new";
+		},
+		claim(entries) {
+			const unseen = entries.filter(entry => !handedOver.has(entry.id));
+			for (const entry of unseen) {
+				handedOver.add(entry.id);
+				claimed.add(entry.id);
+			}
+			return unseen;
+		},
 	};
 }
 
 /** The ledger of one connection start. */
 export function createInboxLedger(deps: InboxLedgerDeps): InboxLedger {
-	const handedOver = new Set<number>();
-	const claimed = new Set<number>();
 	const watermark = createWatermark();
+	const handOvers = createHandOvers();
 	const waiters = createWaiters();
 	const { route, notices } = createRouting(deps, waiters);
 	const progress = createHandOverProgress();
 	const consumed = (ids: readonly number[]): void => {
-		if (watermark.consumed(ids)) void deps.ack(watermark.upTo());
+		const upTo = watermark.consumed(ids);
+		if (upTo !== undefined) void deps.ack(upTo);
 	};
 	/** The entries `bus_wait` returns are consumed. */
 	const taken = (entries: Entry[]): Entry[] => {
@@ -91,25 +115,15 @@ export function createInboxLedger(deps: InboxLedgerDeps): InboxLedger {
 	return {
 		deliver(entry) {
 			watermark.delivered(entry.id);
-			if (claimed.has(entry.id)) consumed([entry.id]);
-			else if (!handedOver.has(entry.id)) {
-				handedOver.add(entry.id);
-				route(entry);
-			}
+			const arrival = handOvers.arrival(entry.id);
+			if (arrival === "claimed") consumed([entry.id]);
+			else if (arrival === "new") route(entry);
 			progress.advance(entry.id);
 		},
 		takeHeld: filter => taken(notices.take(filter)),
 		awaitEntry: async (filter, ms, signal) => taken(await waiters.wait(filter, ms, signal)),
-		claimFromServer(entries) {
-			const unseen = entries.filter(entry => !handedOver.has(entry.id));
-			for (const entry of unseen) {
-				handedOver.add(entry.id);
-				claimed.add(entry.id);
-			}
-			return taken(unseen);
-		},
+		claimFromServer: entries => taken(handOvers.claim(entries)),
 		consumed,
-		upTo: () => watermark.upTo(),
 		handedUpTo: progress.until,
 		stop() {
 			notices.clear();

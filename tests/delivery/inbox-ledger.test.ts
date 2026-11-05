@@ -42,14 +42,12 @@ describe("the inbox ledger: ids arrive ascending and are acked once consumed in 
 		it.consumed([1]);
 		it.consumed([2]);
 		expect(acks).toEqual([1, 2]);
-		expect(it.upTo()).toBe(2);
 	});
 
 	test("nothing is acked before the stream delivered an entry", () => {
 		const { it, acks } = ledger();
 		it.consumed([1]);
 		expect(acks).toEqual([]);
-		expect(it.upTo()).toBe(0);
 	});
 
 	test("an interrupt consumed before the older entries acks nothing until they are consumed", () => {
@@ -126,13 +124,14 @@ describe("the inbox ledger: ids arrive ascending and are acked once consumed in 
 
 describe("the inbox ledger: claims of a forwarded bus_wait", () => {
 	test("claim returns the entries not handed over yet; the stream skips them afterwards but counts them handed over", async () => {
-		const { it, handed } = ledger();
+		const { it, handed, acks } = ledger();
 		stream(it, 1);
 		expect(it.claimFromServer([entry(1), entry(2)]).map(e => e.id)).toEqual([2]);
 		stream(it, 2);
 		expect(await it.handedUpTo(2, 0)).toBe(true);
 		stream(it, 3);
 		expect(handed()).toEqual([1, 3]);
+		expect(acks).toEqual([]);
 	});
 
 	test("a claimed id is acked as soon as this start's stream delivers it, never before", () => {
