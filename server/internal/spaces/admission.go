@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
@@ -29,8 +30,8 @@ func (s *Service) AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Princi
 	if err != nil {
 		return 0, err
 	}
-	if err := requireLeaderRole(m, "list or cancel invites"); err != nil {
-		return 0, err
+	if !m.MaySeeInvites() {
+		return 0, apperr.New(apperr.Forbidden, "only leaders may list or cancel invites")
 	}
 	return m.SpaceID, nil
 }

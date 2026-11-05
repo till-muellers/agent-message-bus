@@ -11,9 +11,11 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/blackboards"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
+	"github.com/till-muellers/agent-message-bus/server/internal/invites"
 	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
 	"github.com/till-muellers/agent-message-bus/server/internal/overview"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 	"github.com/till-muellers/agent-message-bus/server/internal/tools"
@@ -24,17 +26,31 @@ import (
 // admin "ops" exist but joined nothing. Every service shares one database and a clock that
 // advances one second per call, so lastPostAt orders strictly.
 type world struct {
-	conn  *sql.DB
-	reg   *tools.Registry
-	sp    *spaces.Service
-	msg   *messaging.Service
-	bb    *blackboards.Service
-	ib    *inbox.Service
-	lead  auth.Principal
-	lead2 auth.Principal
-	ops   auth.Principal
-	wkr   auth.Principal
-	peer  auth.Principal
+	conn     *sql.DB
+	reg      *tools.Registry
+	sp       *spaces.Service
+	msg      *messaging.Service
+	bb       *blackboards.Service
+	ib       *inbox.Service
+	inv      *invites.Service
+	ov       *overview.Service
+	resolves *atomic.Int64 // Resolve calls of messaging, blackboards and overview
+	lead     auth.Principal
+	lead2    auth.Principal
+	ops      auth.Principal
+	wkr      auth.Principal
+	peer     auth.Principal
+}
+
+// countingResolver counts the Resolve calls it forwards to the real resolver.
+type countingResolver struct {
+	*spaces.Resolver
+	n *atomic.Int64
+}
+
+func (r countingResolver) Resolve(ctx context.Context, q db.DBTX, p auth.Principal, space string) (spaces.Membership, error) {
+	r.n.Add(1)
+	return r.Resolver.Resolve(ctx, q, p, space)
 }
 
 func newWorld(t *testing.T) *world {
@@ -42,14 +58,17 @@ func newWorld(t *testing.T) *world {
 	conn := dbtest.Open(t)
 	now := stepClock()
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), now)
-	r := spaces.NewResolver()
-	w := &world{conn: conn, ib: ib,
+	r := countingResolver{Resolver: spaces.NewResolver(), n: &atomic.Int64{}}
+	w := &world{conn: conn, ib: ib, resolves: r.n,
 		msg: messaging.NewService(conn, r, ib, now), bb: blackboards.NewService(conn, r, ib, now)}
 	authSvc := auth.NewService(conn, "overview-test-admin-token-0123456789", now)
-	w.sp = spaces.NewService(conn, r, authSvc, ib, now, spaces.Hooks{
+	w.sp = spaces.NewService(conn, r.Resolver, authSvc, ib, now, spaces.Hooks{
 		Departure: []spaces.DepartureHook{w.msg, w.bb}, Creation: []spaces.CreationHook{w.msg}})
+	w.inv = invites.NewService(conn, w.sp, ib, now)
+	w.ov = overview.NewService(overview.Deps{DB: conn, Resolver: r, Spaces: w.sp, Topics: w.msg,
+		Boards: w.bb, Invites: w.inv, Inbox: ib})
 	w.reg = tools.New(tools.Deps{Auth: authSvc, Spaces: w.sp, Messaging: w.msg, Blackboards: w.bb, Inbox: ib,
-		Overview: overview.NewService(conn, r, w.sp, w.msg, w.bb)})
+		Overview: w.ov})
 	w.seed(t)
 	return w
 }

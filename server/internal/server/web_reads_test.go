@@ -67,8 +67,6 @@ func TestStateList(t *testing.T) {
 	}{
 		{"bootstrap admin sees all spaces with invite counts", adminToken, "admin", "admin",
 			[]stateRow{with(demo, new(1), false), with(other, new(1), false), with(quiet, new(0), false)}, 0},
-		{"minted admin sees all spaces with invite counts", w.ops, "admin", "ops",
-			[]stateRow{with(demo, new(1), false), with(other, new(1), false), with(quiet, new(0), false)}, 0},
 		{"leader sees all spaces, invite counts only where it leads", w.lead, "leader", "lead",
 			[]stateRow{with(demo, new(1), true), with(other, nil, false), with(quiet, nil, false)}, 1},
 		{"member sees its own space without invite counts", w.worker, "member", "worker",

@@ -27,6 +27,11 @@ func (s *Service) ListTopics(ctx context.Context, p auth.Principal, space string
 	if err != nil {
 		return nil, err
 	}
+	return s.TopicsFor(ctx, m)
+}
+
+// TopicsFor is ListTopics for the already resolved membership m.
+func (s *Service) TopicsFor(ctx context.Context, m spaces.Membership) ([]TopicInfo, error) {
 	return listTopics(ctx, s.db, m.SpaceID, m.AgentID, m.Joined())
 }
 

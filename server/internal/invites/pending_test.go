@@ -57,9 +57,6 @@ func TestListPending(t *testing.T) {
 				t.Fatalf("listing %s contains a code", raw)
 			}
 		}
-		if n, err := e.svc.CountPending(ctx, p, "demo"); err != nil || n != 2 {
-			t.Fatalf("%s: CountPending = %d, %v; want 2", p.AgentName, n, err)
-		}
 	}
 	memberP, err := e.auth.Authenticate(ctx, member.Token)
 	if err != nil {
@@ -80,8 +77,6 @@ func TestListPending(t *testing.T) {
 	for _, tc := range denied {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := e.svc.ListPending(ctx, tc.p, tc.space)
-			apperrtest.WantKind(t, err, tc.kind, tc.msg)
-			_, err = e.svc.CountPending(ctx, tc.p, tc.space)
 			apperrtest.WantKind(t, err, tc.kind, tc.msg)
 		})
 	}

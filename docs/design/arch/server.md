@@ -341,8 +341,11 @@ type You struct {
     Role *spaces.Role `json:"role"` // null for an unjoined admin
 }
 type Service struct{ /* q, the database Resolve reads through, plus the consumer-side interfaces below */ }
-func NewService(q db.DBTX, r resolver, sp participantLister, tp topicLister, bb boardReader) *Service // q since R10
-func (s *Service) Space(ctx context.Context, p auth.Principal, space string) (Overview, error)
+func NewService(d Deps) *Service // Deps{DB, Resolver, Spaces, Topics, Boards, Invites, Inbox} since R13
+func (s *Service) Space(ctx context.Context, p auth.Principal, space string) (Overview, error) // resolves once, then the *For(m) reads (R13)
+// GUI state (R13, moved from web/state.go): web only maps these to contracts.md §10.2.
+func (s *Service) ListState(ctx context.Context, p auth.Principal) (ListState, error)  // open-invite counts in one invites.CountOpen read, only where Membership.MaySeeInvites
+func (s *Service) SpaceState(ctx context.Context, p auth.Principal, space string) (SpaceState, error) // invites.ListOpen only where MaySeeInvites
 ```
 
 Needs one new blackboards read: `func (s *Service) RecentThreads(ctx, p, space string, limit int) ([]RecentThread, error)` — `RecentThread = ThreadInfo + Blackboard + Subscribed`, space-wide, `lastPostAt DESC, MAX(post id) DESC`, LIMIT 10. And `messaging.listTopics` must report `subscribed:false` on `all` for an unjoined admin (`messaging/repository.go:78` forces `all` true) — done in 4c with the admin branch.

@@ -1,5 +1,6 @@
-// Package overview composes one read-only view of a space from the spaces, messaging and
-// blackboards services. It owns no table.
+// Package overview composes read-only views: one space at a glance (bus_space_overview)
+// and the web GUI state, from the spaces, messaging, blackboards, invites and inbox
+// services. It owns no table.
 package overview
 
 import (
@@ -7,6 +8,7 @@ import (
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/blackboards"
+	"github.com/till-muellers/agent-message-bus/server/internal/invites"
 	"github.com/till-muellers/agent-message-bus/server/internal/messaging"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
@@ -19,17 +21,28 @@ type resolver interface {
 	Resolve(ctx context.Context, q db.DBTX, p auth.Principal, space string) (spaces.Membership, error)
 }
 
-type participantLister interface {
-	Participants(ctx context.Context, p auth.Principal, space string) ([]spaces.Participant, error)
+type spaceReader interface {
+	Whoami(ctx context.Context, p auth.Principal) (spaces.WhoamiResult, error)
+	Listing(ctx context.Context, p auth.Principal) ([]spaces.Listed, error)
+	ParticipantsFor(ctx context.Context, m spaces.Membership) ([]spaces.Participant, error)
 }
 
 type topicLister interface {
-	ListTopics(ctx context.Context, p auth.Principal, space string) ([]messaging.TopicInfo, error)
+	TopicsFor(ctx context.Context, m spaces.Membership) ([]messaging.TopicInfo, error)
 }
 
 type boardReader interface {
-	List(ctx context.Context, p auth.Principal, space string) ([]blackboards.BoardInfo, error)
-	RecentThreads(ctx context.Context, p auth.Principal, space string, limit int) ([]blackboards.RecentThread, error)
+	BoardsFor(ctx context.Context, m spaces.Membership) ([]blackboards.BoardInfo, error)
+	RecentThreadsFor(ctx context.Context, m spaces.Membership, limit int) ([]blackboards.RecentThread, error)
+}
+
+type inviteReader interface {
+	CountOpen(ctx context.Context, spaceIDs []int64) (map[int64]int, error)
+	ListOpen(ctx context.Context, spaceID int64) ([]invites.Pending, error)
+}
+
+type mailbox interface {
+	Count(ctx context.Context, p auth.Principal) (int, error)
 }
 
 // Overview is one space at a glance, as seen by the caller.
@@ -48,51 +61,63 @@ type You struct {
 	Role *spaces.Role `json:"role"`
 }
 
-// Service builds overviews; it only reads.
+// Service builds overviews and the GUI state; it only reads.
 type Service struct {
-	q  db.DBTX
-	r  resolver
-	sp participantLister
-	tp topicLister
-	bb boardReader
+	q   db.DBTX
+	r   resolver
+	sp  spaceReader
+	tp  topicLister
+	bb  boardReader
+	inv inviteReader
+	ib  mailbox
 }
 
-// NewService builds an overview Service over the feature services' reads; q is the
-// database the membership is resolved through.
-func NewService(q db.DBTX, r resolver, sp participantLister, tp topicLister, bb boardReader) *Service {
-	return &Service{q: q, r: r, sp: sp, tp: tp, bb: bb}
+// Deps are the reads an overview Service composes; DB is the database the membership is
+// resolved through.
+type Deps struct {
+	DB       db.DBTX
+	Resolver resolver
+	Spaces   spaceReader
+	Topics   topicLister
+	Boards   boardReader
+	Invites  inviteReader
+	Inbox    mailbox
 }
 
-// Space returns the overview of space for p. The reads run outside a transaction, like
-// the list tools they mirror.
+// NewService builds an overview Service over the feature services' reads.
+func NewService(d Deps) *Service {
+	return &Service{q: d.DB, r: d.Resolver, sp: d.Spaces, tp: d.Topics, bb: d.Boards, inv: d.Invites, ib: d.Inbox}
+}
+
+// Space returns the overview of space for p. It resolves the membership once; the reads
+// run outside a transaction, like the list tools they mirror.
 func (s *Service) Space(ctx context.Context, p auth.Principal, space string) (Overview, error) {
 	m, err := s.r.Resolve(ctx, s.q, p, space)
 	if err != nil {
 		return Overview{}, err
 	}
+	return s.of(ctx, m)
+}
+
+// of builds the overview of m's space: participants, topics, boards and recent threads.
+func (s *Service) of(ctx context.Context, m spaces.Membership) (Overview, error) {
 	o := Overview{Space: m.SpaceName, You: You{Name: m.AgentName}}
 	if m.Joined() {
 		role := m.Role
 		o.You.Role = &role
 	}
-	if err := s.fill(ctx, p, &o); err != nil {
+	var err error
+	if o.Participants, err = s.sp.ParticipantsFor(ctx, m); err != nil {
+		return Overview{}, err
+	}
+	if o.Topics, err = s.tp.TopicsFor(ctx, m); err != nil {
+		return Overview{}, err
+	}
+	if o.Blackboards, err = s.bb.BoardsFor(ctx, m); err != nil {
+		return Overview{}, err
+	}
+	if o.RecentThreads, err = s.bb.RecentThreadsFor(ctx, m, RecentThreads); err != nil {
 		return Overview{}, err
 	}
 	return o, nil
-}
-
-// fill reads the participants, topics, boards and recent threads of o.Space into o.
-func (s *Service) fill(ctx context.Context, p auth.Principal, o *Overview) error {
-	var err error
-	if o.Participants, err = s.sp.Participants(ctx, p, o.Space); err != nil {
-		return err
-	}
-	if o.Topics, err = s.tp.ListTopics(ctx, p, o.Space); err != nil {
-		return err
-	}
-	if o.Blackboards, err = s.bb.List(ctx, p, o.Space); err != nil {
-		return err
-	}
-	o.RecentThreads, err = s.bb.RecentThreads(ctx, p, o.Space, RecentThreads)
-	return err
 }

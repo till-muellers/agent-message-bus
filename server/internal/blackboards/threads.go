@@ -9,6 +9,7 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
+	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 // ThreadInfo summarizes a thread on a blackboard.
@@ -62,13 +63,9 @@ func (s *Service) ListThreads(ctx context.Context, p auth.Principal, space, name
 	return listThreads(ctx, s.db, b.id)
 }
 
-// RecentThreads returns at most limit threads across all boards of space, latest post
-// first, each with whether the caller is subscribed.
-func (s *Service) RecentThreads(ctx context.Context, p auth.Principal, space string, limit int) ([]RecentThread, error) {
-	m, err := s.spaces.Resolve(ctx, s.db, p, space)
-	if err != nil {
-		return nil, err
-	}
+// RecentThreadsFor returns at most limit threads across all boards of m's space, latest
+// post first, each with whether m's agent is subscribed.
+func (s *Service) RecentThreadsFor(ctx context.Context, m spaces.Membership, limit int) ([]RecentThread, error) {
 	return recentThreads(ctx, s.db, m.SpaceID, m.AgentID, limit)
 }
 
