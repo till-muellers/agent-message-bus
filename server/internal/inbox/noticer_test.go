@@ -44,3 +44,22 @@ func TestNoticeAfter(t *testing.T) {
 		})
 	}
 }
+
+// countingNoticer records how often TakeNotice ran.
+type countingNoticer struct{ calls int }
+
+func (c *countingNoticer) TakeNotice(ctx context.Context, _ auth.Principal) (inbox.Notice, bool, error) {
+	c.calls++
+	return inbox.Notice{}, false, ctx.Err()
+}
+
+func TestNoticeAfterCancelledContextSkipsTheQuery(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	n := &countingNoticer{}
+	notice, due := inbox.NoticeAfter(ctx, n, auth.Principal{AgentID: 7})
+	if due || !reflect.DeepEqual(notice, inbox.Notice{}) || n.calls != 0 {
+		t.Fatalf("NoticeAfter(cancelled) = %+v, %v after %d queries; want {}, false without a query", notice, due, n.calls)
+	}
+}

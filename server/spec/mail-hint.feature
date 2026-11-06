@@ -55,6 +55,13 @@ Feature: "You have mail" hint on tool results (notice channel for every client)
       When member "worker" calls MCP tool "bus_whoami"
       Then the result carries the hint
 
+    Scenario: A call whose client went away takes no hint and logs no error
+      Given "peer" sent a direct message to "worker" in space "alpha"
+      And the client of member "worker" went away before its "bus_list_topics" call returned
+      When member "worker" calls MCP tool "bus_whoami"
+      Then the result carries the hint
+      And the server logged no error for the abandoned call
+
   Rule: Looking at the mail counts as being told
 
     Scenario Outline: <tool> returning the edge entry clears the hint
