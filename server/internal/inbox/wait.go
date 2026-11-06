@@ -38,8 +38,9 @@ func WaitTimeout(seconds *int) (time.Duration, error) {
 
 // Wait returns p's matching unacknowledged entries at once, or blocks until one arrives,
 // the timeout passes, ctx ends or the service's root ends (each → []). A dropped live
-// subscription ends the wait with one more read. Every read and every heartbeat first
-// re-validates p's token: once it stopped authenticating, Wait fails with Unauthenticated.
+// subscription ends the wait with one more read. After every read and on every heartbeat
+// it re-validates p's token: once it stopped authenticating, Wait fails with
+// Unauthenticated.
 // Wait never acknowledges and never takes the stream slot, but counts p as connected while
 // it runs; it marks the edges it returns noticed (MarkNoticed).
 func (s *Service) Wait(ctx context.Context, p auth.Principal, q WaitQuery) ([]Entry, error) {
@@ -82,17 +83,18 @@ func (s *Service) await(ctx context.Context, p auth.Principal, q WaitQuery, live
 	}
 }
 
-// matching re-validates p's token, reads p's entries selected by q, at most waitLimit, and
-// marks the edges among them noticed.
+// matching reads p's entries selected by q, at most waitLimit, re-validates p's token
+// (after the read, so it sees a revocation committed before any entry read) and marks the
+// edges among them noticed.
 func (s *Service) matching(ctx context.Context, p auth.Principal, q WaitQuery) ([]Entry, error) {
-	if err := s.stillValid(ctx, p); err != nil {
-		return disconnected(ctx, nil, err)
-	}
 	es, err := selectMatching(ctx, s.db, p.AgentID, spaceFilter(p), q)
 	if err == nil {
-		err = s.MarkNoticed(ctx, p, es)
+		err = s.stillValid(ctx, p)
 	}
-	return disconnected(ctx, es, err)
+	if err != nil {
+		return disconnected(ctx, nil, err)
+	}
+	return disconnected(ctx, es, s.MarkNoticed(ctx, p, es))
 }
 
 // disconnected ends a wait whose step failed because the caller went away with [] like

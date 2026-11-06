@@ -101,30 +101,118 @@ func TestStreamOfARotatedAdminTokenEnds(t *testing.T) {
 	w := newMailWorld(t)
 	callTool(t, w.srv, adminToken, "bus_join_space", `{"space":"alpha"}`, nil)
 	old := streamUntilEnd(t, w.srv, adminToken)
-	next := "rotated-admin-token-0123456789-abcdefgh"
-	if status, body := do(t, w.srv, http.MethodPost, "/v1/admin/admin-token", adminToken, `{"token":"`+next+`"}`); status != http.StatusOK {
-		t.Fatalf("rotating: %d %s", status, body)
-	}
+	rotateAdminToken(t, w)
 	callTool(t, w.srv, w.lead, "bus_send_direct", `{"space":"alpha","to":"admin","body":"secret after rotation"}`, nil)
 	endsWithout(t, old, "secret")
 }
 
-func TestWaitOfARevokedMemberFails(t *testing.T) {
+func TestStreamOfARevokedAdminEndsBeforeTheRemintedAdminsMail(t *testing.T) {
 	t.Parallel()
 	w := newMailWorld(t)
-	done := make(chan int, 1)
-	go func() { done <- waitStatus(w.srv, w.worker) }()
-	time.Sleep(300 * time.Millisecond) // let the wait block
-	callTool(t, w.srv, w.lead, "bus_revoke_member", `{"space":"alpha","name":"worker"}`, nil)
-	invite(t, w.srv, w.lead, "alpha", "worker")
-	callTool(t, w.srv, w.lead, "bus_send_direct", `{"space":"alpha","to":"worker","body":"wait-leak"}`, nil)
-	select {
-	case status := <-done:
-		if status != http.StatusUnauthorized {
-			t.Fatalf("the revoked wait = %d, want 401", status)
+	old := streamUntilEnd(t, w.srv, joinedAdmin(t, w, "ops"))
+	callTool(t, w.srv, adminToken, "bus_revoke_admin", `{"name":"ops"}`, nil)
+	fresh := joinedAdmin(t, w, "ops")
+	callTool(t, w.srv, w.lead, "bus_send_direct", `{"space":"alpha","to":"ops","body":"secret for ops"}`, nil)
+	endsWithout(t, old, "secret")
+	status, _, closeStream := openStream(t, w.srv, fresh)
+	defer closeStream()
+	if status != http.StatusOK {
+		t.Fatalf("the re-minted admin's stream = %d, want 200", status)
+	}
+}
+
+// joinedAdmin mints admin name, joins it to alpha and returns its token.
+func joinedAdmin(t *testing.T, w mailWorld, name string) string {
+	t.Helper()
+	var minted struct{ Token string }
+	callTool(t, w.srv, adminToken, "bus_mint_admin", `{"name":"`+name+`"}`, &minted)
+	callTool(t, w.srv, minted.Token, "bus_join_space", `{"space":"alpha"}`, nil)
+	return minted.Token
+}
+
+// rotateAdminToken swaps the instance admin token, as agent-message-bus rotate-token does.
+func rotateAdminToken(t *testing.T, w mailWorld) {
+	t.Helper()
+	next := "rotated-admin-token-0123456789-abcdefgh"
+	if status, body := do(t, w.srv, http.MethodPost, "/v1/admin/admin-token", adminToken, `{"token":"`+next+`"}`); status != http.StatusOK {
+		t.Fatalf("rotating: %d %s", status, body)
+	}
+}
+
+func TestWaitOfADeadTokenFailsInsteadOfReturningTheNextMail(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		agent string
+		token func(t *testing.T, w mailWorld) string
+		kill  func(t *testing.T, w mailWorld)
+	}{
+		"member revoked and invited again": {
+			agent: "worker",
+			token: func(_ *testing.T, w mailWorld) string { return w.worker },
+			kill: func(t *testing.T, w mailWorld) {
+				callTool(t, w.srv, w.lead, "bus_revoke_member", `{"space":"alpha","name":"worker"}`, nil)
+				invite(t, w.srv, w.lead, "alpha", "worker")
+			},
+		},
+		"admin revoked and minted again": {
+			agent: "ops",
+			token: func(t *testing.T, w mailWorld) string { return joinedAdmin(t, w, "ops") },
+			kill: func(t *testing.T, w mailWorld) {
+				callTool(t, w.srv, adminToken, "bus_revoke_admin", `{"name":"ops"}`, nil)
+				joinedAdmin(t, w, "ops")
+			},
+		},
+		"bootstrap admin token rotated": {
+			agent: "admin",
+			token: func(t *testing.T, w mailWorld) string {
+				callTool(t, w.srv, adminToken, "bus_join_space", `{"space":"alpha"}`, nil)
+				return adminToken
+			},
+			kill: rotateAdminToken,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			w := newMailWorld(t)
+			token := tc.token(t, w)
+			emptyMailbox(t, w.srv, token)
+			done := make(chan int, 1)
+			go func() { done <- waitStatus(w.srv, token) }()
+			untilConnected(t, w, tc.agent)
+			tc.kill(t, w)
+			callTool(t, w.srv, w.lead, "bus_send_direct", `{"space":"alpha","to":"`+tc.agent+`","body":"wait-leak"}`, nil)
+			select {
+			case status := <-done:
+				if status != http.StatusUnauthorized {
+					t.Fatalf("the dead token's wait = %d, want 401", status)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("the dead token's wait is still pending")
+			}
+		})
+	}
+}
+
+// untilConnected polls alpha's participants until agent counts as connected: its
+// bus_wait is past the request's authentication and blocks.
+func untilConnected(t *testing.T, w mailWorld, agent string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var rows []struct {
+			Name      string
+			Connected bool
 		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the revoked wait is still pending")
+		callTool(t, w.srv, w.lead, "bus_list_participants", `{"space":"alpha"}`, &rows)
+		for _, r := range rows {
+			if r.Name == agent && r.Connected {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never counted as connected", agent)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

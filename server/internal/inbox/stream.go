@@ -16,7 +16,8 @@ var errDropped = errors.New("inbox subscription dropped")
 // stream subscribes before draining the backlog so nothing published meanwhile
 // is missed. Live messages are only wake-up signals: each one drains the inbox
 // after lastSent, so entries go out once and in id order even when producers
-// publish out of order. Once ctx ends, a write blocked on the client fails at once.
+// publish out of order. Once ctx ends, a write blocked on the client fails within
+// expireGrace.
 func (s *Service) stream(ctx context.Context, w http.ResponseWriter, p auth.Principal) error {
 	live, unsubscribe := s.pub.Subscribe(topic(p.AgentID))
 	defer unsubscribe()
@@ -42,21 +43,24 @@ func (s *Service) deliver(ctx context.Context, sse sseWriter, p auth.Principal, 
 }
 
 // drain sends p's stored entries after lastSent page by page and returns the last id
-// sent. Before each page it re-validates p's token, so a revoked or rotated token gets
-// nothing more. After each page it discards the queued wake-up signals, since the next
-// Read covers them, so a long drain under a sender burst does not overflow the
-// subscription.
+// sent. It re-validates p's token after each read and before sending what it read, so a
+// revocation that committed before an entry was stored is seen before that entry goes
+// out, and a woken stream of a dead token ends even when nothing in its scope arrived.
+// The read that finds nothing more after a page is not checked, since that page's check
+// covered it: one token query per wake-up and per further page. After each page it
+// discards the queued wake-up signals, since the next Read covers them, so a long drain
+// under a sender burst does not overflow the subscription.
 func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, live <-chan []byte, lastSent int64) (int64, error) {
-	for {
-		if err := s.stillValid(ctx, p); err != nil {
-			return lastSent, err
-		}
+	for sent := false; ; sent = true {
 		page, err := s.Read(ctx, p, lastSent, MaxLimit)
 		if err != nil {
 			return lastSent, fmt.Errorf("reading inbox after %d: %w", lastSent, err)
 		}
-		if len(page) == 0 {
+		if sent && len(page) == 0 {
 			return lastSent, nil
+		}
+		if err := s.stillValid(ctx, p); err != nil || len(page) == 0 {
+			return lastSent, err
 		}
 		if lastSent, err = s.sendPage(ctx, sse, p, page, lastSent); err != nil {
 			return lastSent, err

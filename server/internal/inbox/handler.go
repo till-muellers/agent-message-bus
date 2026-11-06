@@ -41,18 +41,20 @@ func (h StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	stop := context.AfterFunc(h.root, cancel)
 	defer stop()
-	logStreamEnd(ctx, p.AgentID, h.svc.stream(ctx, w, p))
+	logStreamEnd(ctx, h.root, p.AgentID, h.svc.stream(ctx, w, p))
 }
 
-// logStreamEnd logs why a stream ended: nothing for a disconnect, shutdown or dropped
-// subscription, Info for a revoked token or a client that stopped reading, ERROR otherwise.
-func logStreamEnd(ctx context.Context, agentID int64, err error) {
+// logStreamEnd logs why a stream ended: Info for a client that stopped reading or a
+// revoked token, nothing for a disconnect, shutdown or dropped subscription, ERROR
+// otherwise. A failed write cancels the request context, so a frame write that ran out
+// of time counts as a client that stopped reading unless root (shutdown) cut it.
+func logStreamEnd(ctx, root context.Context, agentID int64, err error) {
 	switch {
+	case errors.Is(err, os.ErrDeadlineExceeded) && root.Err() == nil:
+		slog.InfoContext(ctx, "inbox stream dropped: client not reading", "agent_id", agentID)
 	case err == nil || ctx.Err() != nil || errors.Is(err, errDropped):
 	case isRevoked(err):
 		slog.InfoContext(ctx, "inbox stream ended: token no longer valid", "agent_id", agentID)
-	case errors.Is(err, os.ErrDeadlineExceeded):
-		slog.InfoContext(ctx, "inbox stream dropped: client not reading", "agent_id", agentID)
 	default:
 		slog.ErrorContext(ctx, "inbox stream failed", "agent_id", agentID, "err", err)
 	}

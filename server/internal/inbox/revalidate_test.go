@@ -98,11 +98,69 @@ func TestIdleWaitFailsAtTheHeartbeatAfterItsTokenStoppedAuthenticating(t *testin
 		done <- err
 	}()
 	waiting(t, cp)
-	w.creds.revoke()
+	eventually(t, "the wait checked its token once", func() bool { return w.creds.checks.Load() >= 1 })
+	w.creds.revoke() // only the heartbeat can notice it now
 	select {
 	case err := <-done:
 		apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
 	case <-time.After(waitTimeout):
 		t.Fatal("the revoked wait kept waiting")
 	}
+}
+
+// The token check costs one query per wake-up and per page, not one per read: the read
+// that finds nothing more after a page is covered by that page's check.
+func TestStreamChecksItsTokenOncePerWakeUp(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	w.svc.heartbeat = time.Hour
+	stream := startStream(t.Context(), t, w, "memberA")
+	stream.entries(2)
+	w.send(t, "worker", "alpha", "a3")
+	stream.entries(1)
+	w.send(t, "worker", "alpha", "a4")
+	stream.entries(1)
+	if got := w.creds.checks.Load(); got != 3 {
+		t.Fatalf("token checks = %d, want 3 (backlog, a3, a4)", got)
+	}
+}
+
+// revokeAndLeakAfterFirstCheck makes the first token check of w's stream or wait followed
+// at once by a revocation and a new entry "leak" for memberA, as when revoke, re-invite and
+// send commit between that check and the next read.
+func revokeAndLeakAfterFirstCheck(t *testing.T, w *world) {
+	w.creds.afterFirstCheck = func() {
+		w.creds.revoke()
+		es, err := w.svc.insert(t.Context(), w.db, []Entry{w.entry("worker", "alpha", "leak")})
+		if err != nil {
+			t.Errorf("Insert leak: %v", err)
+			return
+		}
+		w.svc.publish(es)
+	}
+}
+
+func TestStreamSendsNothingStoredAfterARevocationThatFollowsItsCheck(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	w.svc.heartbeat = time.Hour
+	revokeAndLeakAfterFirstCheck(t, w)
+	stream := startStream(t.Context(), t, w, "memberA")
+	if lines := stream.linesUntilClosed(); slices.ContainsFunc(lines, func(l string) bool { return strings.Contains(l, "leak") }) {
+		t.Fatalf("the revoked stream got %v", lines)
+	}
+	slotFreed(t, w)
+}
+
+func TestWaitReturnsNothingStoredAfterARevocationThatFollowsItsCheck(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	svc, _ := waitService(w, t.Context(), w.pub)
+	svc.heartbeat = time.Hour
+	revokeAndLeakAfterFirstCheck(t, w)
+	got, err := svc.Wait(t.Context(), w.principals["memberA"], afterA2(w))
+	if len(got) > 0 {
+		t.Fatalf("the revoked wait returned %v", bodies(got))
+	}
+	apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
 }

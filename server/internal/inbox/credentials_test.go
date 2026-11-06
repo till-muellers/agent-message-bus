@@ -10,12 +10,22 @@ import (
 )
 
 // fakeCredentials accepts every principal until revoke, like a token that is deleted or
-// rotated while its stream or wait runs.
-type fakeCredentials struct{ revoked atomic.Bool }
+// rotated while its stream or wait runs. checks counts the re-validations; afterFirstCheck,
+// when set before the stream or wait starts, runs right after the first check passed, like
+// a revocation that commits just after it.
+type fakeCredentials struct {
+	revoked         atomic.Bool
+	checks          atomic.Int64
+	afterFirstCheck func()
+}
 
 func (f *fakeCredentials) StillValid(context.Context, db.DBTX, auth.Principal) error {
+	n := f.checks.Add(1)
 	if f.revoked.Load() {
 		return apperr.New(apperr.Unauthenticated, "invalid token")
+	}
+	if n == 1 && f.afterFirstCheck != nil {
+		f.afterFirstCheck()
 	}
 	return nil
 }
