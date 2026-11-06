@@ -121,9 +121,3 @@ Feature: Local instance management
       And another process holds the database write lock for 1 second
       When the admin calls bus_create_space with space "short0"
       Then the call succeeds after the lock is released
-
-    Scenario: A read waits for no external writer
-      Given the server runs
-      And another process holds the database write lock
-      When a plain read of the database runs
-      Then it returns without waiting for the lock

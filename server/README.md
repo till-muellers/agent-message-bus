@@ -108,7 +108,7 @@ Sessions live in memory (a restart signs everybody out) for at most 8 hours and 
 - **Single writer.** `db.Open` sets `SetMaxOpenConns(1)`.
   - Every mutating operation is one transaction, opened by its feature (`db.InTx`, or `inbox.InTx` when it produces inbox entries), which does the permission check (`Resolver.Resolve` through the transaction), the change and the inbox insert together.
   - Inside a transaction, use only the transaction. Querying `*sql.DB` there deadlocks.
-  - Transactions begin `IMMEDIATE` (`_txlock=immediate` in the DSN): they take the write lock first, so the 5 s `busy_timeout` also covers another process holding it (a deferred read-then-write would fail with `SQLITE_BUSY` at once). Plain reads outside a transaction are WAL readers and never wait.
+  - Transactions begin `IMMEDIATE` (`_txlock=immediate` in the DSN): they take the write lock first, so the 5 s `busy_timeout` also covers another process holding it (a deferred read-then-write would fail with `SQLITE_BUSY` at once). Plain reads outside a transaction are WAL readers and never wait for the SQLite lock, but they share the one connection, so they queue behind a transaction waiting for it. Every tool call ends with the mail-notice check, a write transaction, so during an external write lock agent-facing calls wait too.
   - Unique indexes back every name rule.
 - **Inbox delivery.**
   - Entries are published only after their transaction commits.

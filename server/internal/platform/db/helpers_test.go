@@ -11,10 +11,10 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 )
 
-func countAgents(t *testing.T, conn *sql.DB) int {
+func countAgents(t *testing.T, q db.DBTX) int {
 	t.Helper()
 	var n int
-	if err := conn.QueryRow(`SELECT COUNT(*) FROM agents`).Scan(&n); err != nil {
+	if err := q.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM agents`).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	return n
