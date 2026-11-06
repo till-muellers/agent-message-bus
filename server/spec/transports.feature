@@ -205,6 +205,10 @@ Feature: Transports
       Then the response body does not contain "secret db detail"
       And the error is logged on the server
 
+    Scenario: A request the client cancelled is not an internal error
+      When a request fails with a non-application error wrapping "context canceled"
+      Then the error is not logged at error level
+
     Scenario: JSON responses
       When a handler writes {"a":1} with status 201
       Then the response status is 201
@@ -258,6 +262,10 @@ Feature: Transports
       Then the MCP call fails with a protocol error instead of an error result
       And the protocol error message is "internal error"
       And the error is logged on the server
+
+    Scenario: An MCP call the client cancelled is not an internal error
+      When an MCP tool fails with a non-application error wrapping "context canceled"
+      Then the error is not logged at error level
 
     Scenario Outline: MCP bearer authentication (<case>)
       # /mcp parses the header and rejects exactly like the /v1 routes (see the bearer table).

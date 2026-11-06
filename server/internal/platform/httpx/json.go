@@ -2,6 +2,7 @@
 package httpx
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -36,7 +37,8 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// WriteError maps err to an HTTP status and error body; unknown errors become 500.
+// WriteError maps err to an HTTP status and error body; unknown errors become 500 and are
+// logged as errors, except a cancelled request (the client went away), logged at debug.
 func WriteError(w http.ResponseWriter, err error) {
 	var ae *apperr.Error
 	if errors.As(err, &ae) {
@@ -45,6 +47,10 @@ func WriteError(w http.ResponseWriter, err error) {
 			return
 		}
 	}
-	slog.Error("internal error", "err", err)
+	if errors.Is(err, context.Canceled) {
+		slog.Debug("request cancelled", "err", err)
+	} else {
+		slog.Error("internal error", "err", err)
+	}
 	WriteJSON(w, http.StatusInternalServerError, errorBody{errorDetail{Code: "internal", Message: "internal error"}})
 }

@@ -1,9 +1,11 @@
 package httpx
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,5 +60,26 @@ func TestWriteJSON(t *testing.T) {
 	}
 	if got := strings.TrimSpace(rec.Body.String()); got != `{"a":1}` {
 		t.Fatalf("body = %s", got)
+	}
+}
+
+// A request the client cancelled is not a server fault: no ERROR line, but the response
+// is still the 500 envelope.
+func TestWriteErrorLogsACancelledRequestBelowError(t *testing.T) {
+	var logs strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	rec := httptest.NewRecorder()
+	WriteError(rec, fmt.Errorf("listing agent spaces: %w", context.Canceled))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	if strings.Contains(logs.String(), "ERROR") {
+		t.Fatalf("a cancelled request logged an error: %s", logs.String())
+	}
+	WriteError(rec, errors.New("real fault"))
+	if !strings.Contains(logs.String(), "ERROR") {
+		t.Fatalf("a real internal error must still log an error: %q", logs.String())
 	}
 }
