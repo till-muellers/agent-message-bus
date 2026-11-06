@@ -38,7 +38,5 @@ func (e *statusError) Error() string {
 	return fmt.Sprintf("POST %s: status %d: %s", e.URL, e.Code, e.Body)
 }
 
-// rejected reports whether the server refused the caller: its token (401) or its address (403).
-func (e *statusError) rejected() bool {
-	return e.Code == http.StatusUnauthorized || e.Code == http.StatusForbidden
-}
+// unauthenticated reports whether the server did not accept the caller's token.
+func (e *statusError) unauthenticated() bool { return e.Code == http.StatusUnauthorized }

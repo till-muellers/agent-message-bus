@@ -28,6 +28,7 @@ type fakeBus struct {
 	obey     bool          // whether shutdown actually stops it
 	takeover bool          // on an ignored shutdown, another instance's state replaces its own
 	token    string        // the admin token it accepts, swapped by POST /v1/admin/admin-token; empty: any
+	refuse   int           // status the admin endpoints answer instead of acting; 0: act
 	swapLag  time.Duration // between a swap's token check and the swap, like a server under load
 	dir      string
 	mu       sync.Mutex
@@ -75,6 +76,10 @@ func (f *fakeBus) handle(w http.ResponseWriter, r *http.Request) {
 	if !authorized {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error":{"code":"unauthenticated","message":"invalid token"}}`))
+		return
+	}
+	if f.refuse != 0 {
+		w.WriteHeader(f.refuse)
 		return
 	}
 	switch r.URL.Path {

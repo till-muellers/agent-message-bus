@@ -28,8 +28,8 @@ func (m Manager) Stop(ctx context.Context) error {
 	return nil
 }
 
-// requestShutdown asks the instance at url to shut down. A server that refuses the request is
-// healthy, not stuck: that is an error and nothing is killed. Any other failure is left to
+// requestShutdown asks the instance at url to shut down. A server that does not accept the
+// token is healthy, not stuck: that is an error and nothing is killed. Any other failure is left to
 // awaitExit, which kills an instance that does not leave.
 func (m Manager) requestShutdown(ctx context.Context, url string) error {
 	tok, err := m.Config.ResolveAdminToken()
@@ -37,7 +37,7 @@ func (m Manager) requestShutdown(ctx context.Context, url string) error {
 		return nil // the instance is stopped by awaitExit
 	}
 	var refused *statusError
-	if err := m.adminPost(ctx, url+"/v1/admin/shutdown", tok, ""); errors.As(err, &refused) && refused.rejected() {
+	if err := m.adminPost(ctx, url+"/v1/admin/shutdown", tok, ""); errors.As(err, &refused) && refused.unauthenticated() {
 		return fmt.Errorf("asking the instance to shut down: %w; the admin token in %s is not the admin token of the running instance, nothing was stopped",
 			err, m.tokenSource())
 	}

@@ -59,6 +59,7 @@ Feature: Local instance management
 
     Scenario: The loser of a start race never takes the data dir over
       Given I run "agent-message-bus start" twice at the same moment, with AMB_ADDR 127.0.0.1:8080 and 127.0.0.1:8090
+      And the server that lost has met the lock and exited with "agent-message-bus already running"
       When I run "agent-message-bus stop" less than a second later
       Then the instance the starts reported is stopped
       And no server process serves the data dir, and "agent-message-bus status" prints "not running"
@@ -144,7 +145,12 @@ Feature: Local instance management
       Then POST /v1/admin/shutdown is answered 401
       And it fails at once with "asking the instance to shut down: POST http://127.0.0.1:8080/v1/admin/shutdown: status 401: <body>; the admin token in <AMB_ADMIN_TOKEN or datadir>/admin-token is not the admin token of the running instance, nothing was stopped"
       And no process is killed and the instance keeps running
-      # a 403 (the command does not run on the server host) fails the same way
+
+    Scenario: stop still kills an instance that answers 403 to its shutdown request
+      Given an instance bound to a non-loopback address of this host runs with pid 42
+      And POST /v1/admin/shutdown from this host is answered 403 "admin endpoints are only available from localhost"
+      When I run "agent-message-bus stop"
+      Then the process is killed once it still holds the data dir lock after 10 s and the state file still names it
 
     Scenario: stop kills nothing once another instance took the data dir over
       Given an instance is running with pid 42 at "http://127.0.0.1:8080"
