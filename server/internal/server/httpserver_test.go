@@ -34,54 +34,64 @@ func rejectUnread(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "no", http.StatusUnauthorized)
 }
 
-// TestNewHTTPServerDrainsUnreadBodyOnClose: a Connection: close request whose body the
-// handler ignored is read to EOF, so the late body never meets a closed socket.
+func readAll(w http.ResponseWriter, r *http.Request) {
+	if _, err := io.Copy(io.Discard, r.Body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+}
+
+// TestNewHTTPServerDrainsUnreadBodyOnClose: the answer to a Connection: close request whose
+// body the handler ignored is sent first, then at most maxDrainBytes+1 of the body are read
+// (http.MaxBytesReader reads one byte past its limit to detect it).
 func TestNewHTTPServerDrainsUnreadBodyOnClose(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		close    bool
-		wantRead int
+		name        string
+		close       bool
+		handler     http.HandlerFunc
+		body        string
+		wantRead    int
+		wantFlushed bool
 	}{
-		{name: "connection close", close: true, wantRead: 5},
-		{name: "keep-alive left to net/http", close: false, wantRead: 0},
+		{name: "unread body", close: true, handler: rejectUnread, body: "hello", wantRead: 5, wantFlushed: true},
+		{name: "read body left alone", close: true, handler: readAll, body: "hello", wantRead: 5},
+		{name: "keep-alive left to net/http", handler: rejectUnread, body: "hello"},
+		{name: "drain capped", close: true, handler: rejectUnread, body: strings.Repeat("x", 2*maxDrainBytes),
+			wantRead: maxDrainBytes + 1, wantFlushed: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			body := &countingBody{r: strings.NewReader("hello")}
+			body := &countingBody{r: strings.NewReader(tc.body)}
 			req := httptest.NewRequest(http.MethodPost, "/v1/tools/x", body)
 			req.Close = tc.close
-			NewHTTPServer(http.HandlerFunc(rejectUnread)).Handler.ServeHTTP(httptest.NewRecorder(), req)
-			if body.read != tc.wantRead || body.eof != tc.close {
-				t.Fatalf("body read %d bytes, eof %v; want %d, %v", body.read, body.eof, tc.wantRead, tc.close)
+			rec := httptest.NewRecorder()
+			NewHTTPServer(tc.handler).Handler.ServeHTTP(rec, req)
+			if body.read != tc.wantRead || rec.Flushed != tc.wantFlushed {
+				t.Fatalf("body read %d bytes, flushed %v; want %d, %v", body.read, rec.Flushed, tc.wantRead, tc.wantFlushed)
 			}
 		})
 	}
 }
 
-// TestNewHTTPServerAnswersBeforeLateBody: headers first, the body only after the handler
-// answered without reading it; the client still gets the status line instead of a reset.
+// TestNewHTTPServerAnswersBeforeLateBody: headers first; the client reads the status line,
+// then sends the body and reads the rest of the answer without a connection reset.
 func TestNewHTTPServerAnswersBeforeLateBody(t *testing.T) {
 	t.Parallel()
-	answered := make(chan struct{})
-	srv := NewHTTPServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rejectUnread(w, r)
-		close(answered)
-	}))
+	srv := NewHTTPServer(http.HandlerFunc(rejectUnread))
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
-	status, err := lateBodyRequest(ln.Addr().String(), answered)
+	status, err := lateBodyRequest(ln.Addr().String())
 	if err != nil || status != "HTTP/1.1 401 Unauthorized" {
-		t.Fatalf("status line %q, %v; want 401", status, err)
+		t.Fatalf("status line %q, %v; want 401 and a clean close", status, err)
 	}
 }
 
-func lateBodyRequest(addr string, answered <-chan struct{}) (string, error) {
+func lateBodyRequest(addr string) (string, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return "", err
@@ -94,10 +104,14 @@ func lateBodyRequest(addr string, answered <-chan struct{}) (string, error) {
 	if _, err := io.WriteString(conn, head); err != nil {
 		return "", err
 	}
-	<-answered
+	answer := bufio.NewReader(conn)
+	line, err := answer.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
 	if _, err := io.WriteString(conn, "hello"); err != nil {
 		return "", err
 	}
-	line, err := bufio.NewReader(conn).ReadString('\n')
+	_, err = io.Copy(io.Discard, answer)
 	return strings.TrimSpace(line), err
 }
