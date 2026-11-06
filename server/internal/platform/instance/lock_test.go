@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"testing"
@@ -121,4 +122,42 @@ func mustClaim(t *testing.T, dir string) *Lock {
 	}
 	t.Cleanup(func() { _ = l.Release() })
 	return l
+}
+
+// TestClaimFailsFastOnServingInstance: a claim that finds the lock held by a serving instance
+// fails at once; it never waits for that instance to stop, or it would take the data dir over
+// from a start whose instance an operator just stopped.
+func TestClaimFailsFastOnServingInstance(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	first := mustClaim(t, dir)
+	pauses := 0
+	f, err := lockExclusive(context.Background(), lockPath(dir), time.Hour, func() {
+		pauses++
+		_ = first.Release() // the serving instance is stopped while the loser waits
+	})
+	if !errors.Is(err, errLocked) || pauses != 0 {
+		t.Fatalf("lock held by a serving instance: %v after %d pauses", err, pauses)
+	}
+	if f != nil {
+		_ = f.Close()
+	}
+	_ = first.Release()
+}
+
+// TestClaimLoserNeverTakesOver: the loser of a start race, with the full patience, still
+// loses when the winner is stopped a moment later.
+func TestClaimLoserNeverTakesOver(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	winner := mustClaim(t, dir)
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		_ = winner.Release()
+	}()
+	l, err := claim(context.Background(), http.DefaultClient, dir, claimPatience)
+	if err == nil {
+		_ = l.Release()
+		t.Fatal("the loser took the data dir over from the winner")
+	}
 }

@@ -57,6 +57,12 @@ Feature: Local instance management
       And one start prints "agent-message-bus started (pid <pid>) at <url>; log: <datadir>/agent-message-bus.log"
       And the other prints "agent-message-bus already running (pid <pid>) at <url>"
 
+    Scenario: The loser of a start race never takes the data dir over
+      Given I run "agent-message-bus start" twice at the same moment, with AMB_ADDR 127.0.0.1:8080 and 127.0.0.1:8090
+      When I run "agent-message-bus stop" less than a second later
+      Then the instance the starts reported is stopped
+      And no server process serves the data dir, and "agent-message-bus status" prints "not running"
+
     Scenario: start waits for a server that has not published its state yet
       Given a server holds the data dir lock but has not written the state file yet
       When I run "agent-message-bus start"
@@ -130,6 +136,15 @@ Feature: Local instance management
       Then the process is killed once it still holds the data dir lock after 10 s and the state file still names it
       And stop waits until the lock is released
       And the state file is gone
+
+    Scenario: stop with a token the server rejects stops nothing
+      Given an instance is running with pid 42 at "http://127.0.0.1:8080"
+      And the admin token of this command (AMB_ADMIN_TOKEN, or <datadir>/admin-token) is not the instance's
+      When I run "agent-message-bus stop"
+      Then POST /v1/admin/shutdown is answered 401
+      And it fails at once with "asking the instance to shut down: POST http://127.0.0.1:8080/v1/admin/shutdown: status 401: <body>; the admin token in <AMB_ADMIN_TOKEN or datadir>/admin-token is not the admin token of the running instance, nothing was stopped"
+      And no process is killed and the instance keeps running
+      # a 403 (the command does not run on the server host) fails the same way
 
     Scenario: stop kills nothing once another instance took the data dir over
       Given an instance is running with pid 42 at "http://127.0.0.1:8080"
@@ -208,6 +223,18 @@ Feature: Local instance management
       And the output is the new token
       And a call with the old token gets 401 unauthenticated
       And a call with the new token succeeds
+
+    Scenario: Overlapping rotate-token runs take turns
+      Given an instance is running with the token from <datadir>/admin-token
+      When I run "agent-message-bus rotate-token" five times at the same moment
+      Then every run succeeds, one after the other
+      And <datadir>/admin-token holds the token the instance accepts
+
+    Scenario: rotate-token gives up on a run that never ends
+      Given another rotate-token holds <datadir>/admin-token.lock
+      When I run "agent-message-bus rotate-token"
+      Then after 10 s it fails with "another rotate-token still runs (<datadir>/admin-token.lock is held after 10s)"
+      And <datadir>/admin-token is unchanged
 
     Scenario: rotate-token refuses when the env token is set
       Given AMB_ADMIN_TOKEN is "env-token-0123456789-0123456789-abcdef"

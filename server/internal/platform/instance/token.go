@@ -20,10 +20,16 @@ func (m Manager) AdminToken() error {
 }
 
 // RotateToken generates a new admin token, swaps it into a live instance, writes the file and prints it.
+// Runs on one data dir take turns, so the file ends holding the token the instance accepts.
 func (m Manager) RotateToken(ctx context.Context) error {
 	if m.Config.AdminToken != "" {
 		return errors.New("AMB_ADMIN_TOKEN is set in the environment; rotate it there")
 	}
+	release, err := m.lockRotation(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
 	old, err := m.Config.ResolveAdminToken()
 	if err != nil {
 		return fmt.Errorf("resolving admin token: %w", err)

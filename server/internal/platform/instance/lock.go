@@ -67,7 +67,9 @@ func claim(ctx context.Context, client *http.Client, dir string, patience time.D
 func pauseClaim() { time.Sleep(claimRetry) }
 
 // lockExclusive retries, calling pause in between, while CLI probes briefly share the lock,
-// up to patience.
+// up to patience. It never waits for an exclusive holder: a serving instance holds the lock
+// for its whole life, and a claim that outlasted it would take the data dir over from the
+// start that lost the race, after an operator stopped the winner.
 func lockExclusive(ctx context.Context, path string, patience time.Duration, pause func()) (*os.File, error) {
 	deadline := time.Now().Add(patience)
 	for {
@@ -75,8 +77,28 @@ func lockExclusive(ctx context.Context, path string, patience time.Duration, pau
 		if !errors.Is(err, errLocked) || !time.Now().Before(deadline) || ctx.Err() != nil {
 			return f, err
 		}
+		serving, probeErr := heldExclusively(path)
+		if probeErr != nil {
+			return nil, probeErr
+		}
+		if serving {
+			return nil, errLocked
+		}
 		pause()
 	}
+}
+
+// heldExclusively reports whether the lock is held by a serving instance rather than by CLI
+// probes: shared holds admit one more shared hold, an exclusive one admits none.
+func heldExclusively(path string) (bool, error) {
+	f, err := lockFile(path, shared)
+	if errors.Is(err, errLocked) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("probing data dir lock: %w", err)
+	}
+	return false, f.Close()
 }
 
 // claimedBy describes the instance that holds dir's lock for a claim that failed.

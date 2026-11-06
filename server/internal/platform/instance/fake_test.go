@@ -2,7 +2,9 @@ package instance
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -22,9 +24,11 @@ const testToken = "test-admin-token-0123456789-0123456789"
 type fakeBus struct {
 	srv      *httptest.Server
 	healthy  atomic.Bool
-	failures atomic.Int32 // /healthz probes to fail before answering
-	obey     bool         // whether shutdown actually stops it
-	takeover bool         // on an ignored shutdown, another instance's state replaces its own
+	failures atomic.Int32  // /healthz probes to fail before answering
+	obey     bool          // whether shutdown actually stops it
+	takeover bool          // on an ignored shutdown, another instance's state replaces its own
+	token    string        // the admin token it accepts, swapped by POST /v1/admin/admin-token; empty: any
+	swapLag  time.Duration // between a swap's token check and the swap, like a server under load
 	dir      string
 	mu       sync.Mutex
 	calls    []string // "path auth body"
@@ -66,11 +70,44 @@ func (f *fakeBus) handle(w http.ResponseWriter, r *http.Request) {
 	b, _ := io.ReadAll(r.Body)
 	f.mu.Lock()
 	f.calls = append(f.calls, r.URL.Path+" "+r.Header.Get("Authorization")+" "+string(b))
+	authorized := f.token == "" || r.Header.Get("Authorization") == "Bearer "+f.token
 	f.mu.Unlock()
-	if r.URL.Path == "/v1/admin/shutdown" {
+	if !authorized {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"code":"unauthenticated","message":"invalid token"}}`))
+		return
+	}
+	switch r.URL.Path {
+	case "/v1/admin/shutdown":
 		f.shutDown()
+	case "/v1/admin/admin-token":
+		f.swapToken(b)
 	}
 	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+// swapToken installs the token of body after swapLag: the check and the swap are not one step,
+// and the answers come back in no fixed order.
+func (f *fakeBus) swapToken(body []byte) {
+	var in struct{ Token string }
+	if err := json.Unmarshal(body, &in); err != nil {
+		return
+	}
+	time.Sleep(f.swapLag)
+	f.mu.Lock()
+	if f.token != "" {
+		f.token = in.Token
+	}
+	f.mu.Unlock()
+	if f.swapLag > 0 {
+		time.Sleep(rand.N(f.swapLag)) // the answer reaches the caller in no fixed order
+	}
+}
+
+func (f *fakeBus) liveToken() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.token
 }
 
 func (f *fakeBus) shutDown() {
