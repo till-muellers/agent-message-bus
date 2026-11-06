@@ -214,14 +214,25 @@ func TestCancelledCallLogsNoError(t *testing.T) {
 		Call: func(context.Context, auth.Principal, json.RawMessage) (any, error) {
 			return nil, fmt.Errorf("listing spaces: %w", context.Canceled)
 		}}
-	url, tok := setup(t, tools.NewRegistry([]tools.Tool{gone}))
+	crash := tools.Tool{Meta: tools.Meta{Name: "crash", Description: "fails", Schema: map[string]any{"type": "object"}},
+		Call: func(context.Context, auth.Principal, json.RawMessage) (any, error) {
+			return nil, errors.New("real fault")
+		}}
+	url, tok := setup(t, tools.NewRegistry([]tools.Tool{gone, crash}))
 	s, err := connect(context.Background(), url, tok)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	_, _ = s.CallTool(context.Background(), &mcp.CallToolParams{Name: "gone"})
+	_, err = s.CallTool(context.Background(), &mcp.CallToolParams{Name: "gone"})
+	if err == nil || !strings.Contains(err.Error(), "internal error") {
+		t.Fatalf("err = %v, want the protocol error \"internal error\"", err)
+	}
 	if strings.Contains(logs.String(), "ERROR") {
 		t.Fatalf("a cancelled call logged an error: %s", logs.String())
+	}
+	_, _ = s.CallTool(context.Background(), &mcp.CallToolParams{Name: "crash"})
+	if !strings.Contains(logs.String(), "ERROR") {
+		t.Fatalf("a real internal error must still log an error: %q", logs.String())
 	}
 }
