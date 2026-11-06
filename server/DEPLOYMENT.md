@@ -229,7 +229,7 @@ References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [agent guide](in
 |Server exits with "address already in use"|Another process holds the port. Stop it or set `AMB_ADDR=127.0.0.1:8090`. For `listen AMB_WEB_ADDR …` the web GUI port is taken (another instance on the default `127.0.0.1:8081`?): set `AMB_WEB_ADDR` to a free port or `off`.|
 |`AMB_WEB_ADDR 127.0.0.1:8081 must differ from AMB_ADDR`|`AMB_ADDR` uses the GUI's default address. Set `AMB_WEB_ADDR` to another address or `off`.|
 |`agent-message-bus already running (pid N) at <url>`|An instance already serves this data dir. Use it, run `agent-message-bus stop`, or set a different `AMB_DB_PATH`.|
-|`agent-message-bus did not become healthy within 10s`|`start` prints the log tail; fix the cause shown there (port, DB path, invalid `AMB_ADMIN_TOKEN`).|
+|`agent-message-bus did not become healthy within 10s`|`start` prints the log tail; fix the cause shown there (port, DB path, an unusable token in `<datadir>/admin-token`; an unusable `AMB_ADMIN_TOKEN` fails `start` at once).|
 |`AMB_ADMIN_TOKEN: admin token must be 32..512 visible ASCII characters`|`AMB_ADMIN_TOKEN` is too short, too long, blank or holds spaces or control characters; fix it or unset it to use the generated token file. The same message prefixed `admin token in <file>:` names a bad token file.|
 |`AMB_ADMIN_TOKEN is set in the environment; rotate it there`|`rotate-token` only rotates the file token; change the env var and restart.|
 |`403 admin endpoints are only available from localhost`|`stop`/`rotate-token` must run on the server host.|
