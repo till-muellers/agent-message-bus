@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
@@ -37,15 +36,7 @@ func (s *Service) MintAdmin(ctx context.Context, p Principal, name string) (stri
 	if name == BootstrapName {
 		return "", apperr.New(apperr.Conflict, "admin is the bootstrap admin; its token is the instance admin token")
 	}
-	var token string
-	err := db.InTx(ctx, s.db, func(tx *sql.Tx) error {
-		id, err := s.ensureAgent(ctx, tx, name, Admin)
-		if err != nil {
-			return err
-		}
-		token, err = s.issue(ctx, tx, AdminTokenPrefix, id, 0)
-		return err
-	})
+	token, err := s.mint(ctx, p, name, Admin, AdminTokenPrefix)
 	if err != nil {
 		return "", err
 	}

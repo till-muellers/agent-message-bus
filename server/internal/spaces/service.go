@@ -77,6 +77,9 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, name string) err
 }
 
 func (s *Service) createInTx(ctx context.Context, tx db.DBTX, p auth.Principal, name string) error {
+	if err := s.r.revalidate(ctx, tx, p); err != nil {
+		return err
+	}
 	exists, err := spaceExists(ctx, tx, name)
 	if err != nil {
 		return err
@@ -108,21 +111,28 @@ func (s *Service) Join(ctx context.Context, p auth.Principal, name string) error
 		return err
 	}
 	return db.InTx(ctx, s.db, func(tx *sql.Tx) error {
-		id, found, err := spaceIDByName(ctx, tx, name)
-		if err != nil {
-			return err
-		}
-		if !found {
-			return apperr.New(apperr.NotFound, "space %s not found", name)
-		}
-		if _, joined, err := participantRole(ctx, tx, id, p.AgentID); err != nil || joined {
-			if err == nil {
-				err = apperr.New(apperr.Conflict, "already a participant of %s", name)
-			}
-			return err
-		}
-		return insertParticipant(ctx, tx, id, p.AgentID, joinRole(p), s.stamp())
+		return s.joinInTx(ctx, tx, p, name)
 	})
+}
+
+func (s *Service) joinInTx(ctx context.Context, tx db.DBTX, p auth.Principal, name string) error {
+	if err := s.r.revalidate(ctx, tx, p); err != nil {
+		return err
+	}
+	id, found, err := spaceIDByName(ctx, tx, name)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return apperr.New(apperr.NotFound, "space %s not found", name)
+	}
+	if _, joined, err := participantRole(ctx, tx, id, p.AgentID); err != nil || joined {
+		if err == nil {
+			err = apperr.New(apperr.Conflict, "already a participant of %s", name)
+		}
+		return err
+	}
+	return insertParticipant(ctx, tx, id, p.AgentID, joinRole(p), s.stamp())
 }
 
 // joinRole is the participant role of leader or admin p in a space it creates or joins.

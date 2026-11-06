@@ -89,7 +89,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 
 | File | Covers |
 |---|---|
-| [auth.feature](auth.feature) | Token kinds, minting leaders, name-kind conflicts, invalid and missing tokens |
+| [auth.feature](auth.feature) | Token kinds, minting leaders, name-kind conflicts, invalid and missing tokens; the token re-validated inside the write transaction (the space access gate, create, join, mints, `bus_revoke_admin`), so a revocation or rotation that commits first fails calls in flight |
 | [spaces.feature](spaces.feature) | Listing, creating, joining and deleting spaces; participants; whoami; the space access gate |
 | [invites.feature](invites.feature) | Creating invite codes with an optional task; redeeming them once via `POST /v1/invites/accept`; the task delivered as a direct message from the inviter; expiry, normalization, rejection, cancellation by revoke |
 | [membership.feature](membership.feature) | Invite, re-invite, idempotent revoke, leave, departure cascades, last leader, delete blocked by other leaders |

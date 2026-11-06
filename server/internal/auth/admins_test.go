@@ -25,7 +25,7 @@ func bootstrapped(t *testing.T) (*Service, Principal) {
 	if err := s.Bootstrap(context.Background()); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	return s, s.bootstrapPrincipal()
+	return s, s.bootstrapPrincipal(Hash(testAdmin))
 }
 
 func TestMintAdmin(t *testing.T) {
@@ -57,7 +57,7 @@ func TestMintAdmin(t *testing.T) {
 	second := mustMintAdmin(t, s, root, "ops")
 	p1, err1 := s.Authenticate(ctx, first)
 	p2, err2 := s.Authenticate(ctx, second)
-	if err1 != nil || err2 != nil || first == second || p1 != p2 || p1.Kind != Admin || p1.AgentName != "ops" || p1.Bootstrap {
+	if err1 != nil || err2 != nil || first == second || p1.AgentID != p2.AgentID || p1.Kind != Admin || p1.AgentName != "ops" || p1.Bootstrap {
 		t.Fatalf("re-mint: %+v %v / %+v %v", p1, err1, p2, err2)
 	}
 	if _, err := s.MintAdmin(ctx, p1, "web"); err != nil {

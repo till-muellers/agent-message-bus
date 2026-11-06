@@ -58,7 +58,7 @@ func TestListOpenMatchesListPending(t *testing.T) {
 // spaceIDOf resolves the id of space for its leader lead.
 func spaceIDOf(t *testing.T, e env, space string) int64 {
 	t.Helper()
-	m, err := spaces.NewResolver().Resolve(context.Background(), e.db, e.lead, space)
+	m, err := spaces.NewResolver(anyCredential{}).Resolve(context.Background(), e.db, e.lead, space)
 	if err != nil {
 		t.Fatalf("resolving %s: %v", space, err)
 	}

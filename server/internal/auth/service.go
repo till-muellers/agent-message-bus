@@ -39,18 +39,26 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Principal, er
 // AuthenticateHash resolves the Hash of a token to a Principal, so callers that keep only
 // the hash (web sessions) can re-validate it on every request.
 func (s *Service) AuthenticateHash(ctx context.Context, h string) (Principal, error) {
-	if subtle.ConstantTimeCompare([]byte(h), []byte(*s.adminHash.Load())) == 1 {
-		return s.bootstrapPrincipal(), nil
+	if s.isAdminHash(h) {
+		return s.bootstrapPrincipal(h), nil
 	}
 	p, found, err := lookupToken(ctx, s.db, h)
 	if err != nil {
 		return Principal{}, err
 	}
 	if !found {
-		return Principal{}, apperr.New(apperr.Unauthenticated, "invalid token")
+		return Principal{}, errInvalidToken()
 	}
 	return p, nil
 }
+
+// isAdminHash reports whether h is the hash of the current instance admin token.
+func (s *Service) isAdminHash(h string) bool {
+	return subtle.ConstantTimeCompare([]byte(h), []byte(*s.adminHash.Load())) == 1
+}
+
+// errInvalidToken is the Unauthenticated error of a token that does not authenticate.
+func errInvalidToken() error { return apperr.New(apperr.Unauthenticated, "invalid token") }
 
 // MintLeader creates (or reuses) leader agent name and returns a new token. Admins only.
 func (s *Service) MintLeader(ctx context.Context, p Principal, name string) (string, error) {
@@ -60,13 +68,22 @@ func (s *Service) MintLeader(ctx context.Context, p Principal, name string) (str
 	if err := domain.ValidName("name", name); err != nil {
 		return "", err
 	}
+	return s.mint(ctx, p, name, Leader, TokenPrefix)
+}
+
+// mint creates (or reuses) agent name of kind and issues a token starting with prefix, in
+// one transaction that first re-validates admin p's credential.
+func (s *Service) mint(ctx context.Context, p Principal, name string, kind Kind, prefix string) (string, error) {
 	var token string
 	err := db.InTx(ctx, s.db, func(tx *sql.Tx) error {
-		id, err := s.ensureAgent(ctx, tx, name, Leader)
+		if err := s.StillValid(ctx, tx, p); err != nil {
+			return err
+		}
+		id, err := s.ensureAgent(ctx, tx, name, kind)
 		if err != nil {
 			return err
 		}
-		token, err = s.issue(ctx, tx, TokenPrefix, id, 0)
+		token, err = s.issue(ctx, tx, prefix, id, 0)
 		return err
 	})
 	if err != nil {

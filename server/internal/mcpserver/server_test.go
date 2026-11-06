@@ -56,7 +56,11 @@ func setup(t *testing.T, reg *tools.Registry) (string, string) {
 	t.Helper()
 	ctx := context.Background()
 	a := auth.NewService(dbtest.Open(t), "admin-tok", time.Now)
-	tok, err := a.MintLeader(ctx, auth.Principal{Kind: auth.Admin}, "lead")
+	root, err := a.Authenticate(ctx, "admin-tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := a.MintLeader(ctx, root, "lead")
 	if err != nil {
 		t.Fatal(err)
 	}

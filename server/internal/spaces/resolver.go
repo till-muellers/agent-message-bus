@@ -9,13 +9,24 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
+// credentials re-validates a principal inside the caller's transaction.
+type credentials interface {
+	StillValid(ctx context.Context, q db.DBTX, p auth.Principal) error
+}
+
 // Resolver is the single authorization gate for space-scoped operations. It holds no
 // connection: every method reads through the q its caller passes, the caller's
 // transaction or the database.
-type Resolver struct{}
+type Resolver struct{ creds credentials }
 
-// NewResolver returns a Resolver.
-func NewResolver() *Resolver { return &Resolver{} }
+// NewResolver returns a Resolver that re-validates principals through creds.
+func NewResolver(creds credentials) *Resolver { return &Resolver{creds: creds} }
+
+// revalidate fails with Unauthenticated "invalid token" when p's credential was revoked
+// after p was authenticated, so a revocation that committed first wins.
+func (r *Resolver) revalidate(ctx context.Context, q db.DBTX, p auth.Principal) error {
+	return r.creds.StillValid(ctx, q, p)
+}
 
 // requireLeaderPrincipal rejects every principal that is neither a leader nor an admin agent.
 func requireLeaderPrincipal(p auth.Principal, action string) error {
@@ -36,10 +47,13 @@ func (r *Resolver) ParticipantIDs(ctx context.Context, q db.DBTX, spaceID int64)
 	return participantIDs(ctx, q, spaceID)
 }
 
-// Resolve returns p's membership in space, read through q, or a forbidden/not-found
-// error. An admin resolves in every space with Admin set; its Role is its participant
-// role, or "" when it has not joined.
+// Resolve re-validates p's credential and returns p's membership in space, read through
+// q, or an unauthenticated/forbidden/not-found error. An admin resolves in every space
+// with Admin set; its Role is its participant role, or "" when it has not joined.
 func (r *Resolver) Resolve(ctx context.Context, q db.DBTX, p auth.Principal, space string) (Membership, error) {
+	if err := r.revalidate(ctx, q, p); err != nil {
+		return Membership{}, err
+	}
 	id, found, err := spaceIDByName(ctx, q, space)
 	if err != nil {
 		return Membership{}, err

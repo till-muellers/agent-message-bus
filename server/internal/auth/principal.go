@@ -16,13 +16,15 @@ const (
 )
 
 // Principal is the authenticated caller. SpaceID is set only for members; Bootstrap
-// is true only for the instance admin token.
+// is true only for the instance admin token. credential is the hash of the token that
+// authenticated the caller, which StillValid re-checks.
 type Principal struct {
-	Kind      Kind
-	AgentID   int64
-	AgentName string
-	SpaceID   int64
-	Bootstrap bool
+	Kind       Kind
+	AgentID    int64
+	AgentName  string
+	SpaceID    int64
+	Bootstrap  bool
+	credential string
 }
 
 type principalKey struct{}

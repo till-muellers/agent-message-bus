@@ -13,7 +13,8 @@ import (
 
 const testAdmin = "admin-token-admin-token-admin-token"
 
-var admin = Principal{Kind: Admin}
+// admin is the bootstrap principal of every Service built with testAdmin.
+var admin = Principal{Kind: Admin, AgentName: BootstrapName, Bootstrap: true, credential: Hash(testAdmin)}
 
 func newTestService(t *testing.T) (*Service, *sql.DB) {
 	t.Helper()
@@ -64,9 +65,10 @@ func TestAuthenticate(t *testing.T) {
 		want  Principal
 		err   apperr.Kind
 	}{
-		{"admin", testAdmin, Principal{Kind: Admin, AgentName: BootstrapName, Bootstrap: true}, ""},
-		{"leader additional token", leadTok2, lead, ""},
-		{"member", memberTok, Principal{Kind: Member, AgentID: memberID, AgentName: "worker", SpaceID: spaceID}, ""},
+		{"admin", testAdmin, admin, ""},
+		{"leader additional token", leadTok2, Principal{Kind: Leader, AgentID: lead.AgentID, AgentName: "lead", credential: Hash(leadTok2)}, ""},
+		{"member", memberTok, Principal{Kind: Member, AgentID: memberID, AgentName: "worker", SpaceID: spaceID,
+			credential: Hash(memberTok)}, ""},
 		{"unknown", "amb_nope", Principal{}, apperr.Unauthenticated},
 		{"empty", "", Principal{}, apperr.Unauthenticated},
 	}

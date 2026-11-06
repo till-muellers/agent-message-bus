@@ -28,21 +28,48 @@ func newEnv(t *testing.T, departure []DepartureHook, creation []CreationHook) en
 	return newEnvHooks(t, Hooks{Departure: departure, Creation: creation})
 }
 
+// adminSecret is the instance admin token of every env.
+const adminSecret = "admin-secret"
+
 func newEnvHooks(t *testing.T, hooks Hooks) env {
 	t.Helper()
 	conn := dbtest.Open(t)
-	a := auth.NewService(conn, "admin-secret", time.Now)
+	a := auth.NewService(conn, adminSecret, time.Now)
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), time.Now)
-	r := NewResolver()
+	r := NewResolver(a)
 	return env{db: conn, auth: a, inbox: ib, svc: NewService(conn, r, a, ib, time.Now, hooks),
 		adm: NewAdmitter(r, a, time.Now)}
 }
 
-// leader seeds leader agent id and returns its principal.
+// leader seeds leader agent id with a token and returns its principal.
 func leader(t *testing.T, e env, id int64, name string) auth.Principal {
 	t.Helper()
-	dbtest.SeedAgent(t, e.db, id, name, "leader")
-	return auth.Principal{Kind: auth.Leader, AgentID: id, AgentName: name}
+	return authenticated(t, e, id, name, "leader", 0)
+}
+
+// authenticated seeds agent id with name and kind plus a token bound to spaceID (0: none)
+// and returns the principal that token authenticates.
+func authenticated(t *testing.T, e env, id int64, name, kind string, spaceID int64) auth.Principal {
+	t.Helper()
+	dbtest.SeedAgent(t, e.db, id, name, kind)
+	tok := "tok-" + name
+	dbtest.Exec(t, e.db, `INSERT INTO tokens (hash, agent_id, space_id, created_at) VALUES (?, ?, ?, ?)`,
+		auth.Hash(tok), id, sql.NullInt64{Int64: spaceID, Valid: spaceID != 0}, dbtest.SeedTime)
+	p, err := e.auth.Authenticate(context.Background(), tok)
+	if err != nil {
+		t.Fatalf("authenticating %s: %v", name, err)
+	}
+	return p
+}
+
+// instanceAdmin returns the principal of the instance admin token.
+func instanceAdmin(t *testing.T, e env) auth.Principal {
+	t.Helper()
+	p, err := e.auth.Authenticate(context.Background(), adminSecret)
+	if err != nil {
+		t.Fatalf("authenticating the instance admin token: %v", err)
+	}
+	return p
 }
 
 // inviteMember authorizes and admits name into space and authenticates its token.
@@ -83,7 +110,7 @@ func mustCreate(t *testing.T, e env, p auth.Principal, space string) {
 // wantSpace asserts through the service whether space exists.
 func wantSpace(t *testing.T, e env, space string, exists bool) {
 	t.Helper()
-	_, err := e.svc.Participants(context.Background(), auth.Principal{Kind: auth.Admin}, space)
+	_, err := e.svc.Participants(context.Background(), instanceAdmin(t, e), space)
 	if !exists {
 		apperrtest.WantKind(t, err, apperr.NotFound, "space "+space+" not found")
 		return

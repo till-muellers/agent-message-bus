@@ -34,7 +34,7 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 		return Handlers{}, err
 	}
 	inboxSvc := inbox.NewService(streamRoot, conn, broker.NewMemory(256), time.Now)
-	resolver := spaces.NewResolver()
+	resolver := spaces.NewResolver(authSvc)
 	msgSvc := messaging.NewService(conn, resolver, inboxSvc, time.Now)
 	bbSvc := blackboards.NewService(conn, resolver, inboxSvc, time.Now)
 	invSvc := invites.NewService(conn, spaces.NewAdmitter(resolver, authSvc, time.Now), inboxSvc, time.Now)

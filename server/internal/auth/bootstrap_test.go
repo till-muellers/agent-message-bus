@@ -51,7 +51,6 @@ func TestAuthenticateInstanceToken(t *testing.T) {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	id := s.bootstrapID.Load()
-	want := Principal{Kind: Admin, AgentID: id, AgentName: BootstrapName, Bootstrap: true}
 	for _, tc := range []struct{ name, token string }{
 		{"instance token", testAdmin},
 		{"rotated token", "rotated-token-rotated-token-rotated"},
@@ -61,6 +60,7 @@ func TestAuthenticateInstanceToken(t *testing.T) {
 				t.Fatalf("SetAdminToken: %v", err)
 			}
 		}
+		want := Principal{Kind: Admin, AgentID: id, AgentName: BootstrapName, Bootstrap: true, credential: Hash(tc.token)}
 		got, err := s.Authenticate(ctx, tc.token)
 		if err != nil || got != want {
 			t.Fatalf("%s: Authenticate = %+v, %v; want %+v", tc.name, got, err, want)

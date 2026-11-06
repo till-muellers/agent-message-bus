@@ -141,10 +141,14 @@ func TestAcceptConflictKeepsCode(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	inv := mustCreate(t, e, "x", nil)
-	if _, err := e.auth.MintLeader(ctx, auth.Principal{Kind: auth.Admin}, "x"); err != nil {
+	root, err := e.auth.Authenticate(ctx, "admin-secret")
+	if err != nil {
+		t.Fatalf("authenticating the instance admin token: %v", err)
+	}
+	if _, err := e.auth.MintLeader(ctx, root, "x"); err != nil {
 		t.Fatalf("mint leader x: %v", err)
 	}
-	_, err := e.svc.Accept(ctx, inv.Code)
+	_, err = e.svc.Accept(ctx, inv.Code)
 	apperrtest.WantKind(t, err, apperr.Conflict, "agent x is a leader agent")
 	if n := countInvites(t, e); n != 1 {
 		t.Fatalf("invites = %d, want the code kept", n)
