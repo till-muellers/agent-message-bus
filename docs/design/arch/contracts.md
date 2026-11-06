@@ -371,6 +371,7 @@ New (all existing kinds):
 | invalid | `invalid arguments: …` for a bad web GUI request body (replaces `invalid request body: …`) | R14 |
 | internal (MCP) | JSON-RPC error `internal error` (replaces the internal detail as the JSON-RPC error message) | R14 |
 | invalid | `invalid arguments: json: unknown field "<key>"` also for a key that matches a property name only in another case (`threadID` for `threadId`), which was accepted | jcu |
+| invalid | `limit must be 1..500` also for an explicit `limit` 0 (`bus_inbox_read`, `GET /web/api/inbox`), which read the default page of 100 | hs3 |
 
 Removed: `admin token cannot act in spaces; mint a leader with bus_mint_leader` (4c), `admin token has no inbox; mint a leader with bus_mint_leader` (4d). Narrowed: `last leader cannot leave; delete the space instead` only while other participants remain (5). Unchanged and still asserted: `only leaders may send to all`, `only leaders may send critical messages`, `space demo has other leaders; they must leave first` (leader caller), `not a participant of space demo`, `token is not valid for space demo`, `invalid or expired invite code`.
 

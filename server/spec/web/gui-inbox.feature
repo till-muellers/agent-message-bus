@@ -65,6 +65,7 @@ Feature: The signed-in admin's inbox in the web GUI
       Then the response names the inbox read limit 500
       And the inbox page reads GET /web/api/inbox with limit 500
       And GET /web/api/inbox with limit 501 is rejected with invalid "limit must be 1..500"
+      And GET /web/api/inbox with limit 0 is rejected with invalid "limit must be 1..500"
 
   Rule: The web GUI only reads the inbox
 
