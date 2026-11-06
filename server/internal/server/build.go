@@ -22,9 +22,9 @@ import (
 type Handlers struct{ API, Web http.Handler }
 
 // Build wires every service onto conn, ensures the bootstrap admin exists and returns the
-// routed handlers. Inbox streams end when streamRoot is cancelled; shutdown is called by
-// POST /v1/admin/shutdown.
-func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown func()) (Handlers, error) {
+// routed handlers. Inbox streams end when streamRoot is cancelled; /healthz names instanceID;
+// shutdown is called by POST /v1/admin/shutdown.
+func Build(streamRoot context.Context, conn *sql.DB, adminToken, instanceID string, shutdown func()) (Handlers, error) {
 	authSvc := auth.NewService(conn, adminToken, time.Now)
 	if err := authSvc.Bootstrap(streamRoot); err != nil {
 		return Handlers{}, err
@@ -51,5 +51,5 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken string, shutdown
 	})
 	gui := web.New(web.Deps{Auth: authSvc, Spaces: spaceSvc, Overview: ov, Invites: invSvc, Inbox: inboxSvc,
 		Tools: reg, Dist: dist, Now: time.Now})
-	return Handlers{API: Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, shutdown), Web: WebRoutes(gui)}, nil
+	return Handlers{API: Routes(streamRoot, authSvc, inboxSvc, invSvc, reg, instanceID, shutdown), Web: WebRoutes(gui)}, nil
 }

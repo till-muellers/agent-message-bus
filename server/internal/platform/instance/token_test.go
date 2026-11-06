@@ -37,7 +37,7 @@ func TestRotateToken(t *testing.T) {
 			m, out := newManager(t, tc.env)
 			f := newFakeBus(t, m.dir(), true)
 			if tc.running {
-				f.publish(t, 1)
+				f = newRunningBus(t, m.dir(), true, 1)
 			}
 			old, _ := m.Config.ResolveAdminToken()
 			err := m.RotateToken(context.Background())

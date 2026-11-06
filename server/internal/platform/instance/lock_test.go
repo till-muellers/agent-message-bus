@@ -1,0 +1,111 @@
+package instance
+
+import (
+	"context"
+	"net/http"
+	"os"
+	"testing"
+	"time"
+)
+
+// TestClaimIsExclusive: one instance per data dir; a second claim fails while the first holds
+// the lock, whether or not the first has published its state yet.
+func TestClaimIsExclusive(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	first := mustClaim(t, dir)
+	_, err := claim(context.Background(), http.DefaultClient, dir, 0)
+	if err == nil || err.Error() != "agent-message-bus already running (state pending)" {
+		t.Fatalf("second claim before publishing: %v", err)
+	}
+	f := newFakeBus(t, dir, true)
+	f.adopt(first)
+	f.publish(t, 42)
+	_, err = claim(context.Background(), http.DefaultClient, dir, 0)
+	if err == nil || err.Error() != "agent-message-bus already running (pid 42) at "+f.srv.URL {
+		t.Fatalf("second claim after publishing: %v", err)
+	}
+	if err := first.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mustClaim(t, dir).Release(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestClaimWaitsForProbe: a CLI probing the lock holds it for a moment; a claim retries until
+// the probe is done instead of failing.
+func TestClaimWaitsForProbe(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	probe, err := lockFile(lockPath(dir), shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := claim(context.Background(), http.DefaultClient, dir, 0); err == nil {
+		t.Fatal("claim succeeded while a probe held the lock")
+	}
+	claimed := make(chan error, 1)
+	go func() {
+		l, err := claim(context.Background(), http.DefaultClient, dir, 10*time.Second)
+		if err == nil {
+			err = l.Release()
+		}
+		claimed <- err
+	}()
+	if err := probe.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-claimed; err != nil {
+		t.Fatalf("claim after the probe: %v", err)
+	}
+}
+
+// TestProbesShareTheLock: two CLIs probing at once both see a free lock.
+func TestProbesShareTheLock(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	probe, err := lockFile(lockPath(dir), shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = probe.Close() })
+	inst, err := Find(context.Background(), http.DefaultClient, dir)
+	if err != nil || inst.Running {
+		t.Fatalf("Find during another probe = %+v, %v", inst, err)
+	}
+}
+
+func TestPublishWritesStateAtomically(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	l := mustClaim(t, dir)
+	unpublish, err := l.Publish("[::]:8080", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, found, err := readState(dir)
+	want := State{PID: os.Getpid(), URL: "http://127.0.0.1:8080", StartedAt: "2026-01-02T03:04:05Z", InstanceID: l.ID()}
+	if err != nil || !found || st != want || l.ID() == "" {
+		t.Fatalf("got %+v %v %v, want %+v", st, found, err, want)
+	}
+	if files, err := os.ReadDir(dir); err != nil || len(files) != 2 {
+		t.Fatalf("data dir holds %v (%v), want the lock and the state file", files, err)
+	}
+	if err := unpublish(); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := readState(dir); found {
+		t.Fatal("state file still present")
+	}
+}
+
+func mustClaim(t *testing.T, dir string) *Lock {
+	t.Helper()
+	l, err := claim(context.Background(), http.DefaultClient, dir, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Release() })
+	return l
+}

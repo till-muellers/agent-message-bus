@@ -6,35 +6,53 @@ import (
 	"os"
 )
 
-// Stop asks the live instance to shut down, kills it on timeout and removes the state file.
+// Stop asks this data dir's instance to shut down, kills it when it still holds the data dir
+// after Timeout and waits until it let go. Only an instance confirmed at its url is a target.
 func (m Manager) Stop(ctx context.Context) error {
-	st, live, err := Find(ctx, m.Client, m.dir())
+	inst, err := m.settled(ctx)
 	if err != nil {
 		return err
 	}
-	if !live {
+	if !inst.Running {
 		_, _ = fmt.Fprintln(m.Out, "agent-message-bus is not running")
 		return nil
 	}
 	if tok, err := m.Config.ResolveAdminToken(); err == nil {
-		_ = m.adminPost(ctx, st.URL+"/v1/admin/shutdown", tok, "") // fall back to kill below
+		_ = m.adminPost(ctx, inst.State.URL+"/v1/admin/shutdown", tok, "") // fall back to kill below
 	}
-	if !m.waitUntil(ctx, func() bool { return m.gone(ctx, st) }) {
-		if err := m.Kill(st.PID); err != nil {
-			return fmt.Errorf("killing pid %d: %w", st.PID, err)
-		}
-	}
-	if err := RemoveState(m.dir()); err != nil {
+	if err := m.awaitExit(ctx, inst.State.PID); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(m.Out, "agent-message-bus stopped (pid %d)\n", st.PID)
+	_, _ = fmt.Fprintf(m.Out, "agent-message-bus stopped (pid %d)\n", inst.State.PID)
 	return nil
 }
 
-// gone reports whether the instance removed its state file and stopped answering.
-func (m Manager) gone(ctx context.Context, st State) bool {
-	_, statErr := os.Stat(StatePath(m.dir()))
-	return os.IsNotExist(statErr) && !Healthy(ctx, m.Client, st.URL)
+// awaitExit waits until the instance with pid released the data dir and kills it if it
+// doesn't within Timeout.
+func (m Manager) awaitExit(ctx context.Context, pid int) error {
+	if gone, err := m.released(ctx); err != nil || gone {
+		return err
+	}
+	if err := m.Kill(pid); err != nil {
+		return fmt.Errorf("killing pid %d: %w", pid, err)
+	}
+	gone, err := m.released(ctx)
+	if err == nil && !gone {
+		err = fmt.Errorf("agent-message-bus (pid %d) still holds %s after kill", pid, lockPath(m.dir()))
+	}
+	return err
+}
+
+// released waits up to Timeout until no instance holds the data dir lock; the stale state file
+// is removed then.
+func (m Manager) released(ctx context.Context) (bool, error) {
+	var err error
+	gone := m.waitUntil(ctx, func() bool {
+		var free bool
+		free, err = clearIfFree(m.dir())
+		return err != nil || free
+	})
+	return gone && err == nil, err
 }
 
 // KillPID terminates pid.

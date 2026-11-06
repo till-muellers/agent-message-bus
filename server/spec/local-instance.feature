@@ -3,10 +3,15 @@ Feature: Local instance management
   I want start, stop, status and token commands
   So that one instance per data dir runs without manual pid or token handling
 
-  # One instance runs per data dir. The state file <datadir>/agent-message-bus.state.json
-  # holds {"pid","url","startedAt"} while an instance runs; the log appends to
-  # <datadir>/agent-message-bus.log. The admin token comes from AMB_ADMIN_TOKEN if set,
-  # else from <datadir>/admin-token (0600, generated on first use).
+  # One instance runs per data dir. The serving process holds the lock file
+  # <datadir>/agent-message-bus.lock for its whole life (an OS lock, released when the process
+  # ends, however it ends): lock held = an instance runs, lock free = none does. Once it
+  # listens it publishes the state file <datadir>/agent-message-bus.state.json, written via a
+  # temp file and a rename, holding {"pid","url","startedAt","instanceId"}; GET /healthz names
+  # the instance in the Agent-Bus-Instance header. "An instance is running with pid 42 at <url>"
+  # means it holds the lock and <url>/healthz answers with the state file's instanceId. The log
+  # appends to <datadir>/agent-message-bus.log. The admin token comes from AMB_ADMIN_TOKEN if
+  # set, else from <datadir>/admin-token (0600, generated on first use).
 
   Background:
     Given an empty data dir
@@ -33,11 +38,44 @@ Feature: Local instance management
       When I run "agent-message-bus" without a command
       Then it fails with "agent-message-bus already running (pid 42) at http://127.0.0.1:8080"
 
-    Scenario: A stale state file is cleaned up
-      Given the state file names pid 42 at a url that doesn't answer /healthz
-      When I run "agent-message-bus status"
-      Then the output is "not running"
+    Scenario: A second server on the same data dir fails
+      Given an instance is running with pid 42 at "http://127.0.0.1:8080"
+      When a server starts on the same data dir with AMB_ADDR "127.0.0.1:8090"
+      Then it fails with "agent-message-bus already running (pid 42) at http://127.0.0.1:8080"
+      And it never opens the database
+
+    Scenario: Two starts at the same moment run one instance
+      When I run "agent-message-bus start" twice at the same moment, with AMB_ADDR 127.0.0.1:8080 and 127.0.0.1:8090
+      Then exactly one server process serves the data dir
+      And one start prints "agent-message-bus started (pid <pid>) at <url>; log: <datadir>/agent-message-bus.log"
+      And the other prints "agent-message-bus already running (pid <pid>) at <url>"
+
+    Scenario: A server that has not published its state yet counts as running
+      Given a server holds the data dir lock but has not written the state file yet
+      When I run "agent-message-bus start"
+      Then no new process is started
+      And the output is "agent-message-bus already running (state pending)"
+
+    Scenario Outline: A state file without a lock holder is stale
+      Given no instance holds the data dir lock
+      And the state file <holds>
+      When I run "agent-message-bus <command>"
+      Then the output is "<output>"
       And the state file is removed
+
+      Examples:
+        | holds                                                      | command | output                           |
+        | names pid 42 at a url that doesn't answer /healthz         | status  | not running                      |
+        | is empty                                                   | status  | not running                      |
+        | is not valid JSON                                          | stop    | agent-message-bus is not running |
+        | names a url where another data dir's instance now answers  | status  | not running                      |
+
+    Scenario: start starts over an unparseable stale state file
+      Given no instance holds the data dir lock
+      And the state file is empty
+      When I run "agent-message-bus start"
+      Then a detached server process is running
+      And the state file holds its pid and url
 
   Rule: status reports the instance
 
@@ -55,6 +93,14 @@ Feature: Local instance management
       When I run "agent-message-bus status --json"
       Then the output is {"running":false}
 
+    Scenario: status of a running instance not confirmed at its url
+      Given a server holds the data dir lock
+      And the state file is missing, unparseable, or names a url whose /healthz doesn't answer with its instanceId
+      When I run "agent-message-bus status"
+      Then the output is "running (state pending)"
+      And the state file is left alone
+      And "agent-message-bus status --json" prints {"running":true}
+
   Rule: stop shuts the instance down gracefully
 
     Scenario: stop asks the server to shut down
@@ -68,8 +114,24 @@ Feature: Local instance management
     Scenario: stop kills the process if graceful shutdown fails
       Given an instance is running that doesn't exit after POST /v1/admin/shutdown
       When I run "agent-message-bus stop"
-      Then the process is killed
+      Then the process is killed once it still holds the data dir lock after 10 s
+      And stop waits until the lock is released
       And the state file is gone
+
+    Scenario: stop never acts on an instance it cannot confirm
+      Given a server holds the data dir lock
+      And the state file names a url whose /healthz doesn't answer with its instanceId
+      When I run "agent-message-bus stop"
+      Then it sends no POST /v1/admin/shutdown and kills no process
+      And after 10 s it fails with "agent-message-bus is running (state pending) but did not answer within 10s; retry, or end the process that holds <datadir>/agent-message-bus.lock"
+
+    Scenario: stop leaves another data dir's instance alone
+      Given the instance of this data dir was killed and left its state file
+      And another data dir's instance now serves the url in that state file, with the same admin token
+      When I run "agent-message-bus stop"
+      Then the output is "agent-message-bus is not running"
+      And the other instance got no request and keeps running
+      And the state file is removed
 
     Scenario: stop when not running
       When I run "agent-message-bus stop"

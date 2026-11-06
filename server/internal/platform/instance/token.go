@@ -43,15 +43,15 @@ func (m Manager) RotateToken(ctx context.Context) error {
 }
 
 func (m Manager) swapLive(ctx context.Context, old, next string) error {
-	st, live, err := Find(ctx, m.Client, m.dir())
-	if err != nil || !live {
+	inst, err := m.settled(ctx)
+	if err != nil || !inst.Running {
 		return err
 	}
 	body, err := json.Marshal(map[string]string{"token": next})
 	if err != nil {
 		return fmt.Errorf("encoding body: %w", err)
 	}
-	if err := m.adminPost(ctx, st.URL+"/v1/admin/admin-token", old, string(body)); err != nil {
+	if err := m.adminPost(ctx, inst.State.URL+"/v1/admin/admin-token", old, string(body)); err != nil {
 		return fmt.Errorf("rotating token on running instance: %w", err)
 	}
 	return nil
