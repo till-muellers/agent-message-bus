@@ -86,8 +86,8 @@ func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Princip
 	}
 }
 
-// coalesce discards signals already queued behind the one just received, since
-// one drain covers them all. It reports false if the subscription closed.
+// coalesce discards the wake-up signals already queued, since the next drain or page
+// read covers them all. It reports false if the subscription closed.
 func coalesce(live <-chan []byte) bool {
 	for {
 		select {
