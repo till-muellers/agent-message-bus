@@ -162,7 +162,7 @@ func TestBearerAuth(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			status, ctype, body := postPing(t, url, tc.header)
+			status, ctype, body := postPing(t, url, tc.header, "")
 			if status != tc.wantStatus || !strings.Contains(body, tc.wantBody) {
 				t.Fatalf("got %d %s, want %d %s", status, body, tc.wantStatus, tc.wantBody)
 			}
@@ -173,8 +173,9 @@ func TestBearerAuth(t *testing.T) {
 	}
 }
 
-// postPing sends a JSON-RPC ping to url with the Authorization header (none when empty).
-func postPing(t *testing.T, url, header string) (status int, contentType, body string) {
+// postPing sends a JSON-RPC ping to url with the Authorization header (none when empty) and
+// the Host header host (the URL's own host when empty).
+func postPing(t *testing.T, url, header, host string) (status int, contentType, body string) {
 	t.Helper()
 	ping := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, ping)
@@ -185,6 +186,9 @@ func postPing(t *testing.T, url, header string) (status int, contentType, body s
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	if header != "" {
 		req.Header.Set("Authorization", header)
+	}
+	if host != "" {
+		req.Host = host
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
