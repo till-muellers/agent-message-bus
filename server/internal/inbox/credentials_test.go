@@ -20,8 +20,9 @@ type fakeCredentials struct {
 }
 
 func (f *fakeCredentials) StillValid(context.Context, db.DBTX, auth.Principal) error {
-	n := f.checks.Add(1)
-	if f.revoked.Load() {
+	revoked := f.revoked.Load()
+	n := f.checks.Add(1) // counted after the load: a revoke seen as done after check n hits a later one
+	if revoked {
 		return apperr.New(apperr.Unauthenticated, "invalid token")
 	}
 	if n == 1 && f.afterFirstCheck != nil {

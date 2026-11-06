@@ -248,9 +248,10 @@ Feature: Agent inbox
       Then the server ends the stream
 
     Scenario Outline: The stream ends when its token stops authenticating (<how>)
-      # The stream re-checks its token after every read, before it sends what it
-      # read, and on every heartbeat, so a dead token gets nothing stored after the
-      # revocation, even when the same name is invited again into the same space.
+      # The stream re-checks its token after reading and before sending, on every
+      # wake-up and every page, and on every heartbeat, so a dead token gets nothing
+      # stored after the revocation, even when the same name is invited again into
+      # the same space.
       Given member "worker" opened the inbox stream with its "alpha" token
       And the stream sent entries "a1, a2"
       When <how>
@@ -285,6 +286,15 @@ Feature: Agent inbox
       When "worker" is revoked right after the stream's token check passed
       And an entry "leak" is stored for "worker" in space "alpha"
       Then the server ends the stream without sending "leak"
+
+    Scenario: A wake-up while a page goes out still re-checks the token with nothing to send
+      # The wake-up is merged into the next read, which finds nothing in the old
+      # scope (mail of a space created again gets a new id); the check still runs.
+      Given member "worker" opened the inbox stream with its "alpha" token
+      When "worker" is revoked right after the stream's token check passed
+      And an entry is stored for "worker" in space "beta" while the backlog goes out
+      Then the server ends the stream
+      And the stream slot of "worker" is free
 
     Scenario: An idle stream ends within one heartbeat of its token stopping to authenticate
       Given the stream heartbeat interval is 1 millisecond

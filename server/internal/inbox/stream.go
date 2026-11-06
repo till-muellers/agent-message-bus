@@ -43,20 +43,20 @@ func (s *Service) deliver(ctx context.Context, sse sseWriter, p auth.Principal, 
 }
 
 // drain sends p's stored entries after lastSent page by page and returns the last id
-// sent. It re-validates p's token after each read and before sending what it read, so a
+// sent. It re-validates p's token after reading and before sending what it read, so a
 // revocation that committed before an entry was stored is seen before that entry goes
 // out, and a woken stream of a dead token ends even when nothing in its scope arrived.
-// The read that finds nothing more after a page is not checked, since that page's check
-// covered it: one token query per wake-up and per further page. After each page it
-// discards the queued wake-up signals, since the next Read covers them, so a long drain
-// under a sender burst does not overflow the subscription.
+// Only the empty read right after a page with no wake-up since is not checked, since that
+// page's check covered it: one token query per wake-up and per further page. After each
+// page it discards the queued wake-up signals, since the next Read covers them, so a long
+// drain under a sender burst does not overflow the subscription.
 func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, live <-chan []byte, lastSent int64) (int64, error) {
-	for sent := false; ; sent = true {
+	for covered := false; ; {
 		page, err := s.Read(ctx, p, lastSent, MaxLimit)
 		if err != nil {
 			return lastSent, fmt.Errorf("reading inbox after %d: %w", lastSent, err)
 		}
-		if sent && len(page) == 0 {
+		if covered && len(page) == 0 {
 			return lastSent, nil
 		}
 		if err := s.stillValid(ctx, p); err != nil || len(page) == 0 {
@@ -65,9 +65,11 @@ func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, li
 		if lastSent, err = s.sendPage(ctx, sse, p, page, lastSent); err != nil {
 			return lastSent, err
 		}
-		if !coalesce(live) {
+		open, woken := coalesce(live)
+		if !open {
 			return lastSent, errDropped
 		}
+		covered = !woken
 	}
 }
 
@@ -101,7 +103,7 @@ func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Princip
 				return err
 			}
 		case _, ok := <-live:
-			if !ok || !coalesce(live) {
+			if open, _ := coalesce(live); !ok || !open {
 				return nil
 			}
 			var err error
@@ -113,16 +115,18 @@ func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Princip
 }
 
 // coalesce discards the wake-up signals already queued, since the next drain or page
-// read covers them all. It reports false if the subscription closed.
-func coalesce(live <-chan []byte) bool {
+// read covers them all. It reports whether the subscription is still open and whether it
+// discarded a signal.
+func coalesce(live <-chan []byte) (open, woken bool) {
 	for {
 		select {
 		case _, ok := <-live:
 			if !ok {
-				return false
+				return false, woken
 			}
+			woken = true
 		default:
-			return true
+			return true, woken
 		}
 	}
 }

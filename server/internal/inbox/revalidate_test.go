@@ -109,31 +109,32 @@ func TestIdleWaitFailsAtTheHeartbeatAfterItsTokenStoppedAuthenticating(t *testin
 }
 
 // The token check costs one query per wake-up and per page, not one per read: the read
-// that finds nothing more after a page is covered by that page's check.
+// that finds nothing more after a page is covered by that page's check. Whether the
+// entry sent after the revocation is found by that read or by its own wake-up, the check
+// that ends the stream is the second.
 func TestStreamChecksItsTokenOncePerWakeUp(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	w.svc.heartbeat = time.Hour
 	stream := startStream(t.Context(), t, w, "memberA")
 	stream.entries(2)
+	w.creds.revoke()
 	w.send(t, "worker", "alpha", "a3")
-	stream.entries(1)
-	w.send(t, "worker", "alpha", "a4")
-	stream.entries(1)
-	if got := w.creds.checks.Load(); got != 3 {
-		t.Fatalf("token checks = %d, want 3 (backlog, a3, a4)", got)
+	stream.expectClosed()
+	if got := w.creds.checks.Load(); got != 2 {
+		t.Fatalf("token checks = %d, want 2 (the backlog page, the wake-up for a3)", got)
 	}
 }
 
-// revokeAndLeakAfterFirstCheck makes the first token check of w's stream or wait followed
-// at once by a revocation and a new entry "leak" for memberA, as when revoke, re-invite and
-// send commit between that check and the next read.
-func revokeAndLeakAfterFirstCheck(t *testing.T, w *world) {
+// revokeAndStoreAfterFirstCheck makes the first token check of w's stream or wait followed
+// at once by a revocation and a new entry body for worker in space, as when revoke,
+// re-invite and send commit between that check and the next read.
+func revokeAndStoreAfterFirstCheck(t *testing.T, w *world, space, body string) {
 	w.creds.afterFirstCheck = func() {
 		w.creds.revoke()
-		es, err := w.svc.insert(t.Context(), w.db, []Entry{w.entry("worker", "alpha", "leak")})
+		es, err := w.svc.insert(t.Context(), w.db, []Entry{w.entry("worker", space, body)})
 		if err != nil {
-			t.Errorf("Insert leak: %v", err)
+			t.Errorf("Insert %s: %v", body, err)
 			return
 		}
 		w.svc.publish(es)
@@ -144,11 +145,25 @@ func TestStreamSendsNothingStoredAfterARevocationThatFollowsItsCheck(t *testing.
 	t.Parallel()
 	w := newWorld(t)
 	w.svc.heartbeat = time.Hour
-	revokeAndLeakAfterFirstCheck(t, w)
+	revokeAndStoreAfterFirstCheck(t, w, "alpha", "leak")
 	stream := startStream(t.Context(), t, w, "memberA")
 	if lines := stream.linesUntilClosed(); slices.ContainsFunc(lines, func(l string) bool { return strings.Contains(l, "leak") }) {
 		t.Fatalf("the revoked stream got %v", lines)
 	}
+	slotFreed(t, w)
+}
+
+// A wake-up that arrives while a page goes out is discarded, since the next read covers
+// it; that read must still check the token even when it finds nothing in the stream's
+// scope, as for mail of a space created again under a new id.
+func TestStreamWokenDuringAPageChecksItsTokenEvenWithNothingToSend(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	w.svc.heartbeat = time.Hour
+	revokeAndStoreAfterFirstCheck(t, w, "beta", "other scope")
+	stream := startStream(t.Context(), t, w, "memberA")
+	stream.entries(2)
+	stream.expectClosed()
 	slotFreed(t, w)
 }
 
@@ -157,7 +172,7 @@ func TestWaitReturnsNothingStoredAfterARevocationThatFollowsItsCheck(t *testing.
 	w := newWorld(t)
 	svc, _ := waitService(w, t.Context(), w.pub)
 	svc.heartbeat = time.Hour
-	revokeAndLeakAfterFirstCheck(t, w)
+	revokeAndStoreAfterFirstCheck(t, w, "alpha", "leak")
 	got, err := svc.Wait(t.Context(), w.principals["memberA"], afterA2(w))
 	if len(got) > 0 {
 		t.Fatalf("the revoked wait returned %v", bodies(got))
