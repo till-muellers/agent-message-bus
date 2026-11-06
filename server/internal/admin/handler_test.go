@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,7 +12,12 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 )
 
-type fakeSetter struct{ got string }
+type fakeSetter struct {
+	got   string
+	woken []int64
+}
+
+func (f *fakeSetter) Wake(ids ...int64) { f.woken = append(f.woken, ids...) }
 
 func (f *fakeSetter) SetAdminToken(tok string) error {
 	tok, err := domain.AdminToken(tok)
@@ -26,7 +32,7 @@ func (f *fakeSetter) SetAdminToken(tok string) error {
 // admin token), "admin" (a minted admin) or "leader".
 func fakeAuthn(next http.Handler) http.Handler {
 	principals := map[string]auth.Principal{
-		"bootstrap": {Kind: auth.Admin, AgentName: auth.BootstrapName, Bootstrap: true},
+		"bootstrap": {Kind: auth.Admin, AgentID: 7, AgentName: auth.BootstrapName, Bootstrap: true},
 		"admin":     {Kind: auth.Admin, AgentName: "ops"},
 		"leader":    {Kind: auth.Leader, AgentName: "lead"},
 	}
@@ -63,7 +69,7 @@ func TestMount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			mux, ts, down := http.NewServeMux(), &fakeSetter{}, false
-			Mount(mux, fakeAuthn, ts, func() { down = true })
+			Mount(mux, fakeAuthn, ts, ts, func() { down = true })
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, tc.path, strings.NewReader(tc.body))
 			req.RemoteAddr = tc.remote
 			req.Header.Set("Authorization", "Bearer "+tc.token)
@@ -84,7 +90,7 @@ func TestMount(t *testing.T) {
 func postAdmin(t *testing.T, path, remote, token, body string) (*httptest.ResponseRecorder, bool, string) {
 	t.Helper()
 	mux, ts, down := http.NewServeMux(), &fakeSetter{}, false
-	Mount(mux, fakeAuthn, ts, func() { down = true })
+	Mount(mux, fakeAuthn, ts, ts, func() { down = true })
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, strings.NewReader(body))
 	req.RemoteAddr = remote
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -112,5 +118,29 @@ func TestShutdownAnyAdmin(t *testing.T) {
 		if rec, down, _ := postAdmin(t, "/v1/admin/shutdown", "127.0.0.1:5", token, ""); rec.Code != http.StatusOK || !down {
 			t.Fatalf("%s shutdown: %d %s (down %v)", token, rec.Code, rec.Body, down)
 		}
+	}
+}
+
+func TestAdminTokenSwapWakesTheBootstrapAgentOnlyWhenItSucceeded(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		body string
+		want []int64
+	}{
+		"swapped":  {`{"token":"` + strings.Repeat("n", 32) + `"}`, []int64{7}},
+		"rejected": {`{"token":"x"}`, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			mux, ts := http.NewServeMux(), &fakeSetter{}
+			Mount(mux, fakeAuthn, ts, ts, func() {})
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/admin/admin-token", strings.NewReader(tc.body))
+			req.RemoteAddr = "127.0.0.1:5"
+			req.Header.Set("Authorization", "Bearer bootstrap")
+			mux.ServeHTTP(httptest.NewRecorder(), req)
+			if !slices.Equal(ts.woken, tc.want) {
+				t.Fatalf("woken = %v, want %v", ts.woken, tc.want)
+			}
+		})
 	}
 }

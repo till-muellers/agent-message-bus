@@ -133,3 +133,12 @@ func spaceFilter(p auth.Principal) int64 {
 	}
 	return 0
 }
+
+// Wake sends the wake-up signal to each agent's streams and waits, which re-validate their
+// token. Call it after a transaction committed that deleted the agent's tokens or
+// participations, so a dead credential does not hold a slot until the next heartbeat.
+func (s *Service) Wake(agentIDs ...int64) {
+	for _, id := range agentIDs {
+		s.pub.Publish(topic(id), nil)
+	}
+}

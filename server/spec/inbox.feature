@@ -279,6 +279,24 @@ Feature: Agent inbox
       Then the server ends the stream without sending "secret for ops"
       And the new token of "ops" can open the inbox stream
 
+    Scenario Outline: An idle stream ends at once when its credential dies (<how>)
+      # Whatever deletes the tokens or participations (revoke, leave, delete space,
+      # revoke admin, admin token rotation) wakes the agent's streams and waits after
+      # the commit; the woken stream re-checks its token, so the slot is free again
+      # within about a second instead of at the next heartbeat. Nothing is sent to it.
+      Given <who> opened the inbox stream and nothing was sent to it
+      When <how>
+      Then the server ends the stream within 2 seconds
+      And the agent's slot is free for the new token
+
+      Examples:
+        | who                | how                                           |
+        | member "worker"    | leader "lead" revokes member "worker"         |
+        | member "worker"    | member "worker" leaves space "alpha"          |
+        | member "worker"    | leader "lead" deletes space "alpha"           |
+        | admin "ops"        | admin "admin" revokes admin "ops"             |
+        | the bootstrap admin | the instance admin token is rotated          |
+
     Scenario: A revocation just after the stream's token check still stops the next entry
       # The check follows the read, so an entry stored after the revocation is
       # read only after the revocation committed and the next check sees it.
