@@ -23,11 +23,24 @@ func (g *Web) readInbox(r *http.Request, p auth.Principal) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	limit, err := queryInt(r, "limit")
+	limit, err := queryLimit(r)
 	if err != nil {
 		return nil, err
 	}
-	return g.inbox.Read(r.Context(), p, after, int(limit))
+	return g.inbox.Read(r.Context(), p, after, limit)
+}
+
+// queryLimit resolves the optional limit parameter like bus_inbox_read (inbox.PageSize).
+func queryLimit(r *http.Request) (int, error) {
+	if r.URL.Query().Get("limit") == "" {
+		return inbox.PageSize(nil)
+	}
+	n, err := queryInt(r, "limit")
+	if err != nil {
+		return 0, err
+	}
+	limit := int(n)
+	return inbox.PageSize(&limit)
 }
 
 // queryInt parses query parameter name as an integer; absent means 0.

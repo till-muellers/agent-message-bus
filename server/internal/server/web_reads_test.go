@@ -264,11 +264,15 @@ func TestWebInboxReadOnly(t *testing.T) {
 		if got := w.inboxOf(t, lead, "?after="+jsonInt(es[0].ID)); len(got) != 0 {
 			t.Fatalf("after the last entry = %v", got)
 		}
-		for query, msg := range map[string]string{"?limit=501": "limit must be 1..500", "?limit=x": "limit must be an integer",
-			"?after=x": "after must be an integer"} {
+		for query, msg := range map[string]string{"?limit=501": "limit must be 1..500", "?limit=0": "limit must be 1..500",
+			"?limit=x": "limit must be an integer", "?after=x": "after must be an integer"} {
 			if status, body := w.status(t, http.MethodGet, "/web/api/inbox"+query, lead); status != http.StatusBadRequest || !strings.Contains(body, msg) {
 				t.Fatalf("%s: %d %s, want 400 %q", query, status, body, msg)
 			}
+		}
+		if status, body := do(t, w.api, http.MethodPost, "/v1/tools/bus_inbox_read", w.lead, `{"limit":0}`); status != http.StatusBadRequest ||
+			!strings.Contains(string(body), "limit must be 1..500") {
+			t.Fatalf(`bus_inbox_read {"limit":0}: %d %s, want 400`, status, body)
 		}
 	})
 	t.Run("405 on mutating methods", func(t *testing.T) {

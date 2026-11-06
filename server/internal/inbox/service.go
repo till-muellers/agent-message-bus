@@ -79,10 +79,9 @@ func (s *Service) publish(es []Entry) {
 }
 
 // Read returns p's entries with id > after in id order; members see only their space.
-// limit 0 means 100; otherwise it must be 1..500.
+// limit must be 1..500 (PageSize resolves an optional one).
 func (s *Service) Read(ctx context.Context, p auth.Principal, after int64, limit int) ([]Entry, error) {
-	limit, err := pageSize(limit)
-	if err != nil {
+	if err := checkLimit(limit); err != nil {
 		return nil, err
 	}
 	return selectEntries(ctx, s.db, p.AgentID, after, spaceFilter(p), limit)
@@ -104,14 +103,23 @@ func (s *Service) Count(ctx context.Context, p auth.Principal) (int, error) {
 	return countEntries(ctx, s.db, p.AgentID, spaceFilter(p))
 }
 
-func pageSize(limit int) (int, error) {
-	if limit == 0 {
+// PageSize turns the optional limit argument into a page size: 100 when absent,
+// otherwise 1..500.
+func PageSize(limit *int) (int, error) {
+	if limit == nil {
 		return defaultLimit, nil
 	}
-	if limit < 1 || limit > MaxLimit {
-		return 0, apperr.New(apperr.Invalid, "limit must be 1..%d", MaxLimit)
+	if err := checkLimit(*limit); err != nil {
+		return 0, err
 	}
-	return limit, nil
+	return *limit, nil
+}
+
+func checkLimit(limit int) error {
+	if limit < 1 || limit > MaxLimit {
+		return apperr.New(apperr.Invalid, "limit must be 1..%d", MaxLimit)
+	}
+	return nil
 }
 
 // spaceFilter is the only space p's inbox covers; 0 means every space.

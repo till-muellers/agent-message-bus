@@ -96,7 +96,7 @@ func (w *world) send(t *testing.T, agent, space, body string) {
 // read returns the bodies visible to the named principal.
 func (w *world) read(t *testing.T, who string) []string {
 	t.Helper()
-	es, err := w.svc.Read(t.Context(), w.principals[who], 0, 0)
+	es, err := w.svc.Read(t.Context(), w.principals[who], 0, MaxLimit)
 	if err != nil {
 		t.Fatalf("Read as %s: %v", who, err)
 	}
@@ -143,7 +143,7 @@ func TestInsert(t *testing.T) {
 			t.Fatalf("Insert()[%d] = %+v, want %+v", i, got[i], want)
 		}
 	}
-	read, err := w.svc.Read(t.Context(), w.principals["memberA"], w.entries["a2"].ID, 0)
+	read, err := w.svc.Read(t.Context(), w.principals["memberA"], w.entries["a2"].ID, MaxLimit)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -163,14 +163,15 @@ func TestRead(t *testing.T) {
 		want    []string
 		wantErr apperr.Kind
 	}{
-		{name: "member sees only its space", who: "memberA", want: []string{"a1", "a2"}},
-		{name: "member of the other space", who: "memberB", want: []string{"b1"}},
-		{name: "leader sees its entries in every space", who: "leader", want: []string{"l1", "l2"}},
-		{name: "after skips older entries", who: "memberA", after: "a1", want: []string{"a2"}},
+		{name: "member sees only its space", who: "memberA", limit: MaxLimit, want: []string{"a1", "a2"}},
+		{name: "member of the other space", who: "memberB", limit: MaxLimit, want: []string{"b1"}},
+		{name: "leader sees its entries in every space", who: "leader", limit: MaxLimit, want: []string{"l1", "l2"}},
+		{name: "after skips older entries", who: "memberA", after: "a1", limit: MaxLimit, want: []string{"a2"}},
 		{name: "limit caps the page", who: "leader", limit: 1, want: []string{"l1"}},
 		{name: "max limit", who: "leader", limit: 500, want: []string{"l1", "l2"}},
 		{name: "limit above max", who: "leader", limit: 501, wantErr: apperr.Invalid},
 		{name: "negative limit", who: "leader", limit: -1, wantErr: apperr.Invalid},
+		{name: "zero limit", who: "leader", limit: 0, wantErr: apperr.Invalid},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -200,12 +201,29 @@ func TestReadDefaultLimit(t *testing.T) {
 	if _, err := w.svc.insert(t.Context(), w.db, es); err != nil {
 		t.Fatalf("Insert: %v", err)
 	}
-	got, err := w.svc.Read(t.Context(), w.principals["leader"], 0, 0)
+	limit, err := PageSize(nil)
+	if err != nil {
+		t.Fatalf("PageSize(nil): %v", err)
+	}
+	got, err := w.svc.Read(t.Context(), w.principals["leader"], 0, limit)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
 	if len(got) != 100 {
-		t.Fatalf("Read(limit 0) returned %d entries, want 100", len(got))
+		t.Fatalf("Read(default limit) returned %d entries, want 100", len(got))
+	}
+}
+
+func TestPageSize(t *testing.T) {
+	t.Parallel()
+	for _, limit := range []int{1, MaxLimit} {
+		if got, err := PageSize(&limit); err != nil || got != limit {
+			t.Fatalf("PageSize(%d) = %d, %v; want %d", limit, got, err, limit)
+		}
+	}
+	for _, limit := range []int{0, -1, MaxLimit + 1} {
+		_, err := PageSize(&limit)
+		apperrtest.WantKind(t, err, apperr.Invalid, "limit must be 1..500")
 	}
 }
 
