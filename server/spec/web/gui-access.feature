@@ -208,8 +208,8 @@ Feature: Web GUI access and sessions
       Then the response status is 405
 
     Scenario Outline: An unknown API route (<method> <path>)
-      # GET answers like every /web/api error; other methods get the router's 405, before
-      # the session check (contracts.md §10).
+      # GET (and HEAD) answer like every /web/api error; any other method gets the router's
+      # 405, before the session check (contracts.md §10).
       Given the operator signed in with the instance admin token
       When the operator requests <method> <path>
       Then the response is <response>

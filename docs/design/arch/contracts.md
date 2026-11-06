@@ -260,7 +260,7 @@ MCP token user id: `admin:<agent id>` for every admin (was `admin:0`, `mcpserver
 
 ## 10. Web GUI backend `/web` [W1a, W1b, W2, W3, 10] (`web/*.feature`, `web/analysis.md:300-414`)
 
-Served only on the GUI's own listener `AMB_WEB_ADDR` (PO ruling replacing Q-A1): any `host:port`; empty or `off` disables the GUI; default `127.0.0.1:8081` [AD-16]. The operator controls exposure by choosing the address. The API listener (`AMB_ADDR`) serves no `/web` path (404), and the GUI listener serves only `/web/*` (everything else 404). Graceful shutdown stops both listeners. Errors use the §0 envelope and statuses. A non-GET method on a GET-only route → 405 (mux default). An unknown `GET /web/api/<path>` → 401 without a session, else 404 `not_found "route not found"`; any other method on an unknown `/web/api/<path>` → the mux's plain-text 405 (`Allow: GET, HEAD`), before the session check (a method-aware 404 would need its own router; not worth it, 8ab).
+Served only on the GUI's own listener `AMB_WEB_ADDR` (PO ruling replacing Q-A1): any `host:port`; empty or `off` disables the GUI; default `127.0.0.1:8081` [AD-16]. The operator controls exposure by choosing the address. The API listener (`AMB_ADDR`) serves no `/web` path (404), and the GUI listener serves only `/web/*` (everything else 404). Graceful shutdown stops both listeners. Errors use the §0 envelope and statuses. A non-GET method on a GET-only route → 405 (mux default). `GET` or `HEAD` on an unknown `/web/api/<path>` → 401 without a session, else 404 `not_found "route not found"`; any method other than GET or HEAD on a path no route serves → the mux's plain-text 405 (`Allow: GET, HEAD`), before the session check (a method-aware 404 would need its own router; not worth it, 8ab).
 
 ### 10.1 Session [W1a]
 
@@ -377,6 +377,7 @@ New (all existing kinds):
 | invalid | `invalid arguments: trailing data after the JSON value` for a body with more after its JSON value (`{} junk`, two objects), which was accepted and the rest dropped | 088 |
 | invalid | `admin token must be 32..512 visible ASCII characters` for the token swap (replaces `admin token must be at least 32 characters`; surrounding whitespace is trimmed first). At start, `AMB_ADMIN_TOKEN: …` and `admin token in <file>: …` carry the same rule | b3k, foy |
 | invalid | `invalid arguments: …`, `request body exceeds 4 KiB`, `reading request body: …` for a bad token swap body (replaces `invalid JSON body: …`) | e3j |
+| not_found | `route not found` for `GET`/`HEAD` on an unknown `/web/api/<path>` (was the mux's plain-text `404 page not found`) | 8ab |
 
 Removed: `admin token cannot act in spaces; mint a leader with bus_mint_leader` (4c), `admin token has no inbox; mint a leader with bus_mint_leader` (4d). Narrowed: `last leader cannot leave; delete the space instead` only while other participants remain (5). Unchanged and still asserted: `only leaders may send to all`, `only leaders may send critical messages`, `space demo has other leaders; they must leave first` (leader caller), `not a participant of space demo`, `token is not valid for space demo`, `invalid or expired invite code`.
 

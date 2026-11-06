@@ -64,8 +64,8 @@ func New(d Deps) *Web {
 
 // Mount registers the GUI routes on mux. Reads are GET-only; the mutating routes are the
 // session routes, the space mutations and the admin area; all but the session routes need
-// X-CSRF-Token. Other methods get the mux's 405, also on an unknown /web/api path (GET there
-// is 404 not_found). Wrap the mux with Headers.
+// X-CSRF-Token. Other methods get the mux's 405, also on an unknown /web/api path (GET and
+// HEAD there are 404 not_found). Wrap the mux with Headers.
 func (g *Web) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /web/", g.assets.index)
 	mux.HandleFunc("GET /web/assets/", g.assets.file)
