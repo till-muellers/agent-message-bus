@@ -94,6 +94,7 @@ Feature: Agent inbox
         | limit |
         | 501   |
         | -1    |
+        | 0     |
 
     Scenario: An empty inbox reads as an empty list
       Given leader "lead" acknowledged its inbox up to the id of entry "l2"

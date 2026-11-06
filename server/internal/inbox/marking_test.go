@@ -9,11 +9,11 @@ import (
 // looks are the ways an agent can look at its "alpha" mailbox; each returns the bodies it saw.
 var looks = map[string]func(t *testing.T, w *world, after int64) []string{
 	"Read": func(t *testing.T, w *world, after int64) []string {
-		return mustEntries(t, "Read")(w.svc.Read(t.Context(), w.principals["memberA"], after, 0))
+		return mustEntries(t, "Read")(w.svc.Read(t.Context(), w.principals["memberA"], after, MaxLimit))
 	},
 	"Read+MarkNoticed": func(t *testing.T, w *world, after int64) []string {
 		p := w.principals["memberA"]
-		es, err := w.svc.Read(t.Context(), p, after, 0)
+		es, err := w.svc.Read(t.Context(), p, after, MaxLimit)
 		if err == nil {
 			err = w.svc.MarkNoticed(t.Context(), p, es)
 		}

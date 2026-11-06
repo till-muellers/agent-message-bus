@@ -344,7 +344,7 @@ func TestDepartureHook(t *testing.T) {
 	if len(hook.calls) != 1 || hook.calls[0] != wantM {
 		t.Fatalf("calls = %+v, want %+v", hook.calls, wantM)
 	}
-	got, err := e.inbox.Read(ctx, lead, 0, 0)
+	got, err := e.inbox.Read(ctx, lead, 0, inbox.MaxLimit)
 	if err != nil || len(got) != 1 || got[0].Type != inbox.BlackboardRemoved || got[0].From != "work" ||
 		got[0].Space != "alpha" || got[0].Blackboard != "notes" {
 		t.Fatalf("inbox = %+v, %v", got, err)
@@ -361,7 +361,7 @@ func seedInbox(t *testing.T, e env, member auth.Principal) {
 	if err != nil {
 		t.Fatalf("delivering: %v", err)
 	}
-	if got, err := e.inbox.Read(context.Background(), member, 0, 0); err != nil || len(got) != 1 {
+	if got, err := e.inbox.Read(context.Background(), member, 0, inbox.MaxLimit); err != nil || len(got) != 1 {
 		t.Fatalf("seeded inbox = %+v, %v", got, err)
 	}
 }

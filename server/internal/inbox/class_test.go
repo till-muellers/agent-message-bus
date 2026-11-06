@@ -89,7 +89,7 @@ func TestEntriesCarryClass(t *testing.T) {
 	if stored[0].Class != ClassInterrupt || stored[1].Class != ClassDeferred {
 		t.Fatalf("inserted classes = %q, %q", stored[0].Class, stored[1].Class)
 	}
-	read, err := w.svc.Read(t.Context(), w.principals["memberA"], 0, 0)
+	read, err := w.svc.Read(t.Context(), w.principals["memberA"], 0, MaxLimit)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}

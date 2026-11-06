@@ -9,7 +9,7 @@ import (
 
 type readArgs struct {
 	After int64 `json:"after"`
-	Limit int   `json:"limit"`
+	Limit *int  `json:"limit"`
 }
 
 type ackArgs struct {
@@ -31,7 +31,11 @@ func inboxTools(ib *inbox.Service) []Tool {
 			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
 			nil, map[string]any{"after": integer("Return entries with id greater than this; default 0."), "limit": integer("Maximum entries, 1..500; default 100.")},
 			func(ctx context.Context, p auth.Principal, a readArgs) (any, error) {
-				es, err := ib.Read(ctx, p, a.After, a.Limit)
+				limit, err := inbox.PageSize(a.Limit)
+				if err != nil {
+					return nil, err
+				}
+				es, err := ib.Read(ctx, p, a.After, limit)
 				if err != nil {
 					return nil, err
 				}
