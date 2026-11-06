@@ -142,20 +142,9 @@ func TestInternalFailureIsAProtocolErrorWithoutDetail(t *testing.T) {
 	}
 }
 
-func TestNoTokenRejected(t *testing.T) {
-	url, _ := setup(t, testRegistry())
-	s, err := connect(context.Background(), url, "")
-	if err == nil {
-		_, err = s.ListTools(context.Background(), nil)
-		_ = s.Close()
-	}
-	if err == nil {
-		t.Fatal("expected failure without token")
-	}
-}
-
-// /mcp rejects like every other route: the §0 JSON envelope, parsed by auth.BearerToken.
-func TestUnauthenticatedEnvelope(t *testing.T) {
+// /mcp parses the header with auth.BearerToken and rejects with the §0 JSON envelope, like
+// the /v1 routes.
+func TestBearerAuth(t *testing.T) {
 	url, tok := setup(t, testRegistry())
 	tests := []struct {
 		name, header string

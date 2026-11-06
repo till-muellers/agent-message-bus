@@ -33,8 +33,8 @@ Feature: Transports
 
   Rule: Bearer authentication on the web API
 
-    # One parser for every route on both listeners (/v1/*, /mcp, /v1/invites/accept,
-    # POST /web/session): "Bearer", in any case, then whitespace, then exactly one token.
+    # One parser for the bearer routes (/v1/*, /mcp, /v1/invites/accept, POST /web/session):
+    # "Bearer", in any case, then whitespace, then exactly one token.
     Scenario Outline: Authorization header "<header>"
       When a client calls GET /v1/tools with Authorization header "<header>"
       Then the response status is <status>
