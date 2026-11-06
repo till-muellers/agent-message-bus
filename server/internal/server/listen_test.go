@@ -2,6 +2,7 @@ package server
 
 import (
 	"net"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -62,10 +63,13 @@ func TestListenGUIAddressTaken(t *testing.T) {
 }
 
 // TestListenOverlappingAddresses: the GUI address may not overlap the API address on the same
-// port, wildcard against loopback in either order. The second bind fails on every OS; Windows
-// needs SO_EXCLUSIVEADDRUSE for it, else the more specific socket silently shadows the other.
+// port, wildcard against loopback in either order. The second bind fails on Linux by default
+// and on Windows with SO_EXCLUSIVEADDRUSE; BSD SO_REUSEADDR (macOS) still lets it through.
 func TestListenOverlappingAddresses(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
+		t.Skip("overlapping binds are only refused on Windows and Linux so far")
+	}
 	for _, hosts := range [][2]string{{"", "127.0.0.1"}, {"0.0.0.0", "127.0.0.1"}, {"127.0.0.1", ""}, {"127.0.0.1", "0.0.0.0"}} {
 		t.Run(hosts[0]+" vs "+hosts[1], func(t *testing.T) {
 			t.Parallel()

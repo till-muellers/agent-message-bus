@@ -38,6 +38,9 @@ func (m Manager) awaitStart(ctx context.Context, pid int) error {
 		return err
 	}
 	if !ok {
+		if ctx.Err() != nil {
+			return fmt.Errorf("waiting for agent-message-bus to become healthy: %w", ctx.Err())
+		}
 		return m.unhealthy(inst, pid)
 	}
 	if inst.State.PID != pid {
@@ -55,21 +58,21 @@ func (m Manager) unhealthy(inst Instance, pid int) error {
 }
 
 // stopSpawned kills the spawned pid while it holds the data dir unconfirmed, so no orphan keeps
-// the port and the database, and says so. A server that exited, or a lock holder whose state
-// file names another pid, is left alone.
+// the port and the database, and says so. Only a lock holder whose state file names the pid is
+// killed: a server that exited on its own, or one that has not published yet, is left alone.
 func (m Manager) stopSpawned(inst Instance, pid int) string {
 	if !inst.Running {
 		return ""
 	}
 	st, found, err := readState(m.dir())
-	if err == nil && found && st.PID != pid {
+	if err == nil && (!found || st.PID != pid) {
 		return ""
 	}
 	if err == nil {
 		err = m.Kill(pid)
 	}
 	if err != nil {
-		return fmt.Sprintf(" and could not be stopped (pid %d: %v)", pid, err)
+		return fmt.Sprintf(" and could not be stopped: %v", err)
 	}
 	return fmt.Sprintf(" and was stopped (pid %d)", pid)
 }
