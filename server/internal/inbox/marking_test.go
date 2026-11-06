@@ -28,7 +28,8 @@ var looks = map[string]func(t *testing.T, w *world, after int64) []string{
 		if err != nil {
 			t.Fatalf("openSSE: %v", err)
 		}
-		if _, err := w.svc.drain(t.Context(), sse, w.principals["memberA"], after); err != nil {
+		live := make(chan []byte)
+		if _, err := w.svc.drain(t.Context(), sse, w.principals["memberA"], live, after); err != nil {
 			t.Fatalf("drain: %v", err)
 		}
 		return nil

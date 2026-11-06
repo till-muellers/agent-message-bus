@@ -247,6 +247,24 @@ Feature: Agent inbox
       When the live channel drops the stream's subscription because its buffer is full
       Then the server ends the stream
 
+    Scenario: A fast reader keeps its stream while senders burst during a long backlog
+      # The stream discards the wake-up signals queued behind each page it has read,
+      # since its next read covers them, so the subscription overflows only when more
+      # signals than its buffer arrive while a single page is sent.
+      Given the live channel buffers 16 signals per subscription
+      And 3000 entries for "worker" in space "alpha" are stored
+      And member "worker" opened the inbox stream with its "alpha" token
+      When 8 wake-up signals are published while each page of the backlog streams
+      Then the stream sends every entry
+      And then entry "after the burst" for "worker" in space "alpha" is stored, published and streamed
+
+    Scenario: A subscription dropped during the backlog ends the stream after the current page
+      Given the live channel buffers 16 signals per subscription
+      And member "worker" opened the inbox stream with its "alpha" token
+      When 17 wake-up signals are published while the backlog streams
+      Then the stream sends entries "a1, a2"
+      And the server ends the stream without an error
+
     Scenario: Reconnecting replays every unacknowledged entry
       Given member "worker" streamed entries "a1, a2" and disconnected without acknowledging
       When member "worker" opens the inbox stream with its "alpha" token again
