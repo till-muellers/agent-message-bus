@@ -11,46 +11,52 @@ import (
 )
 
 // Revoke removes member name from space, if present, and runs the revocation hooks,
-// which cancel state such as pending invite codes. It reports whether anything was removed.
+// which cancel state such as pending invite codes. It reports whether anything was removed
+// and wakes the removed member's streams and waits to re-check their token.
 // Leader targets are refused before any hook runs.
 func (s *Service) Revoke(ctx context.Context, p auth.Principal, space, name string) (bool, error) {
 	var deleted bool
+	var target int64
 	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
-		entries, removed, err := s.revokeTx(ctx, tx, p, space, name)
-		deleted = removed
+		entries, removed, id, err := s.revokeTx(ctx, tx, p, space, name)
+		deleted, target = removed, id
 		return entries, err
 	})
 	if err != nil {
 		return false, err
 	}
+	if target != 0 {
+		s.ib.Wake(target)
+	}
 	return deleted, nil
 }
 
 // revokeTx authorizes leader p, checks the target, runs the hooks and removes the participant.
-func (s *Service) revokeTx(ctx context.Context, tx db.DBTX, p auth.Principal, space, name string) ([]inbox.Entry, bool, error) {
+// It returns the removed participant's agent id, 0 when none was removed.
+func (s *Service) revokeTx(ctx context.Context, tx db.DBTX, p auth.Principal, space, name string) ([]inbox.Entry, bool, int64, error) {
 	m, err := s.r.Resolve(ctx, tx, p, space)
 	if err != nil {
-		return nil, false, err
+		return nil, false, 0, err
 	}
 	if err := requireLeaderRole(m, "revoke members"); err != nil {
-		return nil, false, err
+		return nil, false, 0, err
 	}
 	target, found, err := revocableMember(ctx, tx, m, name)
 	if err != nil {
-		return nil, false, err
+		return nil, false, 0, err
 	}
 	cancelled, err := s.runRevocationHooks(ctx, tx, m.SpaceID, name)
 	if err != nil {
-		return nil, false, err
+		return nil, false, 0, err
 	}
 	if !found {
-		return nil, cancelled, nil
+		return nil, cancelled, 0, nil
 	}
 	entries, err := s.removeParticipant(ctx, tx, target)
 	if err != nil {
-		return nil, false, err
+		return nil, false, 0, err
 	}
-	return entries, true, nil
+	return entries, true, target.AgentID, nil
 }
 
 // runRevocationHooks runs every revocation hook and reports whether any removed something.

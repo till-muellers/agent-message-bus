@@ -179,3 +179,36 @@ func TestWaitReturnsNothingStoredAfterARevocationThatFollowsItsCheck(t *testing.
 	}
 	apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
 }
+
+func TestWakeEndsAnIdleStreamOfADeadToken(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	w.svc.heartbeat = time.Hour
+	stream := startStream(t.Context(), t, w, "memberA")
+	stream.entries(2)
+	w.creds.revoke()
+	w.svc.Wake(w.principals["memberA"].AgentID)
+	stream.expectClosed()
+	slotFreed(t, w)
+}
+
+func TestWakeFailsAnIdleWaitOfADeadToken(t *testing.T) {
+	t.Parallel()
+	w := newWorld(t)
+	svc, cp := waitService(w, t.Context(), w.pub)
+	svc.heartbeat = time.Hour
+	done := make(chan error, 1)
+	go func() {
+		_, err := svc.Wait(t.Context(), w.principals["memberA"], afterA2(w))
+		done <- err
+	}()
+	waiting(t, cp)
+	w.creds.revoke()
+	svc.Wake(w.principals["memberA"].AgentID)
+	select {
+	case err := <-done:
+		apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
+	case <-time.After(waitTimeout):
+		t.Fatal("the woken wait kept waiting")
+	}
+}

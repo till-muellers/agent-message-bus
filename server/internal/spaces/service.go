@@ -25,6 +25,7 @@ type inboxStore interface {
 	Publish(st inbox.Staged) []inbox.Receipt
 	DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
 	Connected(agentID int64) bool
+	Wake(agentIDs ...int64)
 }
 
 // Participant is one agent in a space; Connected means it holds its inbox stream or
@@ -144,32 +145,50 @@ func joinRole(p auth.Principal) Role {
 }
 
 // Delete removes a space. Admins may delete any space; a leader only once no other
-// leader remains.
+// leader remains. Streams and waits of its participants are woken to re-check their token.
 func (s *Service) Delete(ctx context.Context, p auth.Principal, name string) error {
-	return db.InTx(ctx, s.db, func(tx *sql.Tx) error {
+	var participants []int64
+	err := db.InTx(ctx, s.db, func(tx *sql.Tx) error {
 		m, err := s.r.Resolve(ctx, tx, p, name)
 		if err != nil {
 			return err
 		}
-		if err := requireLeaderRole(m, "delete spaces"); err != nil {
+		if err := checkDeletable(ctx, tx, m, name); err != nil {
 			return err
 		}
-		if m.Admin {
-			return deleteSpace(ctx, tx, m.SpaceID)
-		}
-		n, err := countOtherLeaders(ctx, tx, m.SpaceID, m.AgentID)
-		if err != nil {
+		if participants, err = participantIDs(ctx, tx, m.SpaceID); err != nil {
 			return err
-		}
-		if n > 0 {
-			return apperr.New(apperr.Conflict, "space %s has other leaders; they must leave first", name)
 		}
 		return deleteSpace(ctx, tx, m.SpaceID)
 	})
+	if err != nil {
+		return err
+	}
+	s.ib.Wake(participants...)
+	return nil
+}
+
+// checkDeletable refuses m's deletion of space name unless m is an admin or the only leader.
+func checkDeletable(ctx context.Context, tx db.DBTX, m Membership, name string) error {
+	if err := requireLeaderRole(m, "delete spaces"); err != nil {
+		return err
+	}
+	if m.Admin {
+		return nil
+	}
+	n, err := countOtherLeaders(ctx, tx, m.SpaceID, m.AgentID)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return apperr.New(apperr.Conflict, "space %s has other leaders; they must leave first", name)
+	}
+	return nil
 }
 
 // Leave removes p from space. The last leader cannot leave while other participants
-// remain, and an admin that has not joined has nothing to leave.
+// remain, and an admin that has not joined has nothing to leave. Its streams and waits
+// are woken to re-check their token.
 func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) error {
 	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
 		m, err := s.r.Resolve(ctx, tx, p, space)
@@ -184,6 +203,9 @@ func (s *Service) Leave(ctx context.Context, p auth.Principal, space string) err
 		}
 		return s.removeParticipant(ctx, tx, m)
 	})
+	if err == nil {
+		s.ib.Wake(p.AgentID)
+	}
 	return err
 }
 

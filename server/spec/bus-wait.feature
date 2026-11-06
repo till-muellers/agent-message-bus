@@ -168,6 +168,21 @@ Feature: Waiting for mail (bus_wait)
       When leader "lead" revokes member "worker"
       Then the call fails with unauthenticated "invalid token" within one heartbeat
 
+    Scenario Outline: An idle wait ends at once when its credential dies (<how>)
+      # The revocation wakes the agent's waits after the commit; the heartbeat is only
+      # the fallback.
+      Given <who> is in bus_wait with timeoutSeconds 300
+      When <how>
+      Then the call fails with unauthenticated "invalid token" within 2 seconds
+
+      Examples:
+        | who                 | how                                           |
+        | member "worker"     | leader "lead" revokes member "worker"         |
+        | member "worker"     | member "worker" leaves space "alpha"          |
+        | member "worker"     | leader "lead" deletes space "alpha"           |
+        | admin "ops"         | admin "admin" revokes admin "ops"             |
+        | the bootstrap admin | the instance admin token is rotated           |
+
     Scenario: Waiting does not take the inbox stream slot
       Given member "worker" opened the inbox stream with its "alpha" token
       When member "worker" calls bus_wait with its "alpha" token and timeoutSeconds 5

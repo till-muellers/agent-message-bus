@@ -32,7 +32,7 @@ func Routes(streamRoot context.Context, a *auth.Service, ib *inbox.Service, inv 
 	mux.Handle("POST /v1/invites/accept", inv.AcceptHandler())
 	mux.Handle("GET /v1/inbox/stream", a.Middleware(ib.StreamHandler(streamRoot)))
 	mux.Handle("GET /v1/guide", a.Middleware(http.HandlerFunc(serveGuide)))
-	admin.Mount(mux, a.Middleware, a, shutdown)
+	admin.Mount(mux, a.Middleware, a, ib, shutdown)
 	return mux
 }
 
