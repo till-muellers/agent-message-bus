@@ -3,6 +3,7 @@ package web
 import (
 	"net"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -16,6 +17,8 @@ const (
 
 // limiter counts failed sign-ins per remote IP over a sliding minute; after maxFailures
 // every sign-in from that IP answers 429 until the oldest failure is a minute old [AD-9].
+// A sign-in in progress counts as a failure until its token checks out or the check
+// fails for another reason.
 type limiter struct {
 	mu        sync.Mutex
 	now       func() time.Time
@@ -27,24 +30,30 @@ func newLimiter(now func() time.Time) *limiter {
 	return &limiter{now: now, failures: map[string][]time.Time{}}
 }
 
-// blocked reports whether ip has used up its failed sign-ins.
-func (l *limiter) blocked(ip string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.recent(ip, l.now())) >= maxFailures
-}
-
-// fail records a failed sign-in from ip.
-func (l *limiter) fail(ip string) {
+// reserve counts a sign-in from ip as failed before its token is checked, so concurrent
+// attempts cannot all pass the limit. ok is false when ip has used up its failed sign-ins;
+// otherwise release takes the attempt back, for a sign-in that did not fail.
+func (l *limiter) reserve(ip string) (release func(), ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
 	l.sweep(now)
 	ts := l.recent(ip, now)
 	if len(ts) >= maxFailures {
-		ts = ts[1:]
+		return nil, false
 	}
 	l.failures[ip] = append(ts, now)
+	return func() { l.forget(ip, now) }, true
+}
+
+// forget removes one failure of ip recorded at at, if it is still counted.
+func (l *limiter) forget(ip string, at time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ts := l.failures[ip]
+	if i := slices.Index(ts, at); i >= 0 {
+		l.failures[ip] = slices.Delete(ts, i, i+1)
+	}
 }
 
 // recent drops ip's failures older than failureWindow and returns the rest. Call with mu held.
