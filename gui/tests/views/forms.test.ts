@@ -3,7 +3,8 @@ import type { VNode } from "../../src/view/h.ts";
 import { inviteForm, postForm, sendForm } from "../../src/views/forms.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
-const none = { invite: () => {}, post: () => {}, send: () => {} };
+const sent = async (): Promise<boolean> => true;
+const none = { invite: sent, post: sent, send: sent };
 
 function fieldsOf(form: VNode): (string | undefined)[] {
 	return findAll(form, (n) => n.tag === "input" || n.tag === "textarea" || n.tag === "select").map((n) => n.attrs.name);

@@ -1,9 +1,10 @@
 import type { AdminsApi } from "../api/admins.ts";
 import { type MutationDeps, mutate } from "./mutate.ts";
 
+/** Resolves true when it went through and false when it was refused (the form keeps what was typed). */
 export interface AdminIntents {
-	mintAdmin(name: string): Promise<void>;
-	revokeAdmin(name: string): Promise<void>;
+	mintAdmin(name: string): Promise<boolean>;
+	revokeAdmin(name: string): Promise<boolean>;
 }
 
 /** Mints (token shown once) and revokes admins; never rejects. */

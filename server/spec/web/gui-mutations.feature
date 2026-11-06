@@ -277,3 +277,54 @@ Feature: Web GUI mutations
       When the operator posts a reply to thread 1 in space "demo"
       Then the response status is 401
       And thread 1 in space "demo" has one post
+
+  Rule: The outcome of an action is in view where the operator acts
+
+    # Behaviour of the GUI bundle in the browser (gui/src). The server's tests do not
+    # see it: the GUI's unit tests (gui/tests) and the browser smoke in
+    # docs/design/arch/gui.md §7 check it. The confirmation, the secret shown once and
+    # the notice stick to the top of the viewport, so a button far down a long page
+    # shows its outcome where the operator looks; the confirmation and the secret
+    # also take the keyboard focus.
+
+    Scenario: A confirmation is in view and has the focus
+      Given the operator scrolled to the bottom of a page taller than the window
+      When the operator clicks "Delete space"
+      Then the confirmation is visible in the window
+      And the keyboard focus is on the confirmation
+
+    Scenario: Escape closes a confirmation
+      Given the operator opened the confirmation to delete space "demo"
+      When the operator presses Escape
+      Then the confirmation is gone
+      And the keyboard focus is back on "Delete space"
+      And space "demo" still exists
+
+    Scenario: A secret shown once is in view and has the focus
+      Given the operator scrolled to the bottom of a page taller than the window
+      When the operator creates an invite code for "new" in space "demo"
+      Then the invite code is visible in the window
+      And the keyboard focus is on the invite code
+
+    Scenario: A notice is in view
+      Given the operator scrolled to the bottom of a thread taller than the window
+      When the operator posts a reply
+      Then the notice "Post 2 added." is visible in the window
+
+    Scenario Outline: A refused submit keeps what the operator typed (<form>)
+      When the operator submits the <form> form and the server refuses it
+      Then the page shows the server's error
+      And the form still holds what the operator typed
+      And the form is cleared once a submit goes through
+
+      Examples:
+        | form        |
+        | invite      |
+        | mint admin  |
+        | reply       |
+        | topic send  |
+
+    Scenario: Unbroken long text does not widen the page
+      Given a post whose body is 400 times "x"
+      When the operator opens the thread in a window 360 pixels wide
+      Then the page does not scroll sideways

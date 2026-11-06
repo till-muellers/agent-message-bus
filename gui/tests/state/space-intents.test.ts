@@ -112,4 +112,12 @@ describe("the space intents", () => {
 			{ type: "notice/shown", message: "Sent to topic all.", alert: false },
 		]);
 	});
+
+	test("a form intent reports whether it went through, so the form keeps what a refusal rejected", async () => {
+		const refuse = async (): Promise<never> => Promise.reject(new Error("no"));
+		const done = intents();
+		const refused = intents({ invite: refuse, post: refuse, sendTopic: refuse });
+		expect(await Promise.all([done.space.invite("demo", "new", ""), done.space.post("demo", 1, "r"), done.space.send("demo", "all", "hi", false)])).toEqual([true, true, true]);
+		expect(await Promise.all([refused.space.invite("demo", "Bad", ""), refused.space.post("demo", 1, "r"), refused.space.send("demo", "all", "hi", false)])).toEqual([false, false, false]);
+	});
 });

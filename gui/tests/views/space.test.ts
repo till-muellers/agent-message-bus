@@ -15,9 +15,10 @@ function rows(view: VNode, title: string): string[][] {
 }
 
 const calls: string[] = [];
+const went = async (): Promise<boolean> => true;
 const intents: Pick<Intents, "invite" | "send" | "ask" | "cancelInvite"> = {
-	invite: () => {},
-	send: () => {},
+	invite: went,
+	send: went,
 	ask: (c) => void calls.push(`ask ${JSON.stringify(c)}`),
 	cancelInvite: (space, invite) => void calls.push(`cancel ${space} ${invite.id}`),
 };

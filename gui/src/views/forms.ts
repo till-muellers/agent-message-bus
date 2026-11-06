@@ -1,12 +1,12 @@
-import { takeForm } from "../view/form-field.ts";
+import { submitForm } from "../view/form-field.ts";
 import { h, type Handler, type VNode } from "../view/h.ts";
 import type { Intents } from "./intents.ts";
 
-/** A submit handler that reads and resets the form, then hands its fields to act. */
-function onSubmit(act: (fields: ReadonlyMap<string, string>) => void): Handler {
+/** A submit handler that hands the form's fields to act; the form resets only when act resolves true. */
+export function onSubmit(act: (fields: ReadonlyMap<string, string>) => Promise<boolean>): Handler {
 	return (event) => {
 		event.preventDefault();
-		act(takeForm(event));
+		submitForm(event, act);
 	};
 }
 

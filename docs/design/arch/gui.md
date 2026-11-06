@@ -51,8 +51,8 @@ gui/
       reducer.ts        pure (state, action) → state
       store.ts          getState / dispatch / subscribe (~30 lines)
       session-intents.ts signIn / restore / signOut: run the session calls, dispatch the outcome (never rejects)
-      mutate.ts         mutate(deps, call, done): awaits a mutation, dispatches done(result) and refreshes; 401 → signed-out, else the server's message as an alert notice (never rejects)
-      admin-intents.ts  (W2) mintAdmin → secret/shown, revokeAdmin → notice/shown
+      mutate.ts         mutate(deps, call, done): awaits a mutation, dispatches done(result) and refreshes; resolves true when it went through, false when refused (a form keeps what was typed then); 401 → signed-out, else the server's message as an alert notice (never rejects)
+      admin-intents.ts  (W2) mintAdmin → secret/shown, revokeAdmin → notice/shown; every intent resolves like mutate
       space-intents.ts  (W3) invite → secret/shown; cancel, post, send → notice; ask/dismiss open and close the confirmation, confirmed closes it and runs the revoke or delete; a successful delete sends an operator still on a page of that space to the space list (store, then hash) before its notice, so the notice stays and the deleted space is not polled; one who moved on while it ran stays where they are
     router/
       routes.ts         parseRoute(hash) → Route; hrefOf(route) → "#/…" (pure)
@@ -63,13 +63,13 @@ gui/
     view/
       h.ts              h(tag, props, ...children) → VNode (plain objects)
       plan-patch.ts     planPatch(previous, next) (pure): which old child each new child patches in place (tag + key, keyed moves), which old ones go
-      mount.ts          VNode → DOM: applies planPatch per parent (reuses nodes; keeps focus and input values)
-      form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state); takeForm(event): all fields, then resets the form
+      mount.ts          VNode → DOM: applies planPatch per parent (reuses nodes; keeps focus and input values); a newly created node with the `autofocus` attribute takes the focus, and the focus goes back to where it was when such a node is removed while it holds it
+      form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state); submitForm(event, act): hands all fields to act and resets the form only when act resolves true and the form still holds what was sent (a refused submit and text typed meanwhile are kept; a second submit while one is unanswered is ignored)
     views/
       intents.ts        Intents: the one contract of what the operator can do; each view takes the Pick it needs. The state/*-intents.ts modules implement it structurally (state never imports views); main.ts only spreads them into one object
-      layout.ts         header (signed-in name/kind, nav, sign out), confirm/outcome section, error banner
+      layout.ts         header (signed-in name/kind, nav, sign out), confirm/outcome section, error banner; the notice is `.outcome`
       login.ts          token form
-      table.ts          table(head, rows): a header row and keyed rows
+      table.ts          table(head, rows): a header row and keyed rows, in a `.scroll-x` box so a wide table scrolls inside itself instead of widening the page
       time.ts           time(iso): a <time> element with the local formatted text
       spaces.ts         space list: leader and member counts, admin names, open invites where the session may manage a space (mayManage)
       space.ts          participants, topics + send form (no `all` or critical without leader rights), blackboards, recent threads; with leader rights (the state's mayManage, never the presence of invites) revoke per member (and per leader for admin sessions; no revoke for a role the GUI does not know), open invites with a cancel button by id, the invite form and delete space
@@ -77,9 +77,9 @@ gui/
       thread.ts         a thread: title, posts with author and time, reply form (W3)
       inbox.ts          the signed-in agent's own inbox, read-only ("Inbox of <kind> <name>", no acknowledge)
       admins.ts         (W2) admin list, mint form, revoke button per minted admin (none for the bootstrap admin)
-      confirm.ts        (W3) confirm section (role alertdialog) naming space / target / role, above the page
-      shown-once.ts     (W2/W3) invite code or admin token shown once
-      forms.ts          (W3) invite (space view, leader rights), post (thread view), send-to-topic (space view) forms; read through takeForm
+      confirm.ts        (W3) confirm section (role alertdialog, `.outcome`) naming space / target / role; takes the focus when it appears (another confirmation is another key) and Escape dismisses it
+      shown-once.ts     (W2/W3) invite code or admin token shown once (`.outcome`); takes the focus when it appears; hidden (not removed) while a confirmation is open, so it takes no focus when the confirmation closes
+      forms.ts          (W3) invite (space view, leader rights), post (thread view), send-to-topic (space view) forms; submitted through submitForm
     format/
       time.ts           server time → local "YYYY-MM-DD HH:MM" (absolute: a deep-equal poll does not re-render, so a relative time would go stale)
   tests/                bun test, one file per src module
@@ -137,6 +137,9 @@ export function createStore(reducer: (s: AppState, a: Action) => AppState, initi
 - Render loop: `store.subscribe(state => mount(root, render(state)))`; `render` is `views/layout.ts` choosing the view by `state.route.name`. A `view/loaded` whose data is deep-equal to the current data does not notify (no re-render every 5 s).
 - Any `401` from any call dispatches `session/signed-out` (session revoked, rotated token, expired cookie: `gui-access.feature:103-140`). `403` shows the error message in place (e.g. a leader opening `#/admins`).
 - `view/mount.ts` patches by tag + `key` prop: same tag and key reuse the node and update props/text; an `<input>`/`<textarea>` that has focus keeps its value. This keeps forms usable while polling re-renders (W3).
+- Outcomes stay in view (`.outcome` in `style.css`: `position: sticky; top: 0` inside `<main>`): the confirmation, the secret shown once and the notice are the first children of `<main>`, but the button that caused them may be far down a long page. Sticky keeps them at the top of the viewport while the page scrolls; they leave with their state (a secret and a notice on the next navigation, a confirmation on dismiss, confirm or navigation). The confirmation and the secret also carry `autofocus` and `tabindex="-1"`: `mount.ts` focuses them when they appear (a screen reader reads the dialog name or the secret), Tab then reaches the confirmation's buttons, Escape dismisses the confirmation and the focus goes back to the button that opened it. A notice does not take the focus (the operator keeps typing; its `status` and `alert` roles are announced).
+- A form clears only when its mutation went through: `submitForm` resets it once the intent resolves true and the form still holds what was submitted, so a refused invite, mint, reply or topic message keeps the typed text next to the server's error, and text typed while the answer was pending is not wiped. The sign-in token field is the exception: it is cleared at once (`takeField`).
+- Long unbroken text wraps (`overflow-wrap: break-word` on `body`, `min-width: 0` on the flex paragraphs of the header and the confirmation); a table wider than the window scrolls inside its `.scroll-x` box. At 360 px the page itself never scrolls sideways.
 
 ### 3.3 Polling
 
@@ -198,7 +201,7 @@ export type Decoder<T> = (json: unknown) => T;   // throws ApiError(0, "invalid_
 | W2 | admins (list, mint once, revoke) | `gui-admins` |
 | W3 | forms (invite, post, send), invite cancel button per pending invite (PO-3), confirm (revoke, delete space), shown-once | `gui-mutations` (PO-1, PO-4) + PO-3 cancel |
 
-Rules visible in the views: the signed-in agent is shown by kind and name ("admin ops"), never a placeholder (`spaces-and-participants.feature:114-118`); a secret (invite code, admin token) is shown once with "it cannot be shown again" and is dropped from state on the next navigation (`gui-mutations.feature:85-88`, `gui-admins.feature:73-76`); the confirm dialog names space, target and role and sends the `confirm` string the server checks.
+Rules visible in the views: the signed-in agent is shown by kind and name ("admin ops"), never a placeholder (`spaces-and-participants.feature:114-118`); a secret (invite code, admin token) is shown once with "it cannot be shown again" and is dropped from state on the next navigation (`gui-mutations.feature:85-88`, `gui-admins.feature:73-76`), in view and focused when it appears; the confirm dialog names space, target and role, takes the focus, closes on Escape and sends the `confirm` string the server checks (rule "The outcome of an action is in view where the operator acts", `gui-mutations.feature`).
 
 ---
 
@@ -231,10 +234,11 @@ Rules visible in the views: the signed-in agent is shown by kind and name ("admi
 | `poll/poller.ts` | fake `Clock`: interval, pause when hidden, backoff, refresh after mutation |
 | `views/*.ts` | assert the VNode tree (`h()` output): texts, order, keys, links (`hrefOf`), buttons per kind (no admin nav for a member) |
 | `view/plan-patch.ts` | `planPatch` and `samePlace` are pure and tested: reuse in place, insert, remove, keyed moves, tag change, nodes the patcher never rendered |
-| `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage). `mount.ts` only applies `planPatch`. |
+| `view/mount.ts`, `view/form-field.ts` | not unit-tested against a real DOM (no new dependency such as happy-dom); covered by the smoke procedure (focus kept while polling, token field cleared, no token in storage, focus on a new confirmation or secret and back to the trigger on Escape, a refused submit keeps the input). `mount.ts` only applies `planPatch` and the focus rules. The views test what they hand it: the `autofocus`/`tabindex`/`class` attributes, the Escape handler, the keys; the intents test the went-through result `submitForm` reads. |
+| `style.css` | `tests/style.test.ts` pins the rules the views rely on (`.outcome` sticky at the top with a background, `.scroll-x`, wrapping); what they look like is the smoke's job. |
 | `scripts/build.ts` | builds into a temp `--out` (in-process and through the command line); asserts `index.html` references an existing `assets/main-*.js` and `assets/style-*.css`; each build test has a 60 s limit (the command-line child 30 s) instead of bun's 5 s default, so a busy machine slows them down instead of failing them |
 | fitness | `tests/no-raw-html.test.ts`: no `innerHTML`/`outerHTML`/`insertAdjacentHTML`/`document.write` in `gui/src`; `tests/layout.test.ts` (R4): browser globals only in the four DOM-edge modules (§1), no `state/*` → `views/*` import, every relative import resolves, no import cycle |
 
 Server behaviour (cookie flags, 401/403/405, CSRF binding, loopback rule) is tested in Go by Arch-server's W slices; the GUI tests only the client's side of each contract.
 
-**Smoke procedure (per GUI slice):** throwaway server (`AMB_ADDR=127.0.0.1:<port>`, `AMB_WEB_ADDR=127.0.0.1:<port2>`, `AMB_DB_PATH=<tmp>/x.db`, `AMB_ADMIN_TOKEN=<32..512 visible ASCII chars>`), GUI built into `server/internal/web/dist`, `go run .` in `server/`; open `http://127.0.0.1:<port2>/web/` (the GUI listener `AMB_WEB_ADDR`; the API listener `AMB_ADDR` serves no `/web`); sign in with the admin token; seed data with `POST /v1/tools/<name>` on `AMB_ADDR` (`.omp/AGENTS.md` "Running it locally"); check each view, a 5 s refresh after a seeded change, sign-out, and (W3) every mutation's confirm text; DevTools → Application shows no token in storage, cookie `HttpOnly`.
+**Smoke procedure (per GUI slice):** throwaway server (`AMB_ADDR=127.0.0.1:<port>`, `AMB_WEB_ADDR=127.0.0.1:<port2>`, `AMB_DB_PATH=<tmp>/x.db`, `AMB_ADMIN_TOKEN=<32..512 visible ASCII chars>`), GUI built into `server/internal/web/dist`, `go run .` in `server/`; open `http://127.0.0.1:<port2>/web/` (the GUI listener `AMB_WEB_ADDR`; the API listener `AMB_ADDR` serves no `/web`); sign in with the admin token; seed data with `POST /v1/tools/<name>` on `AMB_ADDR` (`.omp/AGENTS.md` "Running it locally"); check each view, a 5 s refresh after a seeded change, sign-out, and (W3) every mutation's confirm text; DevTools → Application shows no token in storage, cookie `HttpOnly`. On a page taller than the window (for example 900×500) also check that the confirmation, the invite code and a notice are in view when the button at the bottom is used, that Tab reaches the confirmation's buttons (Enter confirms, Escape cancels and returns the focus), that a refused invite keeps the typed name, and at 360×640 that a 400-character unbroken post does not make the page scroll sideways (`document.documentElement.scrollWidth === innerWidth`).

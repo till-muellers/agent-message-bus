@@ -9,12 +9,13 @@ import type { PendingConfirm } from "../state/app-state.ts";
 export interface Intents {
 	signIn(token: string): void;
 	signOut(): void;
-	mintAdmin(name: string): void;
+	/** The form intents (mint, invite, post, send) resolve true when it went through: the form clears only then. */
+	mintAdmin(name: string): Promise<boolean>;
 	revokeAdmin(name: string): void;
-	invite(space: string, name: string, task: string): void;
+	invite(space: string, name: string, task: string): Promise<boolean>;
 	cancelInvite(space: string, invite: PendingInvite): void;
-	post(space: string, threadId: number, body: string): void;
-	send(space: string, topic: string, body: string, critical: boolean): void;
+	post(space: string, threadId: number, body: string): Promise<boolean>;
+	send(space: string, topic: string, body: string, critical: boolean): Promise<boolean>;
 	/** Opens the confirmation of a revoke or a space deletion. */
 	ask(confirm: PendingConfirm): void;
 	/** Runs a confirmed revoke or space deletion. */

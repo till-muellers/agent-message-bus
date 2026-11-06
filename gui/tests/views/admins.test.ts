@@ -5,7 +5,8 @@ import { admins } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
 function view(calls: string[] = []): VNode {
-	return adminsView(admins, { mintAdmin: (name) => void calls.push(`mint ${name}`), revokeAdmin: (name) => void calls.push(`revoke ${name}`) });
+	const mintAdmin = async (name: string): Promise<boolean> => calls.push(`mint ${name}`) > 0;
+	return adminsView(admins, { mintAdmin, revokeAdmin: (name) => void calls.push(`revoke ${name}`) });
 }
 
 describe("the admin area", () => {
