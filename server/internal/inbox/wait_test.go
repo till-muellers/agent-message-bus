@@ -78,7 +78,7 @@ func (c *countingPub) Subscribe(topic string) (<-chan []byte, func()) {
 // counted; root ends its waits. Entries w.send publishes reach it when pub is w.pub.
 func waitService(w *world, root context.Context, pub publisher) (*Service, *countingPub) {
 	cp := &countingPub{publisher: pub}
-	return NewService(root, w.db, cp, testNow), cp
+	return NewService(root, w.db, cp, w.creds, testNow), cp
 }
 
 // waiting blocks until a Wait has subscribed through cp.
@@ -154,7 +154,7 @@ func TestWaitSubscribeBeforeRead(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	pub := insertOnSubscribe{publisher: w.pub, insert: func() { w.insert(t, "worker", "alpha", "a3") }}
-	svc := NewService(t.Context(), w.db, pub, testNow)
+	svc := NewService(t.Context(), w.db, pub, w.creds, testNow)
 	got, err := svc.Wait(t.Context(), w.principals["memberA"], afterA2(w))
 	if err != nil || !slices.Equal(bodies(got), []string{"a3"}) {
 		t.Fatalf("Wait = %v, %v; want [a3]", bodies(got), err)

@@ -35,7 +35,7 @@ func newEnvHooks(t *testing.T, hooks Hooks) env {
 	t.Helper()
 	conn := dbtest.Open(t)
 	a := auth.NewService(conn, adminSecret, time.Now)
-	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), time.Now)
+	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), a, time.Now)
 	r := NewResolver(a)
 	return env{db: conn, auth: a, inbox: ib, svc: NewService(conn, r, a, ib, time.Now, hooks),
 		adm: NewAdmitter(r, a, time.Now)}

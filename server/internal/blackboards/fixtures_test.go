@@ -49,7 +49,7 @@ func newFixture(t *testing.T) fixture {
 	}{{10, 1, "leader"}, {10, 2, "member"}, {10, 3, "member"}, {20, 1, "leader"}, {20, 4, "member"}} {
 		dbtest.SeedParticipant(t, db, p.space, p.agent, p.role)
 	}
-	ib := inbox.NewService(t.Context(), db, broker.NewMemory(64), time.Now)
+	ib := inbox.NewService(t.Context(), db, broker.NewMemory(64), anyCredential{}, time.Now)
 	return fixture{
 		db:   db,
 		svc:  NewService(db, spaces.NewResolver(anyCredential{}), ib, time.Now),

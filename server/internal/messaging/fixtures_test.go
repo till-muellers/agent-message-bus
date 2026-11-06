@@ -33,7 +33,7 @@ type world struct {
 func newWorld(t *testing.T) *world {
 	t.Helper()
 	conn := dbtest.Open(t)
-	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), time.Now)
+	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), anyCredential{}, time.Now)
 	w := &world{svc: NewService(conn, spaces.NewResolver(anyCredential{}), ib, time.Now), ib: ib, db: conn, p: map[string]auth.Principal{}}
 	const sp = 1
 	dbtest.SeedAgent(t, conn, 1, "lead", "leader")

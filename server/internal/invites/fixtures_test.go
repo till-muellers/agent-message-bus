@@ -42,7 +42,7 @@ func newEnv(t *testing.T) env {
 	now := func() time.Time { return clock }
 	a := auth.NewService(conn, "admin-secret", now)
 	pub := broker.NewMemory(64)
-	ib := inbox.NewService(t.Context(), conn, pub, now)
+	ib := inbox.NewService(t.Context(), conn, pub, anyCredential{}, now)
 	r := spaces.NewResolver(anyCredential{})
 	svc := NewService(conn, spaces.NewAdmitter(r, a, now), ib, now)
 	sp := spaces.NewService(conn, r, a, ib, now, spaces.Hooks{Revocation: []spaces.RevocationHook{svc}})

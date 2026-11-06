@@ -28,6 +28,7 @@ type world struct {
 	svc        *Service
 	pub        *broker.Memory
 	db         *sql.DB
+	creds      *fakeCredentials
 	agents     map[string]int64
 	spaces     map[string]int64
 	principals map[string]auth.Principal
@@ -38,7 +39,8 @@ func newWorld(t *testing.T) *world {
 	t.Helper()
 	db := dbtest.Open(t)
 	pub := broker.NewMemory(16)
-	w := &world{svc: NewService(t.Context(), db, pub, testNow), pub: pub, db: db, entries: map[string]Entry{}}
+	creds := &fakeCredentials{}
+	w := &world{svc: NewService(t.Context(), db, pub, creds, testNow), pub: pub, db: db, creds: creds, entries: map[string]Entry{}}
 	const lead, worker, ops, admin, alpha, beta = 1, 2, 3, 4, 1, 2
 	dbtest.SeedAgent(t, db, lead, "lead", "leader")
 	dbtest.SeedAgent(t, db, worker, "worker", "member")

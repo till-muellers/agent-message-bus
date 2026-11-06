@@ -63,7 +63,7 @@ func newWorld(t *testing.T) *world {
 	t.Helper()
 	conn := dbtest.Open(t)
 	now := stepClock()
-	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), now)
+	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), anyCredential{}, now)
 	r := countingResolver{Resolver: spaces.NewResolver(anyCredential{}), n: &atomic.Int64{}}
 	w := &world{conn: conn, ib: ib, resolves: r.n,
 		msg: messaging.NewService(conn, r, ib, now), bb: blackboards.NewService(conn, r, ib, now)}
