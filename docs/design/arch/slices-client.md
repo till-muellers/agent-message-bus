@@ -9,7 +9,7 @@ Design references: `client.md` (§ numbers), `gui.md`, `pipeline.md`. All PO dec
 ## Common smoke setup (`.omp/AGENTS.md` "Running it locally")
 
 ```
-S0  server:  AMB_ADDR=127.0.0.1:<port> AMB_DB_PATH=<tmp>/x.db AMB_ADMIN_TOKEN=<32+ chars> agent-message-bus start   (or `go run .` in server/ for unreleased server slices)
+S0  server:  AMB_ADDR=127.0.0.1:<port> AMB_DB_PATH=<tmp>/x.db AMB_ADMIN_TOKEN=<32..512 visible ASCII chars> agent-message-bus start   (or `go run .` in server/ for unreleased server slices)
 S1  seed:    POST /v1/tools/<name> with Bearer <admin token>: bus_mint_leader lead, bus_create_space demo (as lead), bus_invite_member worker
 S2  session: OMP_AGENT_BUS_DIR=<tmp>/omp-a with credentials.json {"url","token"}; omp -e <repo>/extension/index.ts   (tui mode)
              installed plugin disabled or upgraded (two copies: only the first sees env credentials; both register tools)
