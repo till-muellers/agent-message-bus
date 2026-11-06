@@ -132,6 +132,28 @@ Feature: Web GUI access and sessions
       When the operator signs in with the token of member "worker"
       Then the response status is 200
 
+  Rule: At most 5 failed sign-ins per IP and minute are evaluated
+
+    # A sign-in counts as failed from the moment it is admitted until its token
+    # checks out, so concurrent attempts cannot all pass the limit.
+
+    Scenario: The sixth failed sign-in within a minute answers 429
+      Given 5 sign-ins with token "amb_nope" from one IP failed within a minute
+      When the operator signs in from that IP with the instance admin token
+      Then the response status is 429
+      And the body is {"error":{"code":"rate_limited","message":"too many failed sign-ins; try again later"}}
+
+    Scenario: Concurrent failed sign-ins are bounded by the same limit
+      When 150 sign-ins with token "amb_nope" from one IP arrive at the same time
+      Then exactly 5 of them answer 401
+      And the other 145 answer 429
+
+    Scenario: A successful sign-in does not count
+      Given 4 sign-ins with token "amb_nope" from one IP failed within a minute
+      And the operator signed in from that IP with the instance admin token
+      When a sign-in with token "amb_nope" from that IP fails
+      Then the response status is 401
+
   Rule: A session is re-validated on every request
 
     Scenario: An active session sees the web GUI

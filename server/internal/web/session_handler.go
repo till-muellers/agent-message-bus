@@ -22,15 +22,16 @@ type sessionBody struct {
 // Failed sign-ins count toward the per-IP limit; the token is never echoed.
 func (g *Web) signIn(w http.ResponseWriter, r *http.Request) {
 	ip := remoteIP(r)
-	if g.limit.blocked(ip) {
+	release, ok := g.limit.reserve(ip)
+	if !ok {
 		writeRateLimited(w)
 		return
 	}
 	p, hash, err := g.authenticate(r)
+	if kind, _ := apperr.KindOf(err); kind != apperr.Unauthenticated {
+		release()
+	}
 	if err != nil {
-		if kind, _ := apperr.KindOf(err); kind == apperr.Unauthenticated {
-			g.limit.fail(ip)
-		}
 		httpx.WriteError(w, err)
 		return
 	}
