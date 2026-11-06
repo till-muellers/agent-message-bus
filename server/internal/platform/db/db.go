@@ -12,11 +12,13 @@ import (
 )
 
 // Open opens the SQLite database at path with foreign keys, WAL and a busy timeout.
+// Transactions begin IMMEDIATE: they take the write lock up front, so busy_timeout
+// covers an external writer (a deferred read-to-write upgrade fails with SQLITE_BUSY at once).
 func Open(ctx context.Context, path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, fmt.Errorf("creating db dir for %s: %w", path, err)
 	}
-	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+	dsn := "file:" + path + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_txlock=immediate"
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("opening db %s: %w", path, err)

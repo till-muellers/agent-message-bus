@@ -110,3 +110,20 @@ Feature: Local instance management
       Given AMB_ADMIN_TOKEN is "env-token-0123456789-0123456789-abcdef"
       When I run "agent-message-bus rotate-token"
       Then it fails with "AMB_ADMIN_TOKEN is set in the environment; rotate it there"
+
+  Rule: a brief external write lock on the database delays calls, it does not fail them
+
+    # Every transaction begins IMMEDIATE, so the 5 s busy timeout covers another
+    # process (an operator's sqlite3 session, a backup tool) holding the write lock.
+
+    Scenario: A mutating call waits for an external writer
+      Given the server runs
+      And another process holds the database write lock for 1 second
+      When the admin calls bus_create_space with space "short0"
+      Then the call succeeds after the lock is released
+
+    Scenario: A read waits for no external writer
+      Given the server runs
+      And another process holds the database write lock
+      When a plain read of the database runs
+      Then it returns without waiting for the lock
