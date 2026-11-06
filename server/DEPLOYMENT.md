@@ -35,7 +35,7 @@ Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` 
 
 |Env|Default|Meaning|
 |---|---|---|
-|`AMB_ADMIN_TOKEN`|— (optional, ≥32 chars)|Admin token override. Without it the token is generated once into `<datadir>/admin-token` (0600) and persists across restarts.|
+|`AMB_ADMIN_TOKEN`|— (optional, 32..512 visible ASCII chars, trimmed)|Admin token override. Without it the token is generated once into `<datadir>/admin-token` (0600) and persists across restarts.|
 |`AMB_ADDR`|`127.0.0.1:8080`|API listen address (the Docker image sets `:8080`).|
 |`AMB_WEB_ADDR`|`127.0.0.1:8081`|Web GUI listen address, any `host:port`; empty or `off` disables the GUI (the Docker image sets `off`). It must differ from `AMB_ADDR`; a GUI address that can't be bound stops the start with an error naming `AMB_WEB_ADDR`. The GUI is served only here (`http://127.0.0.1:8081/web/`); the API listener has no `/web` route.|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its parent directory is created if missing.|
@@ -229,8 +229,8 @@ References: [`TOOLS.md`](TOOLS.md) (generated tool ledger), the [agent guide](in
 |Server exits with "address already in use"|Another process holds the port. Stop it or set `AMB_ADDR=127.0.0.1:8090`. For `listen AMB_WEB_ADDR …` the web GUI port is taken (another instance on the default `127.0.0.1:8081`?): set `AMB_WEB_ADDR` to a free port or `off`.|
 |`AMB_WEB_ADDR 127.0.0.1:8081 must differ from AMB_ADDR`|`AMB_ADDR` uses the GUI's default address. Set `AMB_WEB_ADDR` to another address or `off`.|
 |`agent-message-bus already running (pid N) at <url>`|An instance already serves this data dir. Use it, run `agent-message-bus stop`, or set a different `AMB_DB_PATH`.|
-|`agent-message-bus did not become healthy within 10s`|`start` prints the log tail; fix the cause shown there (port, DB path, invalid `AMB_ADMIN_TOKEN`).|
-|`admin token must be at least 32 characters`|`AMB_ADMIN_TOKEN` is too short; unset it to use the generated token file.|
+|`agent-message-bus did not become healthy within 10s`|`start` prints the log tail; fix the cause shown there (port, DB path, an unusable token in `<datadir>/admin-token`; an unusable `AMB_ADMIN_TOKEN` fails `start` at once).|
+|`AMB_ADMIN_TOKEN: admin token must be 32..512 visible ASCII characters`|`AMB_ADMIN_TOKEN` is too short, too long, blank or holds spaces or control characters; fix it or unset it to use the generated token file. The same message prefixed `admin token in <file>:` names a bad token file.|
 |`AMB_ADMIN_TOKEN is set in the environment; rotate it there`|`rotate-token` only rotates the file token; change the env var and restart.|
 |`403 admin endpoints are only available from localhost`|`stop`/`rotate-token` must run on the server host.|
 |`bus_*` tools missing in omp|Run `/bus status`; it names the identity the session acts with (an admin token alone acts as that admin). After `/bus logout` all `bus_*` tools stay off until `/bus login` or `/bus server start`. Check the omp log for `agent-bus:` lines (unreachable server, unregistered tools). If `/bus` is unknown, the plugin isn't installed: run `omp plugin install github:till-muellers/agent-message-bus`.|

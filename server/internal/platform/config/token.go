@@ -8,7 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 )
 
 const tokenFileName = "admin-token"
@@ -23,7 +24,7 @@ func (c Config) ResolveAdminToken() (string, error) {
 	}
 	b, err := os.ReadFile(c.TokenPath())
 	if err == nil {
-		return validFileToken(c.TokenPath(), strings.TrimSpace(string(b)))
+		return validFileToken(c.TokenPath(), string(b))
 	}
 	if !errors.Is(err, fs.ErrNotExist) {
 		return "", fmt.Errorf("reading admin token %s: %w", c.TokenPath(), err)
@@ -38,9 +39,23 @@ func (c Config) ResolveAdminToken() (string, error) {
 	return tok, nil
 }
 
-func validFileToken(path, tok string) (string, error) {
-	if len(tok) < minTokenLen {
-		return "", fmt.Errorf("admin token in %s must be at least 32 characters", path)
+// adminTokenOverride validates the AMB_ADMIN_TOKEN value raw with domain.AdminToken; empty
+// means no override. A set but blank value fails instead of falling back to the token file.
+func adminTokenOverride(raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	tok, err := domain.AdminToken(raw)
+	if err != nil {
+		return "", fmt.Errorf("AMB_ADMIN_TOKEN: %w", err)
+	}
+	return tok, nil
+}
+
+func validFileToken(path, raw string) (string, error) {
+	tok, err := domain.AdminToken(raw)
+	if err != nil {
+		return "", fmt.Errorf("admin token in %s: %w", path, err)
 	}
 	return tok, nil
 }

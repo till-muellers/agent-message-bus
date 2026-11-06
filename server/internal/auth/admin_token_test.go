@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"cmp"
 	"context"
 	"strings"
 	"testing"
@@ -12,12 +13,17 @@ func TestSetAdminToken(t *testing.T) {
 	t.Parallel()
 	next := strings.Repeat("n", 32)
 	tests := []struct {
-		name, token       string
-		wantErr           bool
-		oldWorks, newWork bool
+		name, token, presented string // presented defaults to token
+		wantErr                bool
+		oldWorks, newWork      bool
 	}{
 		{name: "swap", token: next, oldWorks: false, newWork: true},
+		{name: "surrounding whitespace trimmed", token: " " + next + "\n", presented: next, oldWorks: false, newWork: true},
 		{name: "too short", token: "short", wantErr: true, oldWorks: true},
+		{name: "blank", token: strings.Repeat(" ", 40), wantErr: true, oldWorks: true},
+		{name: "inner space", token: next[:16] + " " + next[16:], wantErr: true, oldWorks: true},
+		{name: "control character", token: next + "\x01", wantErr: true, oldWorks: true},
+		{name: "too long for a header", token: strings.Repeat("n", 2<<20), wantErr: true, oldWorks: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -34,7 +40,7 @@ func TestSetAdminToken(t *testing.T) {
 			if got := isAdmin(s, testAdmin); got != tc.oldWorks {
 				t.Fatalf("old token admin = %v, want %v", got, tc.oldWorks)
 			}
-			if got := isAdmin(s, tc.token); got != tc.newWork {
+			if got := isAdmin(s, cmp.Or(tc.presented, tc.token)); got != tc.newWork {
 				t.Fatalf("new token admin = %v, want %v", got, tc.newWork)
 			}
 		})

@@ -29,7 +29,7 @@ One instance runs per data dir. While it runs, `<datadir>/agent-message-bus.stat
 
 |Env|Default|Meaning|
 |---|---|---|
-|`AMB_ADMIN_TOKEN`|— (optional, ≥32 chars)|Admin token override. Without it the token is generated once into `<datadir>/admin-token` (0600) and persists across restarts.|
+|`AMB_ADMIN_TOKEN`|— (optional, 32..512 visible ASCII chars, trimmed)|Admin token override. Without it the token is generated once into `<datadir>/admin-token` (0600) and persists across restarts.|
 |`AMB_ADDR`|`127.0.0.1:8080`|API listen address.|
 |`AMB_WEB_ADDR`|`127.0.0.1:8081`|Web GUI listen address (`host:port`; empty or `off` disables the GUI). It must differ from `AMB_ADDR`; the GUI is served only here and the API listener has no `/web` route.|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its directory is created if missing. `<datadir>`: Windows `%LOCALAPPDATA%\agent-message-bus`; macOS `~/Library/Application Support/agent-message-bus`; others `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`.|

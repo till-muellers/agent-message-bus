@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
@@ -137,7 +138,7 @@ func TestRotateKeepsMintedAdmins(t *testing.T) {
 	ctx := context.Background()
 	s, root := bootstrapped(t)
 	tok := mustMintAdmin(t, s, root, "ops")
-	if err := s.SetAdminToken(strings.Repeat("n", MinAdminTokenLen)); err != nil {
+	if err := s.SetAdminToken(strings.Repeat("n", domain.MinAdminTokenLen)); err != nil {
 		t.Fatalf("SetAdminToken: %v", err)
 	}
 	if p, err := s.Authenticate(ctx, tok); err != nil || p.AgentName != "ops" {

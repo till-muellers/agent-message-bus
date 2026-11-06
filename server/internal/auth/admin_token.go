@@ -1,16 +1,15 @@
 package auth
 
 import (
-	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 )
 
-// MinAdminTokenLen is the minimum length of an admin token.
-const MinAdminTokenLen = 32
-
-// SetAdminToken atomically replaces the admin credential; the old token stops working.
+// SetAdminToken atomically replaces the admin credential with token, trimmed; the old token
+// stops working. A token domain.AdminToken rejects leaves the old one in place.
 func (s *Service) SetAdminToken(token string) error {
-	if len(token) < MinAdminTokenLen {
-		return apperr.New(apperr.Invalid, "admin token must be at least %d characters", MinAdminTokenLen)
+	token, err := domain.AdminToken(token)
+	if err != nil {
+		return err
 	}
 	h := Hash(token)
 	s.adminHash.Store(&h)

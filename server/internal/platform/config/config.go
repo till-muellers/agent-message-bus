@@ -2,7 +2,6 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,8 +9,7 @@ import (
 )
 
 const (
-	minTokenLen = 32
-	dbFileName  = "agent-message-bus.db"
+	dbFileName = "agent-message-bus.db"
 	// DefaultAddr is the listen address used when AMB_ADDR is unset.
 	DefaultAddr = "127.0.0.1:8080"
 	// DefaultWebAddr is the web GUI listen address used when AMB_WEB_ADDR is unset.
@@ -35,10 +33,12 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 func load(lookup func(string) (string, bool), goos string, home func() (string, error)) (Config, error) {
 	getenv := func(k string) string { v, _ := lookup(k); return v }
 	c := Config{Addr: orDefault(getenv("AMB_ADDR"), DefaultAddr), WebAddr: webAddr(lookup),
-		DBPath: getenv("AMB_DB_PATH"), AdminToken: getenv("AMB_ADMIN_TOKEN")}
-	if c.AdminToken != "" && len(c.AdminToken) < minTokenLen {
-		return Config{}, errors.New("AMB_ADMIN_TOKEN must be at least 32 characters")
+		DBPath: getenv("AMB_DB_PATH")}
+	tok, err := adminTokenOverride(getenv("AMB_ADMIN_TOKEN"))
+	if err != nil {
+		return Config{}, err
 	}
+	c.AdminToken = tok
 	if c.WebAddr != "" && c.WebAddr == c.Addr {
 		return Config{}, fmt.Errorf("AMB_WEB_ADDR %s must differ from AMB_ADDR; set another address or off", c.WebAddr)
 	}

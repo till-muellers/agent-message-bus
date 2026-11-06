@@ -39,7 +39,7 @@ Flags:
   --help          show this help
 
 Environment:
-  AMB_ADMIN_TOKEN  optional admin token override (at least 32 characters); default is the
+  AMB_ADMIN_TOKEN  optional admin token override (32..512 visible ASCII characters); default is the
                    generated <datadir>/admin-token file
   AMB_ADDR         API listen address (default 127.0.0.1:8080)
   AMB_WEB_ADDR     web GUI listen address (default 127.0.0.1:8081; empty or off disables

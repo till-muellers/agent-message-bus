@@ -1,12 +1,17 @@
 package admin
 
 import (
-	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/httpx"
+	"github.com/till-muellers/agent-message-bus/server/internal/tools"
 )
+
+// maxTokenBody bounds the token swap body; an admin token is at most 512 characters.
+const maxTokenBody = 4 << 10
 
 // TokenSetter swaps the admin credential.
 type TokenSetter interface {
@@ -15,6 +20,10 @@ type TokenSetter interface {
 
 type okBody struct {
 	OK bool `json:"ok"`
+}
+
+type tokenBody struct {
+	Token string `json:"token"`
 }
 
 // Mount registers POST /v1/admin/shutdown (any admin) and POST /v1/admin/admin-token (the
@@ -32,19 +41,29 @@ func shutdownHandler(shutdown func()) http.HandlerFunc {
 	}
 }
 
+// tokenHandler decodes the body like every other JSON body (tools.Decode) and swaps the token.
 func tokenHandler(ts TokenSetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var in struct {
-			Token string `json:"token"`
+		in, err := readTokenBody(w, r)
+		if err == nil {
+			err = ts.SetAdminToken(in.Token)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			httpx.WriteError(w, apperr.New(apperr.Invalid, "invalid JSON body: %v", err))
-			return
-		}
-		if err := ts.SetAdminToken(in.Token); err != nil {
+		if err != nil {
 			httpx.WriteError(w, err)
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, okBody{OK: true})
 	}
+}
+
+func readTokenBody(w http.ResponseWriter, r *http.Request) (tokenBody, error) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxTokenBody))
+	var tooBig *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooBig):
+		return tokenBody{}, apperr.New(apperr.Invalid, "request body exceeds 4 KiB")
+	case err != nil:
+		return tokenBody{}, apperr.New(apperr.Invalid, "reading request body: %v", err)
+	}
+	return tools.Decode[tokenBody](raw)
 }
