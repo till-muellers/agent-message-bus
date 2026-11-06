@@ -25,10 +25,10 @@ func (adminWho) Whoami(context.Context, auth.Principal) (spaces.WhoamiResult, er
 
 func (adminWho) List(context.Context, auth.Principal) ([]spaces.SpaceInfo, error) { return nil, nil }
 
-// TestUnregisteredToolIsNotFound: a GUI endpoint whose tool the registry lacks answers like
-// POST /v1/tools/<name> does, 404 not_found, not 500.
-func TestUnregisteredToolIsNotFound(t *testing.T) {
-	t.Parallel()
+// adminSession mounts the GUI over an empty registry and signs in with the admin token; it
+// returns the wrapped handler and the session cookie.
+func adminSession(t *testing.T) (http.Handler, *http.Cookie) {
+	t.Helper()
 	c := &clock{t: time.Now()}
 	mux := http.NewServeMux()
 	web.New(web.Deps{Auth: auth.NewService(dbtest.Open(t), adminToken, c.now), Spaces: adminWho{},
@@ -39,8 +39,16 @@ func TestUnregisteredToolIsNotFound(t *testing.T) {
 	if signIn.Code != http.StatusOK || len(cookies) == 0 {
 		t.Fatalf("sign-in: %d %s", signIn.Code, signIn.Body)
 	}
+	return h, cookies[0]
+}
+
+// TestUnregisteredToolIsNotFound: a GUI endpoint whose tool the registry lacks answers like
+// POST /v1/tools/<name> does, 404 not_found, not 500.
+func TestUnregisteredToolIsNotFound(t *testing.T) {
+	t.Parallel()
+	h, session := adminSession(t)
 	req := httptest.NewRequest(http.MethodGet, "/web/api/admins", nil)
-	req.AddCookie(cookies[0])
+	req.AddCookie(session)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	const want = `{"error":{"code":"not_found","message":"tool bus_list_admins not found"}}`

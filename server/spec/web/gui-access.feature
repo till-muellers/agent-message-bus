@@ -207,6 +207,20 @@ Feature: Web GUI access and sessions
       When the operator requests any of the mutating methods on a web GUI read route
       Then the response status is 405
 
+    Scenario Outline: An unknown API route (<method> <path>)
+      # GET (and HEAD) answer like every /web/api error; any other method gets the router's
+      # 405, before the session check (contracts.md §10).
+      Given the operator signed in with the instance admin token
+      When the operator requests <method> <path>
+      Then the response is <response>
+
+      Examples:
+        | method | path                 | response                                                  |
+        | GET    | /web/api/nope        | 404 with the JSON envelope not_found "route not found"    |
+        | GET    | /web/api/spaces/demo | 404 with the JSON envelope not_found "route not found"    |
+        | POST   | /web/api/nope        | 405 text/plain with "Allow: GET, HEAD"                    |
+        | DELETE | /web/api/nope        | 405 text/plain with "Allow: GET, HEAD"                    |
+
     Scenario: The web GUI never opens an inbox stream
       # The inbox stream authenticates with a bearer token, not with the
       # web GUI session, so the web GUI can never take the stream slot of an

@@ -64,7 +64,8 @@ func New(d Deps) *Web {
 
 // Mount registers the GUI routes on mux. Reads are GET-only; the mutating routes are the
 // session routes, the space mutations and the admin area; all but the session routes need
-// X-CSRF-Token. Other methods get the mux's 405. Wrap the mux with Headers.
+// X-CSRF-Token. Other methods get the mux's 405, also on an unknown /web/api path (GET and
+// HEAD there are 404 not_found). Wrap the mux with Headers.
 func (g *Web) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET /web/", g.assets.index)
 	mux.HandleFunc("GET /web/assets/", g.assets.file)
@@ -85,7 +86,14 @@ func (g *Web) Mount(mux *http.ServeMux) {
 	mux.Handle("GET /web/api/admins", g.api(g.listAdmins))
 	mux.Handle("POST /web/api/admins", g.mutation(g.mintAdmin))
 	mux.Handle("POST /web/api/admins/{name}/revoke", g.mutation(g.revokeAdmin))
-	mux.Handle("GET /web/api/", noStore(g.authn(http.NotFoundHandler())))
+	mux.Handle("GET /web/api/", g.api(routeNotFound))
+}
+
+// routeNotFound answers an unknown GET /web/api/<path> with the §0 envelope. Other methods on
+// an unknown path still get the mux's 405: a method-less catch-all conflicts with GET /web/,
+// and per-method ones would turn the 405 of known GET-only routes into 404.
+func routeNotFound(*http.Request, auth.Principal) (any, error) {
+	return nil, apperr.New(apperr.NotFound, "route not found")
 }
 
 // endpoint answers one JSON request for the signed-in principal p.
