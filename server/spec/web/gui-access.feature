@@ -85,6 +85,21 @@ Feature: Web GUI access and sessions
       When the server starts
       Then it exits with an error naming AMB_WEB_ADDR
 
+    Scenario Outline: A GUI address overlapping AMB_ADDR on the same port stops the start
+      # Both listeners bind exclusively (Windows: SO_EXCLUSIVEADDRUSE), so a wildcard and a
+      # loopback address on one port never both bind and shadow each other on loopback.
+      Given AMB_ADDR is "<api>" and AMB_WEB_ADDR is "<web>" on the same free port P
+      When the server starts
+      Then it exits with "listen AMB_WEB_ADDR <web>: …"
+      And nothing listens on P
+
+      Examples:
+        | api         | web         |
+        | :P          | 127.0.0.1:P |
+        | 0.0.0.0:P   | 127.0.0.1:P |
+        | 127.0.0.1:P | :P          |
+        | 127.0.0.1:P | 0.0.0.0:P   |
+
   Rule: Signing in exchanges an admin token for a session
 
     Scenario: The instance admin token starts a session as the bootstrap admin

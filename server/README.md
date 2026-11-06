@@ -31,7 +31,7 @@ One instance runs per data dir: the server holds the OS lock `<datadir>/agent-me
 |---|---|---|
 |`AMB_ADMIN_TOKEN`|— (optional, 32..512 visible ASCII chars, trimmed)|Admin token override. Without it the token is generated once into `<datadir>/admin-token` (0600) and persists across restarts.|
 |`AMB_ADDR`|`127.0.0.1:8080`|API listen address.|
-|`AMB_WEB_ADDR`|`127.0.0.1:8081`|Web GUI listen address (`host:port`; empty or `off` disables the GUI). It must differ from `AMB_ADDR`; the GUI is served only here and the API listener has no `/web` route.|
+|`AMB_WEB_ADDR`|`127.0.0.1:8081`|Web GUI listen address (`host:port`; empty or `off` disables the GUI). It must differ from `AMB_ADDR` and may not overlap it on the same port (wildcard next to loopback; refused on Windows and Linux); the GUI is served only here and the API listener has no `/web` route.|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its directory is created if missing. `<datadir>`: Windows `%LOCALAPPDATA%\agent-message-bus`; macOS `~/Library/Application Support/agent-message-bus`; others `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`.|
 
 **Upgrade.** Stop a running instance with the binary that started it before you run any command of a newer one: the commands find instances by their data dir lock, which older binaries don't take, so a newer binary treats the older instance's state file as stale and removes it. Pre-release databases are not upgraded: stop the server and delete `agent-message-bus.db`, `-wal` and `-shm` before starting this version.

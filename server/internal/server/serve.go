@@ -29,7 +29,7 @@ func Serve(ctx context.Context, cfg config.Config, conn *sql.DB, adminToken stri
 	if err != nil {
 		return err
 	}
-	apiLn, webLn, err := listen(cfg.Addr, cfg.WebAddr)
+	apiLn, webLn, err := listen(ctx, cfg.Addr, cfg.WebAddr)
 	if err != nil {
 		return err
 	}
