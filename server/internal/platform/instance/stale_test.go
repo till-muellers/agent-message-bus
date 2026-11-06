@@ -4,29 +4,31 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 var errSpawned = errors.New("spawned")
 
-// staleOps runs one CLI command against a data dir whose instance is gone; spawn stops start
-// right after it launched the server.
-var staleOps = map[string]func(m Manager) error{
-	"status": func(m Manager) error { return m.Status(context.Background(), false) },
-	"start": func(m Manager) error {
-		m.Spawn = func(string) (int, error) { return 0, errSpawned }
-		if err := m.Start(context.Background()); !errors.Is(err, errSpawned) {
-			return err
-		}
-		return nil
-	},
-	"stop": func(m Manager) error { return m.Stop(context.Background()) },
+// staleOp is one CLI command run against a data dir whose instance is gone, with its output.
+type staleOp struct {
+	name, want string
+	run        func(m Manager) error
 }
 
-var staleOutput = map[string]string{
-	"status": "not running\n",
-	"start":  "",
-	"stop":   "agent-message-bus is not running\n",
+// staleOps returns status, start (stopped right after it launched the server) and stop.
+func staleOps() []staleOp {
+	return []staleOp{
+		{name: "status", want: "not running\n", run: func(m Manager) error { return m.Status(context.Background(), false) }},
+		{name: "start", run: func(m Manager) error {
+			m.Spawn = func(string) (int, error) { return 0, errSpawned }
+			if err := m.Start(context.Background()); !errors.Is(err, errSpawned) {
+				return err
+			}
+			return nil
+		}},
+		{name: "stop", want: "agent-message-bus is not running\n", run: func(m Manager) error { return m.Stop(context.Background()) }},
+	}
 }
 
 // TestUnparseableStateIsStale: an empty or truncated state file of a gone instance blocks
@@ -34,15 +36,15 @@ var staleOutput = map[string]string{
 func TestUnparseableStateIsStale(t *testing.T) {
 	t.Parallel()
 	for _, content := range []string{"", "{x"} {
-		for op, run := range staleOps {
-			t.Run(op+" "+content, func(t *testing.T) {
+		for _, op := range staleOps() {
+			t.Run(op.name+" "+content, func(t *testing.T) {
 				t.Parallel()
 				m, out := newManager(t, testToken)
 				if err := os.WriteFile(statePath(m.dir()), []byte(content), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				if err := run(m); err != nil {
-					t.Fatalf("%s: %v", op, err)
+				if err := op.run(m); err != nil {
+					t.Fatalf("%s: %v", op.name, err)
 				}
 				expectStaleHandled(t, m, out.String(), op)
 			})
@@ -55,16 +57,16 @@ func TestUnparseableStateIsStale(t *testing.T) {
 // killed as this data dir's.
 func TestForeignInstanceOnStateURL(t *testing.T) {
 	t.Parallel()
-	for op, run := range staleOps {
-		t.Run(op, func(t *testing.T) {
+	for _, op := range staleOps() {
+		t.Run(op.name, func(t *testing.T) {
 			t.Parallel()
 			m, out := newManager(t, testToken)
 			foreign := newFakeBus(t, t.TempDir(), true)
 			if err := writeState(m.dir(), State{PID: 42, URL: foreign.srv.URL, StartedAt: "2026-01-01T00:00:00Z"}); err != nil {
 				t.Fatal(err)
 			}
-			if err := run(m); err != nil {
-				t.Fatalf("%s: %v", op, err)
+			if err := op.run(m); err != nil {
+				t.Fatalf("%s: %v", op.name, err)
 			}
 			expectStaleHandled(t, m, out.String(), op)
 			if calls := foreign.recorded(); len(calls) != 0 {
@@ -74,12 +76,34 @@ func TestForeignInstanceOnStateURL(t *testing.T) {
 	}
 }
 
-func expectStaleHandled(t *testing.T, m Manager, out, op string) {
+// TestMissingDataDir: status and stop on a data dir that doesn't exist report no instance and
+// create nothing.
+func TestMissingDataDir(t *testing.T) {
+	t.Parallel()
+	for _, op := range staleOps() {
+		if op.name == "start" {
+			continue
+		}
+		t.Run(op.name, func(t *testing.T) {
+			t.Parallel()
+			m, out := newManager(t, testToken)
+			m.Config.DBPath = filepath.Join(m.dir(), "missing", "bus.db")
+			if err := op.run(m); err != nil || out.String() != op.want {
+				t.Fatalf("%s: %v, printed %q", op.name, err, out)
+			}
+			if _, err := os.Stat(m.dir()); !os.IsNotExist(err) {
+				t.Fatalf("%s created the data dir: %v", op.name, err)
+			}
+		})
+	}
+}
+
+func expectStaleHandled(t *testing.T, m Manager, out string, op staleOp) {
 	t.Helper()
-	if out != staleOutput[op] {
-		t.Fatalf("%s printed %q, want %q", op, out, staleOutput[op])
+	if out != op.want {
+		t.Fatalf("%s printed %q, want %q", op.name, out, op.want)
 	}
 	if _, err := os.Stat(statePath(m.dir())); !os.IsNotExist(err) {
-		t.Fatalf("stale state file remains after %s: %v", op, err)
+		t.Fatalf("stale state file remains after %s: %v", op.name, err)
 	}
 }

@@ -51,32 +51,42 @@ func claim(ctx context.Context, client *http.Client, dir string, patience time.D
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("creating data dir %s: %w", dir, err)
 	}
-	f, err := lockExclusive(ctx, lockPath(dir), patience)
+	f, err := lockExclusive(ctx, lockPath(dir), patience, pauseClaim)
 	if errors.Is(err, errLocked) {
 		return nil, claimedBy(ctx, client, dir)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("locking data dir: %w", err)
 	}
+	if err := removeState(dir); err != nil { // left by a crashed instance
+		return nil, errors.Join(err, f.Close())
+	}
 	return &Lock{dir: dir, id: rand.Text(), file: f}, nil
 }
 
-// lockExclusive retries while CLI probes briefly share the lock, up to patience.
-func lockExclusive(ctx context.Context, path string, patience time.Duration) (*os.File, error) {
+func pauseClaim() { time.Sleep(claimRetry) }
+
+// lockExclusive retries, calling pause in between, while CLI probes briefly share the lock,
+// up to patience.
+func lockExclusive(ctx context.Context, path string, patience time.Duration, pause func()) (*os.File, error) {
 	deadline := time.Now().Add(patience)
 	for {
 		f, err := lockFile(path, exclusive)
 		if !errors.Is(err, errLocked) || !time.Now().Before(deadline) || ctx.Err() != nil {
 			return f, err
 		}
-		time.Sleep(claimRetry)
+		pause()
 	}
 }
 
+// claimedBy describes the instance that holds dir's lock for a claim that failed.
 func claimedBy(ctx context.Context, client *http.Client, dir string) error {
 	inst, err := Find(ctx, client, dir)
 	if err != nil {
 		return err
+	}
+	if !inst.Running { // the holder let go just after the claim gave up
+		return fmt.Errorf("data dir lock %s was busy; retry", lockPath(dir))
 	}
 	return errors.New(alreadyRunning(inst))
 }

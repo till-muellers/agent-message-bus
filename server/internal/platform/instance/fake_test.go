@@ -20,14 +20,16 @@ const testToken = "test-admin-token-0123456789-0123456789"
 // fakeBus imitates a serving instance: it answers /healthz with its instance id and, once it
 // holds dir's lock, counts as that data dir's running instance.
 type fakeBus struct {
-	srv     *httptest.Server
-	healthy atomic.Bool
-	obey    bool // whether shutdown actually stops it
-	dir     string
-	mu      sync.Mutex
-	calls   []string // "path auth body"
-	lock    *Lock
-	id      string
+	srv      *httptest.Server
+	healthy  atomic.Bool
+	failures atomic.Int32 // /healthz probes to fail before answering
+	obey     bool         // whether shutdown actually stops it
+	takeover bool         // on an ignored shutdown, another instance's state replaces its own
+	dir      string
+	mu       sync.Mutex
+	calls    []string // "path auth body"
+	lock     *Lock
+	id       string
 }
 
 func newFakeBus(t *testing.T, dir string, obey bool) *fakeBus {
@@ -51,7 +53,7 @@ func newRunningBus(t *testing.T, dir string, obey bool, pid int) *fakeBus {
 
 func (f *fakeBus) handle(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/healthz" {
-		if !f.healthy.Load() {
+		if !f.healthy.Load() || f.failures.Add(-1) >= 0 {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -65,10 +67,19 @@ func (f *fakeBus) handle(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	f.calls = append(f.calls, r.URL.Path+" "+r.Header.Get("Authorization")+" "+string(b))
 	f.mu.Unlock()
-	if r.URL.Path == "/v1/admin/shutdown" && f.obey {
-		f.exit()
+	if r.URL.Path == "/v1/admin/shutdown" {
+		f.shutDown()
 	}
 	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+func (f *fakeBus) shutDown() {
+	switch {
+	case f.obey:
+		f.exit()
+	case f.takeover:
+		_ = writeState(f.dir, State{PID: 8, URL: f.srv.URL, InstanceID: "successor"})
+	}
 }
 
 // adopt makes l the fake's lock: it serves l's instance id.

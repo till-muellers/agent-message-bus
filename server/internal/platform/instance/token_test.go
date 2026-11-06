@@ -24,26 +24,25 @@ func TestRotateToken(t *testing.T) {
 	tests := []struct {
 		name    string
 		env     string
-		running bool
+		kind    instanceKind
 		wantErr string
 	}{
 		{name: "env override", env: testToken, wantErr: "AMB_ADMIN_TOKEN is set in the environment; rotate it there"},
 		{name: "not running"},
-		{name: "running", running: true},
+		{name: "running", kind: serving},
+		{name: "running, pending", kind: pending, wantErr: "agent-message-bus is running (state pending) but did not answer"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			m, out := newManager(t, tc.env)
-			f := newFakeBus(t, m.dir(), true)
-			if tc.running {
-				f = newRunningBus(t, m.dir(), true, 1)
-			}
+			f := setUp(t, m, tc.kind, true)
 			old, _ := m.Config.ResolveAdminToken()
 			err := m.RotateToken(context.Background())
 			if tc.wantErr != "" {
-				if err == nil || err.Error() != tc.wantErr {
-					t.Fatalf("err = %v", err)
+				if b, _ := os.ReadFile(m.Config.TokenPath()); err == nil || !strings.Contains(err.Error(), tc.wantErr) ||
+					(tc.env == "" && string(b) != old+"\n") {
+					t.Fatalf("err = %v, token file %q", err, b)
 				}
 				return
 			}
@@ -56,7 +55,7 @@ func TestRotateToken(t *testing.T) {
 				t.Fatalf("new %q old %q file %q", next, old, b)
 			}
 			want := []string{}
-			if tc.running {
+			if tc.kind == serving {
 				want = []string{`/v1/admin/admin-token Bearer ` + old + ` {"token":"` + next + `"}`}
 			}
 			if got := f.recorded(); strings.Join(got, "|") != strings.Join(want, "|") {

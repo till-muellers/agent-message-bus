@@ -34,7 +34,7 @@ func TestClaimIsExclusive(t *testing.T) {
 }
 
 // TestClaimWaitsForProbe: a CLI probing the lock holds it for a moment; a claim retries until
-// the probe is done instead of failing.
+// the probe is done instead of failing, and without patience it says the lock was busy.
 func TestClaimWaitsForProbe(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -42,22 +42,35 @@ func TestClaimWaitsForProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := claim(context.Background(), http.DefaultClient, dir, 0); err == nil {
-		t.Fatal("claim succeeded while a probe held the lock")
+	_, err = claim(context.Background(), http.DefaultClient, dir, 0)
+	if err == nil || err.Error() != "data dir lock "+lockPath(dir)+" was busy; retry" {
+		t.Fatalf("claim during a probe without patience: %v", err)
 	}
-	claimed := make(chan error, 1)
-	go func() {
-		l, err := claim(context.Background(), http.DefaultClient, dir, 10*time.Second)
-		if err == nil {
-			err = l.Release()
+	pauses := 0
+	f, err := lockExclusive(context.Background(), lockPath(dir), time.Hour, func() {
+		pauses++
+		if pauses == 1 {
+			_ = probe.Close() // the probe is done
 		}
-		claimed <- err
-	}()
-	if err := probe.Close(); err != nil {
+	})
+	if err != nil || pauses != 1 {
+		t.Fatalf("lock after the probe: %v after %d pauses", err, pauses)
+	}
+	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-claimed; err != nil {
-		t.Fatalf("claim after the probe: %v", err)
+}
+
+// TestClaimRemovesLeftoverState: a state file found by the claim is a crashed instance's.
+func TestClaimRemovesLeftoverState(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := writeState(dir, State{PID: 42, URL: "http://127.0.0.1:1", InstanceID: "crashed"}); err != nil {
+		t.Fatal(err)
+	}
+	mustClaim(t, dir)
+	if _, found, err := readState(dir); found || err != nil {
+		t.Fatalf("leftover state found = %v, %v", found, err)
 	}
 }
 

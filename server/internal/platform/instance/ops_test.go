@@ -62,21 +62,27 @@ func TestStart(t *testing.T) {
 	tests := []struct {
 		name          string
 		kind          instanceKind
-		spawnedPID    int // pid the spawned server publishes; 0: none becomes healthy
+		failures      int32 // /healthz probes the running instance fails first
+		spawnedPID    int   // pid the spawned server publishes; 0: none becomes healthy
 		wantErr, want string
 	}{
 		{name: "already running", kind: serving, want: "agent-message-bus already running (pid 7) at http://"},
-		{name: "already running, pending", kind: pending, want: "agent-message-bus already running (state pending)\n"},
+		{name: "running, confirmed while start waits", kind: serving, failures: 3,
+			want: "agent-message-bus already running (pid 7) at http://"},
+		{name: "running, pending for the whole timeout", kind: pending, wantErr: "is running (state pending)"},
 		{name: "started", spawnedPID: 9, want: "agent-message-bus started (pid 9) at http://"},
 		{name: "another start won the race", spawnedPID: 5, want: "agent-message-bus already running (pid 5) at http://"},
-		{name: "timeout", wantErr: "did not become healthy"},
+		{name: "timeout", wantErr: "did not become healthy within 500ms; log tail"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			m, out := newManager(t, "")
 			f := setUp(t, m, tc.kind, true)
+			f.failures.Store(tc.failures)
+			spawned := false
 			m.Spawn = func(logPath string) (int, error) {
+				spawned = true
 				_ = os.WriteFile(logPath, []byte("boom line\n"), 0o600)
 				if tc.spawnedPID != 0 {
 					f.adopt(mustClaim(t, m.dir()))
@@ -85,16 +91,13 @@ func TestStart(t *testing.T) {
 				return 9, nil
 			}
 			err := m.Start(context.Background())
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), "boom line") {
-					t.Fatalf("err = %v", err)
-				}
-				return
+			if spawned != (tc.kind == none) {
+				t.Fatalf("spawned = %v with a running instance = %v", spawned, tc.kind != none)
 			}
-			if err != nil {
-				t.Fatal(err)
+			expectResult(t, err, tc.wantErr, out.String(), tc.want)
+			if spawned && err != nil && !strings.Contains(err.Error(), "boom line") {
+				t.Fatalf("failed start without the log tail: %v", err)
 			}
-			wantOut(t, out, tc.want)
 		})
 	}
 }
@@ -102,43 +105,66 @@ func TestStart(t *testing.T) {
 func TestStop(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name           string
-		kind           instanceKind
-		obey, wantKill bool
-		want, wantErr  string
+		name                     string
+		kind                     instanceKind
+		obey, takeover, wantKill bool
+		want, wantErr            string
 	}{
 		{name: "not running", want: "agent-message-bus is not running\n"},
 		{name: "graceful", kind: serving, obey: true, want: "agent-message-bus stopped (pid 7)\n"},
 		{name: "kill fallback", kind: serving, wantKill: true, want: "agent-message-bus stopped (pid 7)\n"},
-		{name: "pending is no target", kind: pending, wantErr: "agent-message-bus is running (state pending) but did not answer within 500ms"},
+		{name: "pending is no target", kind: pending,
+			wantErr: "agent-message-bus is running (state pending) but did not answer within 500ms; retry, or end the process that holds "},
+		{name: "another instance took over: nothing is killed", kind: serving, takeover: true,
+			wantErr: "but the state file no longer names pid 7; nothing was killed"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			m, out := newManager(t, testToken)
 			f := setUp(t, m, tc.kind, tc.obey)
+			f.takeover = tc.takeover
 			killed := 0
 			m.Kill = func(pid int) error { killed = pid; f.crash(); return nil }
-			err := m.Stop(context.Background())
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) || len(f.recorded()) != 0 {
-					t.Fatalf("err = %v, calls %q", err, f.recorded())
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			wantOut(t, out, tc.want)
+			expectResult(t, m.Stop(context.Background()), tc.wantErr, out.String(), tc.want)
 			if (killed == 7) != tc.wantKill {
 				t.Fatalf("killed = %d", killed)
 			}
-			if _, err := os.Stat(statePath(m.dir())); !os.IsNotExist(err) {
+			expectShutdownCalls(t, f, tc.kind == serving)
+			if _, err := os.Stat(statePath(m.dir())); tc.wantErr == "" && !os.IsNotExist(err) {
 				t.Fatalf("state file remains: %v", err)
 			}
-			if tc.kind == serving && f.recorded()[0] != "/v1/admin/shutdown Bearer "+testToken+" " {
-				t.Fatalf("calls %q", f.recorded())
-			}
 		})
+	}
+}
+
+// expectResult checks an operation's error, or else its output.
+func expectResult(t *testing.T, err error, wantErr, out, want string) {
+	t.Helper()
+	if wantErr != "" {
+		if err == nil || !strings.Contains(err.Error(), wantErr) {
+			t.Fatalf("err = %v, want %q", err, wantErr)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, want) {
+		t.Fatalf("output %q, want %q", out, want)
+	}
+}
+
+func expectShutdownCalls(t *testing.T, f *fakeBus, want bool) {
+	t.Helper()
+	calls := f.recorded()
+	if !want {
+		if len(calls) != 0 {
+			t.Fatalf("calls %q, want none", calls)
+		}
+		return
+	}
+	if len(calls) != 1 || calls[0] != "/v1/admin/shutdown Bearer "+testToken+" " {
+		t.Fatalf("calls %q, want one shutdown", calls)
 	}
 }

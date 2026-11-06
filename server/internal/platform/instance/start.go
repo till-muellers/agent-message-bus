@@ -10,9 +10,9 @@ import (
 const logTailLines = 20
 
 // Start launches a detached instance unless one runs and waits until an instance serves the
-// data dir.
+// data dir. A running instance not yet confirmed at its url is waited for, not reported.
 func (m Manager) Start(ctx context.Context) error {
-	inst, err := Find(ctx, m.Client, m.dir())
+	inst, err := m.settled(ctx)
 	if err != nil {
 		return err
 	}

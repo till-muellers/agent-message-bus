@@ -50,11 +50,17 @@ Feature: Local instance management
       And one start prints "agent-message-bus started (pid <pid>) at <url>; log: <datadir>/agent-message-bus.log"
       And the other prints "agent-message-bus already running (pid <pid>) at <url>"
 
-    Scenario: A server that has not published its state yet counts as running
+    Scenario: start waits for a server that has not published its state yet
       Given a server holds the data dir lock but has not written the state file yet
       When I run "agent-message-bus start"
       Then no new process is started
-      And the output is "agent-message-bus already running (state pending)"
+      And once the server answers at its url the output is "agent-message-bus already running (pid <pid>) at <url>"
+      And if it stays unconfirmed for 10 s, start fails with "agent-message-bus is running (state pending) but did not answer within 10s; retry, or end the process that holds <datadir>/agent-message-bus.lock"
+
+    Scenario: A second server fails while the first has not published its state yet
+      Given a server holds the data dir lock but has not written the state file yet
+      When I run "agent-message-bus" without a command
+      Then it fails with "agent-message-bus already running (state pending)"
 
     Scenario Outline: A state file without a lock holder is stale
       Given no instance holds the data dir lock
@@ -114,9 +120,16 @@ Feature: Local instance management
     Scenario: stop kills the process if graceful shutdown fails
       Given an instance is running that doesn't exit after POST /v1/admin/shutdown
       When I run "agent-message-bus stop"
-      Then the process is killed once it still holds the data dir lock after 10 s
+      Then the process is killed once it still holds the data dir lock after 10 s and the state file still names it
       And stop waits until the lock is released
       And the state file is gone
+
+    Scenario: stop kills nothing once another instance took the data dir over
+      Given an instance is running with pid 42 at "http://127.0.0.1:8080"
+      And after POST /v1/admin/shutdown the data dir lock stays held, but the state file names another instance
+      When I run "agent-message-bus stop"
+      Then no process is killed
+      And it fails with "<datadir>/agent-message-bus.lock is still held after 10s, but the state file no longer names pid 42; nothing was killed"
 
     Scenario: stop never acts on an instance it cannot confirm
       Given a server holds the data dir lock
@@ -193,6 +206,12 @@ Feature: Local instance management
       Given AMB_ADMIN_TOKEN is "env-token-0123456789-0123456789-abcdef"
       When I run "agent-message-bus rotate-token"
       Then it fails with "AMB_ADMIN_TOKEN is set in the environment; rotate it there"
+
+    Scenario: rotate-token leaves the token alone while the instance is not confirmed
+      Given a server holds the data dir lock but its state file is not confirmed at its url for 10 s
+      When I run "agent-message-bus rotate-token"
+      Then it fails with "agent-message-bus is running (state pending) but did not answer within 10s; retry, or end the process that holds <datadir>/agent-message-bus.lock"
+      And <datadir>/admin-token is unchanged
 
   Rule: a brief external write lock on the database delays calls, it does not fail them
 
