@@ -284,13 +284,19 @@ Feature: Transports
       Given the bus listens on a loopback address
       When a client connected to that address sends POST /mcp with the Host header "<host>" and a leader token
       Then the response status is 200
-      And the MCP calls of that client succeed as with any other Host
 
       Examples:
         | host              |
         | bus.example.com   |
         | example.com:8443  |
         | localhost:8080    |
+
+    Scenario: An MCP client works through a proxy that forwards the public Host
+      Given the bus listens on a loopback address
+      And leader "lead" connected to /mcp with its token through a proxy forwarding the Host header "bus.example.com"
+      When leader "lead" calls MCP tool "whoami" without arguments
+      Then the result is not an error
+      And the text content is the result JSON, containing "\"kind\":\"leader\""
 
     Scenario: A foreign Host does not replace the bearer token
       Given the bus listens on a loopback address

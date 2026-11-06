@@ -22,8 +22,10 @@ func TestForeignHostOnLoopbackBind(t *testing.T) {
 		{"public host", "Bearer " + tok, "bus.example.com", 200, `"result"`},
 		{"public host with port", "Bearer " + tok, "example.com:8443", 200, `"result"`},
 		{"localhost", "Bearer " + tok, "localhost:8080", 200, `"result"`},
-		{"public host without token", "", "bus.example.com", 401, `"code":"unauthenticated"`},
-		{"public host with bad token", "Bearer amb_nope", "bus.example.com", 401, `"message":"invalid token"`},
+		{"public host without token", "", "bus.example.com", 401,
+			`{"error":{"code":"unauthenticated","message":"bearer token required"}}`},
+		{"public host with bad token", "Bearer amb_nope", "bus.example.com", 401,
+			`{"error":{"code":"unauthenticated","message":"invalid token"}}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
