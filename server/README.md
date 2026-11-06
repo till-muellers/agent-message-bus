@@ -83,8 +83,8 @@ Every tool's arguments, result shape, example call and error codes are listed in
 |`POST /web/session`|bearer (any kind)|Sign in: 200 `{"kind","name","space"?,"csrf"}` and cookie `amb_session` (`Path=/web`, HttpOnly, SameSite=Strict, `Max-Age=28800`, Secure over TLS). Bad token: 401, no cookie. More than 5 failed sign-ins per IP and minute: 429 `rate_limited`.|
 |`GET /web/session`|session cookie|The signed-in session again (same `csrf`); 401 `session required` without one.|
 |`DELETE /web/session`|session cookie|Sign out: 200 `{"ok":true}`, cookie cleared.|
-|`GET /web/api/state`|session cookie|`{"you": <bus_whoami>, "spaces": [<bus_list_spaces row> + "invites"?], "inbox": {"waiting"}}`; `invites` (open-invite count) only for spaces where the session has leader rights (leader of the space, or admin).|
-|`GET /web/api/state?space=demo`|session cookie|`{"you": <bus_whoami>, "overview": <bus_space_overview>, "invites"?: [{"id","name","invitedBy","expiresAt"}], "inbox": {"waiting"}}`; `invites` (soonest expiry first) only for leader-rights sessions. No message bodies, never an invite code. Unknown space 404, leader outside the space 403.|
+|`GET /web/api/state`|session cookie|`{"you": <bus_whoami>, "spaces": [<bus_list_spaces row> + "invites"?], "inbox": {"waiting"}, "maxInboxLimit"}`; every row carries `mayManage` (leader rights in that space); `invites` (open-invite count) only for spaces where the session has leader rights (leader of the space, or admin).|
+|`GET /web/api/state?space=demo`|session cookie|`{"you": <bus_whoami>, "overview": <bus_space_overview>, "mayManage", "invites"?: [{"id","name","invitedBy","expiresAt"}], "inbox": {"waiting"}}`; `invites` (soonest expiry first) only for leader-rights sessions. No message bodies, never an invite code. Unknown space 404, leader outside the space 403.|
 |`GET /web/api/spaces/{space}/blackboards/{board}/threads`|session cookie|The `bus_list_threads` result.|
 |`GET /web/api/spaces/{space}/threads/{id}`|session cookie|The `bus_read_thread` result; a thread of another space is 404.|
 |`GET /web/api/inbox?after=&limit=`|session cookie|The signed-in agent's own entries, like `bus_inbox_read` (`limit` 1..500, default 100), but it never acknowledges, never marks mail noticed and never takes the inbox stream slot.|
@@ -139,8 +139,11 @@ Layout:
 |`internal/tools/`|The handler layer: one registry of `bus_*` tools that both transports serve.|
 |`internal/rpc/`, `internal/mcpserver/`|Thin transports over the registry.|
 |`internal/admin/`|Loopback-only admin endpoints (`/v1/admin/shutdown`, `/v1/admin/admin-token`) behind the admin-token guard.|
+|`internal/overview/`|Read composition for `bus_space_overview` and the web state; owns no table, reads through the spaces, messaging, blackboards, invites and inbox services.|
+|`internal/web/`|The web GUI listener: sessions, CSRF, `/web/api` routes and the embedded `dist/` bundle.|
+|`internal/guide/`|The embedded agent guide `guide.md`.|
 |`internal/{auth,inbox,spaces,invites,messaging,blackboards}/`|Features. `service.go` holds the logic and `repository.go` holds all SQL. Each feature writes only its own tables; cross-feature effects go through hooks and service methods.|
 |`internal/domain/`|Business rules shared by features (name pattern, body and title limits).|
-|`internal/platform/`|Shared infrastructure: `db` (`DBTX`, `InTx`, `InsertID`, `QueryIDs`, `Timestamp`, migrations), `broker`, `httpx`, `httpserver`, `config`, `apperr`, `instance`, plus the test helpers `dbtest` and `apperrtest`.|
+|`internal/platform/`|Shared infrastructure: `db` (`DBTX`, `InTx`, `InsertID`, `QueryIDs`, `Timestamp`, migrations), `broker`, `httpx`, `httpserver`, `config`, `apperr`, `instance`, `detach` (launches the server as a background process), plus the test helpers `dbtest` and `apperrtest`.|
 |`internal/platform/instance/`|Local instance management: state file, start/stop/status, admin token file and rotation.|
 |`migrations/`|Numbered SQL files; never edit an applied one. `0001_schema.up.sql` is the irreversible baseline (no `.down.sql`); every later migration has a `.down.sql`.|

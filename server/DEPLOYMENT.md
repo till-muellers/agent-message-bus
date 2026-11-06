@@ -5,7 +5,7 @@
 |Part|Where|Purpose|
 |---|---|---|
 |Server binary|`agent-message-bus[.exe]` (GitHub releases or `scripts/build.py`)|Hosts spaces, messages, blackboards and inboxes in one SQLite file. Serves MCP at `/mcp`, RPC at `/v1/tools`, SSE at `/v1/inbox/stream` and `/healthz`.|
-|omp extension|`extension/` (installed as an omp plugin)|Adds `/bus login\|promote\|status\|logout\|server\|help`, registers the `bus_*` tools in omp and streams the inbox into the session. `/bus server start` can fetch and run the server for you.|
+|omp extension|`extension/` (installed as an omp plugin)|Adds `/bus login\|promote\|accept\|spawn\|status\|logout\|server\|help`, registers the `bus_*` tools in omp and streams the inbox into the session. `/bus server start` can fetch and run the server for you.|
 |Agent guide|`server/internal/guide/guide.md`, embedded in the binary|Tells agents how to use the bus (leader and member workflows). Served as `GET /v1/guide` and as the MCP `instructions`; the omp extension puts it into every model request.|
 |Other MCP clients|any streamable-HTTP MCP client|Use the `bus_*` tools without omp (no inbox push).|
 
@@ -14,19 +14,19 @@
 **Download** the binary for your OS/arch from the [GitHub release](https://github.com/till-muellers/agent-message-bus/releases) tagged `v<version>`: `agent-message-bus_<version>_<os>_<arch>[.exe]`, plus `SHA256SUMS`. Verify it:
 
 ```powershell
-(Get-FileHash .\agent-message-bus_1.0.0_windows_amd64.exe -Algorithm SHA256).Hash.ToLower()
-Select-String agent-message-bus_1.0.0_windows_amd64.exe SHA256SUMS   # hashes must match
+(Get-FileHash .\agent-message-bus_X.Y.Z_windows_amd64.exe -Algorithm SHA256).Hash.ToLower()
+Select-String agent-message-bus_X.Y.Z_windows_amd64.exe SHA256SUMS   # hashes must match
 ```
 
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing
-chmod +x agent-message-bus_1.0.0_linux_amd64
+chmod +x agent-message-bus_X.Y.Z_linux_amd64
 ```
 
 **Or build locally** (needs Go 1.27) from the repo root:
 
 ```sh
-python scripts/build.py --version 1.0.0 --out dist   # all OS × amd64/arm64 + dist/SHA256SUMS
+python scripts/build.py --version X.Y.Z --out dist   # all OS × amd64/arm64 + dist/SHA256SUMS
 ```
 
 Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` (the examples below assume that).
@@ -46,7 +46,7 @@ Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` 
 - macOS: `~/Library/Application Support/agent-message-bus`
 - Linux/others: `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`
 
-The admin token can only mint leaders and call the admin endpoints. Keep it (and `<datadir>/admin-token`) secret.
+The admin token mints leaders, mints and revokes admins, calls the admin endpoints, leads every space without joining it and may delete any space. Keep it (and `<datadir>/admin-token`) secret.
 
 The web GUI gets its own address so you decide its exposure separately from the API: the default keeps it on loopback, `0.0.0.0:8081` (or any other host) exposes it, `off` turns it off. Sign in there with any token (the admin token for the admin view); the browser keeps only an opaque session cookie, never the token.
 
@@ -162,7 +162,7 @@ docker run -d --name amb -p 8080:8080 -p 127.0.0.1:8081:8081 -e AMB_WEB_ADDR=:80
 
 ## 7. Connect agents
 
-**omp.** Install the plugin (the extension); update it later with `omp plugin upgrade`:
+**omp.** Install the plugin (the extension); update it later with `omp plugin upgrade @till-muellers/omp-agent-message-bus`:
 
 ```sh
 omp plugin install github:till-muellers/agent-message-bus

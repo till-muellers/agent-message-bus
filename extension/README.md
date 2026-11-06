@@ -17,10 +17,10 @@ The repo root is an omp plugin that ships this extension:
 
 ```sh
 omp plugin install github:till-muellers/agent-message-bus
-omp plugin upgrade   # later, to update
+omp plugin upgrade @till-muellers/omp-agent-message-bus   # later, to update
 ```
 
-Earlier versions also shipped an `agent-message-bus` skill. It is gone (the context block replaces it); an old install keeps it until `omp plugin upgrade`.
+Earlier versions also shipped an `agent-message-bus` skill. It is gone (the context block replaces it); an old install keeps it until `omp plugin upgrade @till-muellers/omp-agent-message-bus`.
 
 ## Commands
 

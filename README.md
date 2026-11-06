@@ -37,7 +37,7 @@ flowchart LR
 Download `agent-message-bus_<version>_<os>_<arch>[.exe]` and `SHA256SUMS` from the [latest release](https://github.com/till-muellers/agent-message-bus/releases/latest), verify the checksum and put the binary on your `PATH` as `agent-message-bus[.exe]`. Or build it yourself (Go 1.27):
 
 ```sh
-python scripts/build.py --version 0.1.0 --out dist   # all OS × amd64/arm64 + dist/SHA256SUMS
+python scripts/build.py --version X.Y.Z --out dist   # all OS × amd64/arm64 + dist/SHA256SUMS
 ```
 
 Then:
@@ -50,7 +50,7 @@ agent-message-bus admin-token   # prints the admin token
 ## omp
 
 ```sh
-omp plugin install github:till-muellers/agent-message-bus   # update with: omp plugin upgrade
+omp plugin install github:till-muellers/agent-message-bus   # update with: omp plugin upgrade @till-muellers/omp-agent-message-bus
 ```
 
 In an omp session, either let the extension run a local server (it uses `AGENT_BUS_BIN`, then `PATH`, else downloads and verifies the latest release) or log in to an existing one:
@@ -60,7 +60,7 @@ In an omp session, either let the extension run a local server (it uses `AGENT_B
 /bus promote lead                       # this session acts as leader "lead"
 ```
 
-Then ask the agent to create a space and start workers. `bus_spawn_worker` (or `/bus spawn <space> <name> [task]`) invites a member and opens it as a new omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window); the worker joins the space by itself and gets the task as its first prompt, which travels with the invite on the server. To start a worker by hand, `bus_invite_member {space, name, task?}` returns a single-use invite code (valid for 10 minutes) that the worker session redeems with `/bus accept <url> <code>` or `omp --bus-url <url> --bus-accept <code>`; the optional `task` comes back with the accept and becomes the worker's first prompt. `bus_revoke_member` removes the member and cancels its pending invite codes; it is idempotent and returns `{deleted}`, which says whether anything was removed (revoking a leader fails with `conflict`). A member token can still be passed directly with `AGENT_BUS_URL=<url> AGENT_BUS_TOKEN=<member token> omp`.
+Then ask the agent to create a space and start workers. `bus_spawn_worker` (or `/bus spawn <space> <name> [task]`) invites a member and opens it as a new omp session in a new terminal tab (Orca, tmux, zellij, WezTerm, kitty, Windows Terminal; else a new window); the worker joins the space by itself and gets the task as its first prompt, which travels with the invite on the server. To start a worker by hand, `bus_invite_member {space, name, task?}` returns a single-use invite code (valid for 10 minutes) that the worker session redeems with `/bus accept <url> <code>` or `omp --bus-url <url> --bus-accept <code>`; the optional `task` arrives as the member's first inbox entry, a `direct_message` from the inviter, and becomes the worker's first prompt. `bus_revoke_member` removes the member and cancels its pending invite codes; it is idempotent and returns `{deleted}`, which says whether anything was removed (revoking a leader fails with `conflict`). A member token can still be passed directly with `AGENT_BUS_URL=<url> AGENT_BUS_TOKEN=<member token> omp`.
 
 ## Other MCP clients
 
@@ -78,7 +78,7 @@ Any streamable-HTTP MCP client can use the tools (no inbox push; poll `bus_inbox
 }
 ```
 
-For a member token, redeem an invite code from `bus_invite_member`: `curl -X POST <url>/v1/invites/accept -H "Authorization: Bearer <code>"` answers `{"name", "space", "token", "task"?}` (`task` only when the invite carries a first prompt).
+For a member token, redeem an invite code from `bus_invite_member`: `curl -X POST <url>/v1/invites/accept -H "Authorization: Bearer <code>"` answers `{"name", "space", "token"}`; an invite's `task` arrives as the member's first inbox entry, a `direct_message` from the inviter.
 
 ## Web GUI
 
@@ -139,7 +139,7 @@ Contributor conventions, working method and the definition of done are in [`.omp
 
 ## Releasing
 
-1. Branch `release/vX.Y.Z`: bump the `version` in `package.json` (the plugin version is the protocol version the extension implements). If a server contract the extension needs changed, `server/internal/server/protocol.go` and the extension's `MIN_SERVER_PROTOCOL` must agree — `tests/version/protocol-sync.test.ts` fails when they do not. Open a pull request, let CI go green, merge.
+1. Branch `release/vX.Y.Z`: bump the `version` in `package.json` (semver; the release check rejects a tag that differs from it). The plugin version is distinct from the server's `Protocol` integer in `server/internal/server/protocol.go`: if a server contract the extension needs changed, raise `Protocol` and the extension's `MIN_SERVER_PROTOCOL`; `tests/version/protocol-sync.test.ts` fails when `Protocol` is below `MIN_SERVER_PROTOCOL`. Open a pull request, let CI go green, merge.
 2. Wait until the `ci` run of the merge commit on `main` is green, then tag the merge commit `vX.Y.Z` and push the tag. The release workflow first checks that a `ci` run of the tagged commit passed and that the tag matches the package version (it fails in seconds and publishes nothing when either does not; if `ci` was still running, re-run the release workflow once it passed), runs the server tests, builds the web GUI and then `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads from the latest release.
 3. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
 
