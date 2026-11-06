@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -200,4 +202,37 @@ func postPing(t *testing.T, url, header, host string) (status int, contentType, 
 		t.Fatal(err)
 	}
 	return res.StatusCode, res.Header.Get("Content-Type"), string(b)
+}
+
+// A call cancelled by the client is not an internal error: no ERROR line, like over /v1.
+func TestCancelledCallLogsNoError(t *testing.T) {
+	var logs strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	gone := tools.Tool{Meta: tools.Meta{Name: "gone", Description: "cancelled", Schema: map[string]any{"type": "object"}},
+		Call: func(context.Context, auth.Principal, json.RawMessage) (any, error) {
+			return nil, fmt.Errorf("listing spaces: %w", context.Canceled)
+		}}
+	crash := tools.Tool{Meta: tools.Meta{Name: "crash", Description: "fails", Schema: map[string]any{"type": "object"}},
+		Call: func(context.Context, auth.Principal, json.RawMessage) (any, error) {
+			return nil, errors.New("real fault")
+		}}
+	url, tok := setup(t, tools.NewRegistry([]tools.Tool{gone, crash}))
+	s, err := connect(context.Background(), url, tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	_, err = s.CallTool(context.Background(), &mcp.CallToolParams{Name: "gone"})
+	if err == nil || !strings.Contains(err.Error(), "internal error") {
+		t.Fatalf("err = %v, want the protocol error \"internal error\"", err)
+	}
+	if strings.Contains(logs.String(), "ERROR") {
+		t.Fatalf("a cancelled call logged an error: %s", logs.String())
+	}
+	_, _ = s.CallTool(context.Background(), &mcp.CallToolParams{Name: "crash"})
+	if !strings.Contains(logs.String(), "ERROR") {
+		t.Fatalf("a real internal error must still log an error: %q", logs.String())
+	}
 }

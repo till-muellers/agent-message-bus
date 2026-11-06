@@ -77,13 +77,22 @@ func handler(reg *tools.Registry, name string, notices inbox.Noticer) mcp.ToolHa
 func errorResult(ctx context.Context, err error) (*mcp.CallToolResult, error) {
 	var ae *apperr.Error
 	if !errors.As(err, &ae) {
-		slog.ErrorContext(ctx, "internal error", "err", err)
+		logInternal(ctx, err)
 		return nil, errInternal
 	}
 	return &mcp.CallToolResult{
 		IsError: true,
 		Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("%s: %s", ae.Kind, ae.Msg)}},
 	}, nil
+}
+
+// logInternal logs err as an error, except a cancelled call (the client went away), at debug.
+func logInternal(ctx context.Context, err error) {
+	if errors.Is(err, context.Canceled) {
+		slog.DebugContext(ctx, "call cancelled", "err", err)
+		return
+	}
+	slog.ErrorContext(ctx, "internal error", "err", err)
 }
 
 func successResult(out any) (*mcp.CallToolResult, error) {
