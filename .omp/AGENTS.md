@@ -102,6 +102,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - `0001_schema.up.sql` is the one-time alpha reset: the whole schema, irreversible, no `.down.sql`. Every later migration must be reversible (`.down.sql`).
 - A migration without `.down.sql` says so in its header line: `-- … Not reversible: …`.
 - Later migrations get their number at merge time: the next free number; rename on rebase if another slice merged one first.
+- Each migration runs in one transaction with foreign keys off and must pass `PRAGMA foreign_key_check` before it commits. Change a column definition by rebuilding the table the SQLite way (create `x_new`, copy, drop `x`, rename `x_new` to `x`, recreate its indexes); `ON DELETE` actions do not fire inside a migration.
 
 ### TypeScript
 - `strict` mode, no `any`; use `unknown` and narrow. No untyped function signatures.

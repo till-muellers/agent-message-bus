@@ -8,7 +8,7 @@ Rules (from slice 1 on, `.omp/AGENTS.md:96-97` as amended by X5):
 - `0001_schema.up.sql` is the only reset file, written once in slice 1, marked irreversible by its header; no `.down.sql`. The runner never reads down files (`platform/db/migrate.go:14`).
 - Everything after it is a new numbered migration in merge order with a `.down.sql`, never folded into 0001, never edited after merge.
 - No seed rows: the bootstrap admin is created in Go by `auth.Service.Bootstrap` (slice 4a; `admin/analysis.md:199-200`), so `dbtest` fixtures that seed explicit ids from 1 keep working.
-- Each migration runs in one transaction (`migrate.go:70-80`).
+- Each migration runs in one transaction on one connection with foreign keys off, and `PRAGMA foreign_key_check` must pass before it commits (`platform/db/migrate.go` `applyMigration`, `platform/db/foreign_keys.go`). That is SQLite's table-rebuild procedure: inside a transaction the pragma is a no-op, and with enforcement on `DROP TABLE` cascades into the children of the dropped table.
 
 ---
 
@@ -165,3 +165,11 @@ CREATE INDEX operator_actions_created ON operator_actions(created_at);
 | Protocol version | `internal/server/protocol.go` constant (7) |
 | Guide | `internal/guide/guide.md`, `go:embed` (11) |
 | `[via subagent]` attribution | body prefix written by the extension (`omp-parity/analysis.md:152`); a `posts.via` column is deferred (omp-parity Q12) |
+
+### 2.6 `NNNN_autoincrement_ids` (M5, bead `agent-message-bus-c5h.1`)
+
+Owners: `spaces` (spaces), `blackboards` (threads). Source: `agent-message-bus-cdt` (space-id-reuse variant). `spaces.id` and `threads.id` become `INTEGER PRIMARY KEY AUTOINCREMENT`, so the id of a deleted row is never handed out again. A reused space id let a member token, inbox scope or stream of a deleted space match the next space; a reused thread id let the `threadId` of a `thread_removed` entry, a report or a web link open another thread.
+
+Both up and down rebuild the table (create `x_new`, copy every row with its id, drop `x`, rename); the runner applies it with foreign keys off, so the children (tokens, participants, topics, blackboards, inbox, invites; posts, thread_subscriptions) keep their rows and point at the new table. Neither table has an extra index or trigger to recreate. `sqlite_sequence` starts at the highest id present at migration time: an id deleted before the migration can be handed out once more. The down file also deletes the two `sqlite_sequence` rows.
+
+Checked and left alone: `agents` (rows are never deleted), `topics` and `blackboards` (addressed by name; their ids never leave a transaction), `posts` (ids are only keys within one thread), `inbox` (already `AUTOINCREMENT`).
