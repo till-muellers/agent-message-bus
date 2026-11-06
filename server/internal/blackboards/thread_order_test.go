@@ -28,7 +28,7 @@ func threadsWithTrimmedStamps(t *testing.T) (fixture, int64, int64) {
 	t.Helper()
 	f := newFixture(t)
 	sec := time.Date(2026, 11, 6, 7, 0, 0, 0, time.UTC)
-	f.svc = NewService(f.db, spaces.NewResolver(), f.ib, steppedClock(t, sec, // the board
+	f.svc = NewService(f.db, spaces.NewResolver(anyCredential{}), f.ib, steppedClock(t, sec, // the board
 		sec.Add(300*time.Millisecond), sec.Add(390*time.Millisecond), sec.Add(390500*time.Microsecond)))
 	ctx := context.Background()
 	must(t, f.svc.Create(ctx, f.lead, "alpha", "b"))
