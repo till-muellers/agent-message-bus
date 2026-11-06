@@ -181,6 +181,20 @@ Feature: Blackboards, threads and posts
       | 2  | other | worker2   | 1     |
     And each listed thread has lastPostAt set to the time of its latest post
 
+  # Stamps are RFC3339Nano, which trims trailing zeros ("…00.3Z", "…00.39Z"), so their
+  # text order is not their time order within one second; activity follows the post id.
+  Scenario: Posts within one second order threads by their newest post
+    Given member "worker" created blackboard "b" in space "demo"
+    And at "2026-11-06T07:00:00.300Z" member "worker" created thread "older" with body "p1" on blackboard "b" in space "demo"
+    And at "2026-11-06T07:00:00.390Z" member "worker" created thread "newer" with body "p2" on blackboard "b" in space "demo"
+    And at "2026-11-06T07:00:00.3905Z" member "worker" posted "reply" to thread 2 in space "demo"
+    When member "worker" lists the threads of blackboard "b" in space "demo"
+    Then the call returns
+      | id | title | lastPostAt                |
+      | 2  | newer | 2026-11-06T07:00:00.3905Z |
+      | 1  | older | 2026-11-06T07:00:00.3Z    |
+    And bus_space_overview lists recentThreads 2 then 1 with the same lastPostAt
+
   Scenario: Listing threads of an unknown blackboard
     When leader "lead" lists the threads of blackboard "nope" in space "demo"
     Then the call fails with not_found "blackboard nope not found"

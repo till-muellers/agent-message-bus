@@ -133,10 +133,20 @@ func deleteThread(ctx context.Context, q db.DBTX, id int64) error {
 	return nil
 }
 
+// Thread activity comes from the newest post id, never from comparing *_at texts:
+// RFC3339Nano trims trailing zeros, so within one second text order is not time order.
+// lastPostAt is a bare column next to the only max() aggregate, MAX(p.id), so SQLite
+// takes it from the newest post (https://sqlite.org/lang_select.html#bareagg).
+// Both fragments need "threads t LEFT JOIN posts p ON p.thread_id = t.id GROUP BY t.id".
+const (
+	lastPostAt      = `COALESCE(p.created_at, t.created_at)`
+	newestPostFirst = `MAX(p.id) DESC, t.id DESC`
+)
+
 func listThreads(ctx context.Context, q db.DBTX, boardID int64) ([]ThreadInfo, error) {
-	rows, err := q.QueryContext(ctx, `SELECT t.id, t.title, a.name, COUNT(p.id), COALESCE(MAX(p.created_at), t.created_at) AS last
+	rows, err := q.QueryContext(ctx, `SELECT t.id, t.title, a.name, COUNT(p.id), `+lastPostAt+`
 		FROM threads t JOIN agents a ON a.id = t.created_by LEFT JOIN posts p ON p.thread_id = t.id
-		WHERE t.blackboard_id = ? GROUP BY t.id ORDER BY last DESC, MAX(p.id) DESC`, boardID)
+		WHERE t.blackboard_id = ? GROUP BY t.id ORDER BY `+newestPostFirst, boardID)
 	if err != nil {
 		return nil, fmt.Errorf("listing threads: %w", err)
 	}
@@ -159,11 +169,11 @@ func listThreads(ctx context.Context, q db.DBTX, boardID int64) ([]ThreadInfo, e
 // with agentID's subscription state.
 func recentThreads(ctx context.Context, q db.DBTX, spaceID, agentID int64, limit int) ([]RecentThread, error) {
 	rows, err := q.QueryContext(ctx, `SELECT t.id, b.name, t.title, a.name, COUNT(p.id),
-		COALESCE(MAX(p.created_at), t.created_at) AS last,
+		`+lastPostAt+`,
 		EXISTS (SELECT 1 FROM thread_subscriptions s WHERE s.thread_id = t.id AND s.agent_id = ?)
 		FROM threads t JOIN blackboards b ON b.id = t.blackboard_id JOIN agents a ON a.id = t.created_by
 		LEFT JOIN posts p ON p.thread_id = t.id
-		WHERE b.space_id = ? GROUP BY t.id ORDER BY last DESC, MAX(p.id) DESC LIMIT ?`, agentID, spaceID, limit)
+		WHERE b.space_id = ? GROUP BY t.id ORDER BY `+newestPostFirst+` LIMIT ?`, agentID, spaceID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("listing recent threads: %w", err)
 	}

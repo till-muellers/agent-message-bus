@@ -95,7 +95,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [membership.feature](membership.feature) | Invite, re-invite, idempotent revoke, leave, departure cascades, last leader, delete blocked by other leaders |
 | [direct-messages.feature](direct-messages.feature) | Direct messages and critical delivery |
 | [topics.feature](topics.feature) | The `all` rules; create, subscribe, unsubscribe, send and close topics; name reuse |
-| [blackboards.feature](blackboards.feature) | Blackboards, threads, posts, thread subscriptions and their permissions |
+| [blackboards.feature](blackboards.feature) | Blackboards, threads, posts, thread subscriptions and their permissions; thread activity order by newest post |
 | [inbox.feature](inbox.feature) | Reading and acknowledging the inbox; the SSE stream |
 | [local-instance.feature](local-instance.feature) | `start`, `stop`, `status`, `admin-token`, `rotate-token`; the state file; single instance per data dir; a brief external write lock delays calls instead of failing them |
 | [transports.feature](transports.feature) | RPC routes, error bodies and status codes, argument validation, MCP, admin endpoints |
