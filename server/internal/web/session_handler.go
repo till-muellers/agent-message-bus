@@ -28,7 +28,7 @@ func (g *Web) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, hash, err := g.authenticate(r)
-	if kind, _ := apperr.KindOf(err); kind != apperr.Unauthenticated {
+	if kind, _ := apperr.KindOf(err); kind != apperr.Unauthenticated { // only a rejected token counts
 		release()
 	}
 	if err != nil {

@@ -17,7 +17,8 @@ const (
 
 // limiter counts failed sign-ins per remote IP over a sliding minute; after maxFailures
 // every sign-in from that IP answers 429 until the oldest failure is a minute old [AD-9].
-// A sign-in in progress counts as a failure until it succeeds.
+// A sign-in in progress counts as a failure until its token checks out or the check
+// fails for another reason.
 type limiter struct {
 	mu        sync.Mutex
 	now       func() time.Time

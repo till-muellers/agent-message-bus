@@ -135,9 +135,10 @@ Feature: Web GUI access and sessions
   Rule: At most 5 failed sign-ins per IP and minute are evaluated
 
     # A sign-in counts as failed from the moment it is admitted until its token
-    # checks out, so concurrent attempts cannot all pass the limit.
+    # checks out or the check fails for another reason (an internal error), so
+    # concurrent attempts cannot all pass the limit.
 
-    Scenario: The sixth failed sign-in within a minute answers 429
+    Scenario: After 5 failed sign-ins within a minute even the admin token answers 429
       Given 5 sign-ins with token "amb_nope" from one IP failed within a minute
       When the operator signs in from that IP with the instance admin token
       Then the response status is 429
