@@ -11,8 +11,9 @@ import (
 
 // RevokeAdmin deletes every token of minted admin name and removes it from every space it
 // joined, in one transaction; spaces left empty are deleted. The agent row stays, so
-// minting the name again gives the same agent. It reports whether anything was removed
-// wakes its streams and waits to re-check their token and logs "admin revoked" after commit. Admins only; the bootstrap admin cannot be revoked.
+// minting the name again gives the same agent. It reports whether anything was removed,
+// wakes the admin's streams and waits to re-check their token and logs "admin revoked"
+// after commit. Admins only; the bootstrap admin cannot be revoked.
 func (s *Service) RevokeAdmin(ctx context.Context, p auth.Principal, name string) (bool, error) {
 	if err := auth.RequireAdmin(p); err != nil {
 		return false, err
