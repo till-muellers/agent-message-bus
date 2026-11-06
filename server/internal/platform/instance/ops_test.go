@@ -2,9 +2,11 @@ package instance
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // instanceKind sets up the data dir's instance for an operation test.
@@ -184,5 +186,41 @@ func expectShutdownCalls(t *testing.T, f *fakeBus, want bool) {
 	}
 	if len(calls) != 1 || calls[0] != "/v1/admin/shutdown Bearer "+testToken+" " {
 		t.Fatalf("calls %q, want one shutdown", calls)
+	}
+}
+
+// TestStopRejectedToken: a shutdown request the server rejects for its token is no instance
+// that "doesn't exit": stop reports the answer at once and kills nothing.
+func TestStopRejectedToken(t *testing.T) {
+	t.Parallel()
+	m, out := newManager(t, testToken)
+	f := setUp(t, m, serving, true)
+	f.token = "another-admin-token-0123456789-0123456789"
+	start := time.Now()
+	err := m.Stop(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "POST "+f.srv.URL+"/v1/admin/shutdown: status 401") ||
+		!strings.Contains(err.Error(), "not the admin token of the running instance") {
+		t.Fatalf("err = %v", err)
+	}
+	if time.Since(start) >= m.Timeout || out.Len() != 0 {
+		t.Fatalf("stop took %v and printed %q", time.Since(start), out)
+	}
+	if inst, err := Find(context.Background(), http.DefaultClient, m.dir()); err != nil || !inst.Serving() {
+		t.Fatalf("instance after the rejected stop = %+v, %v", inst, err)
+	}
+}
+
+// TestStopForbiddenByAddress: a 403 means the server saw the caller at a non-loopback address
+// (an instance bound to the host's LAN ip), not a wrong token; stop still kills it.
+func TestStopForbiddenByAddress(t *testing.T) {
+	t.Parallel()
+	m, out := newManager(t, testToken)
+	f := setUp(t, m, serving, false)
+	f.refuse = http.StatusForbidden
+	killed := 0
+	m.Kill = func(pid int) error { killed = pid; f.crash(); return nil }
+	expectResult(t, m.Stop(context.Background()), "", out.String(), "agent-message-bus stopped (pid 7)\n")
+	if killed != 7 {
+		t.Fatalf("killed = %d", killed)
 	}
 }

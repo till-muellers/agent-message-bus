@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 )
@@ -17,14 +18,38 @@ func (m Manager) Stop(ctx context.Context) error {
 		_, _ = fmt.Fprintln(m.Out, "agent-message-bus is not running")
 		return nil
 	}
-	if tok, err := m.Config.ResolveAdminToken(); err == nil {
-		_ = m.adminPost(ctx, inst.State.URL+"/v1/admin/shutdown", tok, "") // fall back to kill below
+	if err := m.requestShutdown(ctx, inst.State.URL); err != nil {
+		return err
 	}
 	if err := m.awaitExit(ctx, inst.State); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(m.Out, "agent-message-bus stopped (pid %d)\n", inst.State.PID)
 	return nil
+}
+
+// requestShutdown asks the instance at url to shut down. A server that does not accept the
+// token is healthy, not stuck: that is an error and nothing is killed. Any other failure is left to
+// awaitExit, which kills an instance that does not leave.
+func (m Manager) requestShutdown(ctx context.Context, url string) error {
+	tok, err := m.Config.ResolveAdminToken()
+	if err != nil {
+		return nil // the instance is stopped by awaitExit
+	}
+	var refused *statusError
+	if err := m.adminPost(ctx, url+"/v1/admin/shutdown", tok, ""); errors.As(err, &refused) && refused.unauthenticated() {
+		return fmt.Errorf("asking the instance to shut down: %w; the admin token in %s is not the admin token of the running instance, nothing was stopped",
+			err, m.tokenSource())
+	}
+	return nil
+}
+
+// tokenSource names where the admin token of this CLI comes from.
+func (m Manager) tokenSource() string {
+	if m.Config.AdminToken != "" {
+		return "AMB_ADMIN_TOKEN"
+	}
+	return m.Config.TokenPath()
 }
 
 // awaitExit waits until the instance st released the data dir and kills it if it doesn't
