@@ -260,7 +260,7 @@ MCP token user id: `admin:<agent id>` for every admin (was `admin:0`, `mcpserver
 
 ## 10. Web GUI backend `/web` [W1a, W1b, W2, W3, 10] (`web/*.feature`, `web/analysis.md:300-414`)
 
-Served only on the GUI's own listener `AMB_WEB_ADDR` (PO ruling replacing Q-A1): any `host:port`; empty or `off` disables the GUI; default `127.0.0.1:8081` [AD-16]. The operator controls exposure by choosing the address. The API listener (`AMB_ADDR`) serves no `/web` path (404), and the GUI listener serves only `/web/*` (everything else 404). Graceful shutdown stops both listeners. Errors use the §0 envelope and statuses. A non-GET method on a GET-only route → 405 (mux default).
+Served only on the GUI's own listener `AMB_WEB_ADDR` (PO ruling replacing Q-A1): any `host:port`; empty or `off` disables the GUI; default `127.0.0.1:8081` [AD-16]. The operator controls exposure by choosing the address. The API listener (`AMB_ADDR`) serves no `/web` path (404), and the GUI listener serves only `/web/*` (everything else 404). Graceful shutdown stops both listeners. Errors use the §0 envelope and statuses. A non-GET method on a GET-only route → 405 (mux default). An unknown `GET /web/api/<path>` → 401 without a session, else 404 `not_found "route not found"`; any other method on an unknown `/web/api/<path>` → the mux's plain-text 405 (`Allow: GET, HEAD`), before the session check (a method-aware 404 would need its own router; not worth it, 8ab).
 
 ### 10.1 Session [W1a]
 
