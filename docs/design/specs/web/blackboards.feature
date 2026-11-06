@@ -40,11 +40,12 @@ Feature: Blackboards in the web GUI
       Given member "worker" created blackboard "b" in space "demo"
       And member "worker" created thread "plan" with body "first" on blackboard "b" in space "demo"
       And member "worker2" created thread "other" with body "hello" on blackboard "b" in space "demo"
+      And leader "lead" posted "reply" to thread 1 in space "demo"
       Given the operator signed in with the instance admin token
       When the operator opens the blackboard "b" in space "demo"
       Then the page lists the threads:
         | id  | title | createdBy | posts |
-        | 1   | plan  | worker    | 1     |
+        | 1   | plan  | worker    | 2     |
         | 2   | other | worker2   | 1     |
       And each listed thread shows the time of its latest post
 
@@ -75,9 +76,9 @@ Feature: Blackboards in the web GUI
 
     Scenario: A thread of another space is not found
       Given leader "lead" created space "other"
-      And member "worker" created blackboard "b" in space "other"
-      And member "worker" created thread "plan" with body "first" on blackboard "b" in space "other"
-      And the thread of space "other" has the id 99
+      And leader "lead" invited member "outsider" to space "other"
+      And member "outsider" created blackboard "b" in space "other"
+      And member "outsider" created thread "plan" with body "first" on blackboard "b" in space "other"
       Given the operator signed in with the instance admin token
-      When the operator opens the thread 99 in space "demo"
+      When the operator opens the thread 1 in space "demo"
       Then the response status is 404
