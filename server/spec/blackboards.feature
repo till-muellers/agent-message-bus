@@ -185,9 +185,9 @@ Feature: Blackboards, threads and posts
   # text order is not their time order within one second; activity follows the post id.
   Scenario: Posts within one second order threads by their newest post
     Given member "worker" created blackboard "b" in space "demo"
-    And the clock reads "2026-11-06T07:00:00.300Z" when member "worker" creates thread "older" on blackboard "b" in space "demo"
-    And the clock reads "2026-11-06T07:00:00.390Z" when member "worker" creates thread "newer" on blackboard "b" in space "demo"
-    And the clock reads "2026-11-06T07:00:00.3905Z" when member "worker" posts "reply" to thread 2 in space "demo"
+    And at "2026-11-06T07:00:00.300Z" member "worker" created thread "older" with body "p1" on blackboard "b" in space "demo"
+    And at "2026-11-06T07:00:00.390Z" member "worker" created thread "newer" with body "p2" on blackboard "b" in space "demo"
+    And at "2026-11-06T07:00:00.3905Z" member "worker" posted "reply" to thread 2 in space "demo"
     When member "worker" lists the threads of blackboard "b" in space "demo"
     Then the call returns
       | id | title | lastPostAt                |

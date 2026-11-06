@@ -41,7 +41,10 @@ func threadsWithTrimmedStamps(t *testing.T) (fixture, int64, int64) {
 	return f, older, newer
 }
 
-const newestPostAt = "2026-11-06T07:00:00.3905Z"
+const (
+	newestPostAt = "2026-11-06T07:00:00.3905Z"
+	olderPostAt  = "2026-11-06T07:00:00.3Z"
+)
 
 func TestListThreadsOrdersByNewestPostNotStampText(t *testing.T) {
 	t.Parallel()
@@ -51,8 +54,8 @@ func TestListThreadsOrdersByNewestPostNotStampText(t *testing.T) {
 	if len(list) != 2 || list[0].ID != newer || list[1].ID != older {
 		t.Fatalf("ListThreads = %+v, want thread %d first", list, newer)
 	}
-	if list[0].LastPostAt != newestPostAt {
-		t.Fatalf("lastPostAt = %q, want %q", list[0].LastPostAt, newestPostAt)
+	if list[0].LastPostAt != newestPostAt || list[1].LastPostAt != olderPostAt {
+		t.Fatalf("lastPostAt = %q, %q, want %q, %q", list[0].LastPostAt, list[1].LastPostAt, newestPostAt, olderPostAt)
 	}
 }
 
@@ -65,7 +68,7 @@ func TestRecentThreadsOrdersByNewestPostNotStampText(t *testing.T) {
 	if len(list) != 2 || list[0].ID != newer || list[1].ID != older {
 		t.Fatalf("RecentThreadsFor = %+v, want thread %d first", list, newer)
 	}
-	if list[0].LastPostAt != newestPostAt {
-		t.Fatalf("lastPostAt = %q, want %q", list[0].LastPostAt, newestPostAt)
+	if list[0].LastPostAt != newestPostAt || list[1].LastPostAt != olderPostAt {
+		t.Fatalf("lastPostAt = %q, %q, want %q, %q", list[0].LastPostAt, list[1].LastPostAt, newestPostAt, olderPostAt)
 	}
 }
