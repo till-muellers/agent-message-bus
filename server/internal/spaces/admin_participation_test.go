@@ -8,7 +8,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
-	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 )
 
 func mustJoin(t *testing.T, e env, p auth.Principal, space string) {
@@ -104,8 +103,7 @@ func TestParticipantOrder(t *testing.T) {
 	e := newEnv(t, nil, nil)
 	lead := leader(t, e, 1, "lead")
 	ops := opsAdmin(t, e)
-	dbtest.SeedAgent(t, e.db, 8, "admin", "admin")
-	root := auth.Principal{Kind: auth.Admin, AgentID: 8, AgentName: "admin"}
+	root := authenticated(t, e, 8, "admin", "admin", 0)
 	mustCreate(t, e, lead, "demo")
 	inviteMember(t, e, lead, "demo", "worker")
 	mustJoin(t, e, ops, "demo")
@@ -140,8 +138,7 @@ func TestRevokeAdminTargetConflict(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, nil, nil)
 	lead, ops := leader(t, e, 1, "lead"), opsAdmin(t, e)
-	dbtest.SeedAgent(t, e.db, 7, "web", "admin")
-	web := auth.Principal{Kind: auth.Admin, AgentID: 7, AgentName: "web"}
+	web := authenticated(t, e, 7, "web", "admin", 0)
 	mustCreate(t, e, lead, "alpha")
 	mustJoin(t, e, ops, "alpha")
 	for _, p := range []auth.Principal{lead, web} {

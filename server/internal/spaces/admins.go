@@ -19,6 +19,9 @@ func (s *Service) RevokeAdmin(ctx context.Context, p auth.Principal, name string
 	}
 	var deleted bool
 	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
+		if err := s.r.revalidate(ctx, tx, p); err != nil {
+			return nil, err
+		}
 		entries, removed, err := s.revokeAdminTx(ctx, tx, name)
 		deleted = removed
 		return entries, err

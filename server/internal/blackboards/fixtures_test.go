@@ -9,9 +9,16 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
+
+// anyCredential accepts every principal: these tests do not exercise credential
+// re-validation, which the spaces tests cover.
+type anyCredential struct{}
+
+func (anyCredential) StillValid(context.Context, db.DBTX, auth.Principal) error { return nil }
 
 // fixture: space alpha (10) with leader lead(1), members m1(2), m2(3);
 // space beta (20) with leader lead and member b1(4).
@@ -45,7 +52,7 @@ func newFixture(t *testing.T) fixture {
 	ib := inbox.NewService(t.Context(), db, broker.NewMemory(64), time.Now)
 	return fixture{
 		db:   db,
-		svc:  NewService(db, spaces.NewResolver(), ib, time.Now),
+		svc:  NewService(db, spaces.NewResolver(anyCredential{}), ib, time.Now),
 		ib:   ib,
 		lead: auth.Principal{Kind: auth.Leader, AgentID: 1, AgentName: "lead"},
 		m1:   auth.Principal{Kind: auth.Member, AgentID: 2, AgentName: "m1", SpaceID: 10},

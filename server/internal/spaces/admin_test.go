@@ -8,14 +8,12 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
-	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 )
 
-// opsAdmin seeds the admin agent "ops" with id 9 and returns its principal.
+// opsAdmin seeds the admin agent "ops" with id 9 and a token and returns its principal.
 func opsAdmin(t *testing.T, e env) auth.Principal {
 	t.Helper()
-	dbtest.SeedAgent(t, e.db, 9, "ops", "admin")
-	return auth.Principal{Kind: auth.Admin, AgentID: 9, AgentName: "ops"}
+	return authenticated(t, e, 9, "ops", "admin", 0)
 }
 
 func TestResolveAdmin(t *testing.T) {

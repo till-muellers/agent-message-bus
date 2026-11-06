@@ -15,8 +15,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
 
-var admin = auth.Principal{Kind: auth.Admin}
-
 func TestCreate(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, nil, nil)
@@ -218,8 +216,8 @@ func TestAdmitMember(t *testing.T) {
 		t.Fatalf("re-admit = %d, %q, %q (first token %q)", agentID, space, tok2, tok1)
 	}
 	again, err := e.auth.Authenticate(ctx, tok2)
-	if err != nil || again != member {
-		t.Fatalf("second token = %+v, %v; want %+v", again, err, member)
+	if err != nil || again.Kind != auth.Member || again.AgentID != member.AgentID || again.SpaceID != member.SpaceID {
+		t.Fatalf("second token = %+v, %v; want the identity of %+v", again, err, member)
 	}
 	if _, err := e.auth.Authenticate(ctx, tok1); err != nil {
 		t.Fatalf("first token: %v", err)
@@ -235,7 +233,7 @@ func TestLeave(t *testing.T) {
 	mustCreate(t, e, lead, "alpha")
 	member, tok := inviteMember(t, e, lead, "alpha", "work")
 	apperrtest.WantKind(t, e.svc.Leave(ctx, lead, "alpha"), apperr.Conflict, "last leader cannot leave; delete the space instead")
-	apperrtest.WantKind(t, e.svc.Leave(ctx, admin, "alpha"), apperr.Forbidden, "")
+	apperrtest.WantKind(t, e.svc.Leave(ctx, instanceAdmin(t, e), "alpha"), apperr.Forbidden, "")
 	seedInbox(t, e, member)
 	if err := e.svc.Leave(ctx, member, "alpha"); err != nil {
 		t.Fatalf("member leave: %v", err)
@@ -262,7 +260,7 @@ func TestParticipants(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, %v; want %+v", got, err, want)
 	}
-	if _, err = e.svc.Participants(ctx, admin, "alpha"); err != nil {
+	if _, err = e.svc.Participants(ctx, instanceAdmin(t, e), "alpha"); err != nil {
 		t.Fatalf("admin lists participants: %v", err)
 	}
 }
@@ -291,7 +289,7 @@ func TestParticipantsConnected(t *testing.T) {
 			t.Parallel()
 			e := newEnv(t, nil, nil)
 			stub := presenceStub{Service: e.inbox, connected: map[int64]bool{}}
-			e.svc = NewService(e.db, NewResolver(), e.auth, stub, time.Now, Hooks{})
+			e.svc = NewService(e.db, NewResolver(e.auth), e.auth, stub, time.Now, Hooks{})
 			lead := leader(t, e, 1, "lead")
 			mustCreate(t, e, lead, "alpha")
 			mustCreate(t, e, lead, "beta")

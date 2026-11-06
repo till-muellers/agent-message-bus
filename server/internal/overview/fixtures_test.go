@@ -42,6 +42,12 @@ type world struct {
 	peer     auth.Principal
 }
 
+// anyCredential accepts every principal: these tests do not exercise credential
+// re-validation, which the spaces tests cover.
+type anyCredential struct{}
+
+func (anyCredential) StillValid(context.Context, db.DBTX, auth.Principal) error { return nil }
+
 // countingResolver counts the Resolve calls it forwards to the real resolver.
 type countingResolver struct {
 	*spaces.Resolver
@@ -58,7 +64,7 @@ func newWorld(t *testing.T) *world {
 	conn := dbtest.Open(t)
 	now := stepClock()
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), now)
-	r := countingResolver{Resolver: spaces.NewResolver(), n: &atomic.Int64{}}
+	r := countingResolver{Resolver: spaces.NewResolver(anyCredential{}), n: &atomic.Int64{}}
 	w := &world{conn: conn, ib: ib, resolves: r.n,
 		msg: messaging.NewService(conn, r, ib, now), bb: blackboards.NewService(conn, r, ib, now)}
 	authSvc := auth.NewService(conn, "overview-test-admin-token-0123456789", now)
@@ -96,7 +102,7 @@ func (w *world) seed(t *testing.T) {
 
 func (w *world) spaceID(t *testing.T, name string) int64 {
 	t.Helper()
-	m, err := spaces.NewResolver().Resolve(t.Context(), w.conn, w.lead, name)
+	m, err := spaces.NewResolver(anyCredential{}).Resolve(t.Context(), w.conn, w.lead, name)
 	w.must(t, err)
 	return m.SpaceID
 }

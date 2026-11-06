@@ -20,7 +20,7 @@ func TestWhoami(t *testing.T) {
 		p    auth.Principal
 		want WhoamiResult
 	}{
-		{name: "admin", p: admin, want: WhoamiResult{Kind: "admin", Spaces: []SpaceRole{}}},
+		{name: "admin", p: auth.Principal{Kind: auth.Admin}, want: WhoamiResult{Kind: "admin", Spaces: []SpaceRole{}}},
 		{name: "leader", p: lead, want: WhoamiResult{Kind: "leader", Name: "lead",
 			Spaces: []SpaceRole{{"alpha", RoleLeader}, {"beta", RoleLeader}}}},
 		{name: "member", p: member, want: WhoamiResult{Kind: "member", Name: "work", Space: "alpha",

@@ -27,7 +27,7 @@ func (s *Service) Bootstrap(ctx context.Context) error {
 	return nil
 }
 
-// bootstrapPrincipal is the caller of the instance admin token.
-func (s *Service) bootstrapPrincipal() Principal {
-	return Principal{Kind: Admin, AgentID: s.bootstrapID.Load(), AgentName: BootstrapName, Bootstrap: true}
+// bootstrapPrincipal is the caller of the instance admin token whose hash is h.
+func (s *Service) bootstrapPrincipal(h string) Principal {
+	return Principal{Kind: Admin, AgentID: s.bootstrapID.Load(), AgentName: BootstrapName, Bootstrap: true, credential: h}
 }

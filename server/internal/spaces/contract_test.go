@@ -4,7 +4,9 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 )
@@ -35,7 +37,7 @@ func TestResolverParticipants(t *testing.T) {
 	dbtest.SeedSpace(t, conn, 10, "alpha", 1)
 	dbtest.SeedParticipant(t, conn, 10, 2, "member")
 	dbtest.SeedParticipant(t, conn, 10, 1, "leader")
-	r, ctx := NewResolver(), context.Background()
+	r, ctx := NewResolver(auth.NewService(conn, adminSecret, time.Now)), context.Background()
 
 	ids, err := r.ParticipantIDs(ctx, conn, 10)
 	if err != nil || !reflect.DeepEqual(ids, []int64{1, 2}) {

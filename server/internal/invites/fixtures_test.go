@@ -9,11 +9,18 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/inbox"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/broker"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
 	"github.com/till-muellers/agent-message-bus/server/internal/spaces"
 )
 
 var start = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+// anyCredential accepts every principal: these tests do not exercise credential
+// re-validation, which the spaces tests cover.
+type anyCredential struct{}
+
+func (anyCredential) StillValid(context.Context, db.DBTX, auth.Principal) error { return nil }
 
 type env struct {
 	db     *sql.DB
@@ -36,7 +43,7 @@ func newEnv(t *testing.T) env {
 	a := auth.NewService(conn, "admin-secret", now)
 	pub := broker.NewMemory(64)
 	ib := inbox.NewService(t.Context(), conn, pub, now)
-	r := spaces.NewResolver()
+	r := spaces.NewResolver(anyCredential{})
 	svc := NewService(conn, spaces.NewAdmitter(r, a, now), ib, now)
 	sp := spaces.NewService(conn, r, a, ib, now, spaces.Hooks{Revocation: []spaces.RevocationHook{svc}})
 	dbtest.SeedAgent(t, conn, 1, "lead", "leader")

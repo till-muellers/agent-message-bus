@@ -32,7 +32,7 @@ func bootstrapRoot(t *testing.T, e env) auth.Principal {
 	if err := e.auth.Bootstrap(context.Background()); err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	p, err := e.auth.Authenticate(context.Background(), "admin-secret")
+	p, err := e.auth.Authenticate(context.Background(), adminSecret)
 	if err != nil {
 		t.Fatalf("Authenticate bootstrap: %v", err)
 	}

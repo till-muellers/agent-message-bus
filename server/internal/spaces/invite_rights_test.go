@@ -27,7 +27,7 @@ func TestMaySeeInvites(t *testing.T) {
 	}{
 		{"unjoined admin", ops, "demo", true},
 		{"joined admin", ops, "other", true},
-		{"bootstrap admin", auth.Principal{Kind: auth.Admin, AgentName: "admin", Bootstrap: true}, "demo", true},
+		{"bootstrap admin", instanceAdmin(t, e), "demo", true},
 		{"leader of the space", lead, "demo", true},
 		{"leader of another space", lead, "other", false},
 		{"member", worker, "demo", false},

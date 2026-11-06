@@ -16,6 +16,12 @@ import (
 
 const space = "alpha"
 
+// anyCredential accepts every principal: these tests do not exercise credential
+// re-validation, which the spaces tests cover.
+type anyCredential struct{}
+
+func (anyCredential) StillValid(context.Context, db.DBTX, auth.Principal) error { return nil }
+
 // world is space alpha with leader "lead", members "ann" and "bob", and the open all topic.
 type world struct {
 	svc *Service
@@ -28,7 +34,7 @@ func newWorld(t *testing.T) *world {
 	t.Helper()
 	conn := dbtest.Open(t)
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), time.Now)
-	w := &world{svc: NewService(conn, spaces.NewResolver(), ib, time.Now), ib: ib, db: conn, p: map[string]auth.Principal{}}
+	w := &world{svc: NewService(conn, spaces.NewResolver(anyCredential{}), ib, time.Now), ib: ib, db: conn, p: map[string]auth.Principal{}}
 	const sp = 1
 	dbtest.SeedAgent(t, conn, 1, "lead", "leader")
 	dbtest.SeedSpace(t, conn, sp, space, 1)

@@ -22,8 +22,17 @@ func lookupToken(ctx context.Context, q db.DBTX, hash string) (p Principal, foun
 	if err != nil {
 		return Principal{}, false, fmt.Errorf("looking up token: %w", err)
 	}
-	p.SpaceID = space.Int64
+	p.SpaceID, p.credential = space.Int64, hash
 	return p, true, nil
+}
+
+// tokenExists reports whether a token with hash is stored.
+func tokenExists(ctx context.Context, q db.DBTX, hash string) (bool, error) {
+	var exists bool
+	if err := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM tokens WHERE hash = ?)`, hash).Scan(&exists); err != nil {
+		return false, fmt.Errorf("checking token: %w", err)
+	}
+	return exists, nil
 }
 
 // findAgent returns the id and kind of the named agent; found is false when missing.
