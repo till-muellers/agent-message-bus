@@ -18,7 +18,8 @@ type migration struct {
 	name    string
 }
 
-// Migrate applies every pending NNNN_*.up.sql file in fsys in ascending order.
+// Migrate applies every pending NNNN_*.up.sql file in fsys in ascending order. It refuses a
+// database whose schema is newer than the newest file in fsys.
 func Migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 	const ddl = `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`
 	if _, err := db.ExecContext(ctx, ddl); err != nil {
@@ -26,6 +27,9 @@ func Migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 	}
 	pending, err := listMigrations(fsys)
 	if err != nil {
+		return err
+	}
+	if err := ensureKnownSchema(ctx, db, pending); err != nil {
 		return err
 	}
 	for _, m := range pending {
