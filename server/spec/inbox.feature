@@ -247,6 +247,84 @@ Feature: Agent inbox
       When the live channel drops the stream's subscription because its buffer is full
       Then the server ends the stream
 
+    Scenario Outline: The stream ends when its token stops authenticating (<how>)
+      # The stream re-checks its token after reading and before sending, on every
+      # wake-up and every page, and on every heartbeat, so a dead token gets nothing
+      # stored after the revocation, even when the same name is invited again into
+      # the same space.
+      Given member "worker" opened the inbox stream with its "alpha" token
+      And the stream sent entries "a1, a2"
+      When <how>
+      And leader "lead" invites "worker" into space "alpha" again with task "secret task"
+      Then the server ends the stream without sending "secret task"
+      And the new token of "worker" can open the inbox stream
+
+      Examples:
+        | how                                          |
+        | leader "lead" revokes member "worker"        |
+        | member "worker" leaves space "alpha"         |
+        | leader "lead" deletes space "alpha" and creates it again |
+
+    Scenario: The bootstrap admin's stream ends when the admin token is rotated
+      Given the admin joined space "alpha" and opened the inbox stream
+      When the instance admin token is rotated
+      And leader "lead" sends a direct message "secret after rotation" to "admin" in space "alpha"
+      Then the server ends the stream without sending "secret after rotation"
+
+    Scenario: The stream of a revoked admin ends before the re-minted admin's mail
+      Given admin "ops" joined space "alpha" and opened the inbox stream
+      When admin "admin" revokes admin "ops" and mints "ops" again
+      And the new "ops" joins space "alpha"
+      And leader "lead" sends a direct message "secret for ops" to "ops" in space "alpha"
+      Then the server ends the stream without sending "secret for ops"
+      And the new token of "ops" can open the inbox stream
+
+    Scenario: A revocation just after the stream's token check still stops the next entry
+      # The check follows the read, so an entry stored after the revocation is
+      # read only after the revocation committed and the next check sees it.
+      Given member "worker" opened the inbox stream with its "alpha" token
+      When "worker" is revoked right after the stream's token check passed
+      And an entry "leak" is stored for "worker" in space "alpha"
+      Then the server ends the stream without sending "leak"
+
+    Scenario: A wake-up while a page goes out still re-checks the token with nothing to send
+      # The wake-up is merged into the next read, which finds nothing in the old
+      # scope (mail of a space created again gets a new id); the check still runs.
+      Given member "worker" opened the inbox stream with its "alpha" token
+      When "worker" is revoked right after the stream's token check passed
+      And an entry is stored for "worker" in space "beta" while the backlog goes out
+      Then the server ends the stream
+      And the stream slot of "worker" is free
+
+    Scenario: An idle stream ends within one heartbeat of its token stopping to authenticate
+      Given the stream heartbeat interval is 1 millisecond
+      And member "worker" opened the inbox stream with its "alpha" token
+      When leader "lead" revokes member "worker"
+      Then the server ends the stream
+      And the stream slot of "worker" is free
+
+    Scenario: The stream drops a client that stops reading
+      # One frame write may stay blocked for at most 30 seconds. It blocks only
+      # once the connection buffers are full, so an idle stream to a stalled
+      # client lasts until its heartbeats fill them. The client reconnects and
+      # gets the unacknowledged backlog again.
+      Given the frame write timeout is 200 milliseconds
+      And member "worker" opened the inbox stream from a client that never reads
+      When more entries are stored for "worker" than the connection buffers hold
+      Then the server ends the stream
+      And the stream slot of "worker" is free
+      And the server logs "inbox stream dropped: client not reading" at info level
+
+    Scenario: Shutdown ends a stream blocked writing to a client that stops reading
+      # A write in flight gets 250 milliseconds to finish, so a reading client still
+      # sees a clean end; a blocked one fails then.
+      Given member "worker" opened the inbox stream from a client that never reads
+      And the stream is blocked writing its backlog
+      When the server cancels all streams
+      Then the server ends the stream within a second
+      And the stream slot of "worker" is free
+      And the server logs nothing about the stream
+
     Scenario: A fast reader keeps its stream while senders burst during a long backlog
       # The stream discards the wake-up signals queued behind each page it has read,
       # since its next read covers them, so the subscription overflows only when more
@@ -288,7 +366,8 @@ Feature: Agent inbox
 
     # One identity per agent: each agent has one stream slot, held from the
     # moment its stream is accepted until that stream ends for any reason
-    # (client disconnect, server shutdown or a dropped live subscription).
+    # (client disconnect, server shutdown, a dropped live subscription, a token
+    # that stopped authenticating or a client that stopped reading).
     # The slot is per agent, not per token, so a member's space tokens share it.
     # Tool calls are not restricted.
 

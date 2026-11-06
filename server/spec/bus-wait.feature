@@ -140,6 +140,34 @@ Feature: Waiting for mail (bus_wait)
       When the live channel drops the wait's subscription because its buffer is full
       Then the call reads the mailbox once more and returns the matching entries, possibly []
 
+    Scenario Outline: A wait whose token stopped authenticating fails instead of returning the next mail (<who>)
+      # The wait re-checks the token it started with after every read and on
+      # every heartbeat.
+      Given <who> is in bus_wait with timeoutSeconds 15
+      When <how>
+      And leader "lead" sends a direct message "wait-leak" to <who> in space "alpha"
+      Then the call fails with unauthenticated "invalid token"
+      And it returns no entry
+
+      Examples:
+        | who               | how                                                      |
+        | member "worker"   | leader "lead" revokes member "worker" and invites "worker" again |
+        | admin "ops"       | admin "admin" revokes admin "ops", mints "ops" again and it joins "alpha" |
+        | the admin "admin" | the instance admin token is rotated                      |
+
+    Scenario: A revocation just after the wait's token check still stops the next entry
+      Given member "worker" is in bus_wait with timeoutSeconds 15
+      When "worker" is revoked right after the wait's token check passed
+      And an entry "leak" is stored for "worker" in space "alpha"
+      Then the call fails with unauthenticated "invalid token"
+      And it returns no entry
+
+    Scenario: An idle wait ends within one heartbeat of its token stopping to authenticate
+      Given member "worker" is in bus_wait with timeoutSeconds 300
+      And the wait has checked its token once
+      When leader "lead" revokes member "worker"
+      Then the call fails with unauthenticated "invalid token" within one heartbeat
+
     Scenario: Waiting does not take the inbox stream slot
       Given member "worker" opened the inbox stream with its "alpha" token
       When member "worker" calls bus_wait with its "alpha" token and timeoutSeconds 5

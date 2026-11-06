@@ -230,7 +230,7 @@ func openService(t *testing.T, path string) (*Service, *sql.DB) {
 	if err := db.Migrate(ctx, conn, migrations.FS); err != nil {
 		t.Fatalf("migrating %s: %v", path, err)
 	}
-	return NewService(t.Context(), conn, broker.NewMemory(16), testNow), conn
+	return NewService(t.Context(), conn, broker.NewMemory(16), &fakeCredentials{}, testNow), conn
 }
 
 func TestNoticeHasNoBodies(t *testing.T) {

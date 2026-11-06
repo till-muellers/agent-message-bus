@@ -2,8 +2,10 @@ package inbox
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
@@ -11,7 +13,8 @@ import (
 )
 
 // StreamHandler serves GET /v1/inbox/stream as server-sent events: the stored
-// backlog, then live entries, until the request, root or subscription ends.
+// backlog, then live entries, until the request, root or subscription ends, the
+// caller's token stops authenticating or the client stops reading.
 // Each agent has one stream slot: a second concurrent stream gets 409 Conflict.
 type StreamHandler struct {
 	svc  *Service
@@ -38,7 +41,21 @@ func (h StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	stop := context.AfterFunc(h.root, cancel)
 	defer stop()
-	if err := h.svc.stream(ctx, w, p); err != nil && ctx.Err() == nil {
-		slog.ErrorContext(ctx, "inbox stream failed", "agent_id", p.AgentID, "err", err)
+	logStreamEnd(ctx, h.root, p.AgentID, h.svc.stream(ctx, w, p))
+}
+
+// logStreamEnd logs why a stream ended: Info for a client that stopped reading or a
+// revoked token, nothing for a disconnect, shutdown or dropped subscription, ERROR
+// otherwise. A failed write cancels the request context, so a frame write that ran out
+// of time counts as a client that stopped reading unless root (shutdown) cut it.
+func logStreamEnd(ctx, root context.Context, agentID int64, err error) {
+	switch {
+	case errors.Is(err, os.ErrDeadlineExceeded) && root.Err() == nil:
+		slog.InfoContext(ctx, "inbox stream dropped: client not reading", "agent_id", agentID)
+	case err == nil || ctx.Err() != nil || errors.Is(err, errDropped):
+	case isRevoked(err):
+		slog.InfoContext(ctx, "inbox stream ended: token no longer valid", "agent_id", agentID)
+	default:
+		slog.ErrorContext(ctx, "inbox stream failed", "agent_id", agentID, "err", err)
 	}
 }

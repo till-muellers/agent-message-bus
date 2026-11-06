@@ -1,7 +1,6 @@
 package inbox
 
 import (
-	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -24,10 +23,7 @@ var looks = map[string]func(t *testing.T, w *world, after int64) []string{
 		return mustEntries(t, "Wait")(w.svc.Wait(t.Context(), w.principals["memberA"], q))
 	},
 	"stream": func(t *testing.T, w *world, after int64) []string {
-		sse, err := openSSE(httptest.NewRecorder())
-		if err != nil {
-			t.Fatalf("openSSE: %v", err)
-		}
+		sse := recordedSSE(t)
 		live := make(chan []byte)
 		if _, err := w.svc.drain(t.Context(), sse, w.principals["memberA"], live, after); err != nil {
 			t.Fatalf("drain: %v", err)

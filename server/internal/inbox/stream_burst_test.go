@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
@@ -103,6 +104,21 @@ func publishSignals(w *world, n int) {
 	}
 }
 
+// deadlineRecorder is a recorder whose writes accept deadlines, like a real connection.
+type deadlineRecorder struct{ *httptest.ResponseRecorder }
+
+func (deadlineRecorder) SetWriteDeadline(time.Time) error { return nil }
+
+// recordedSSE opens an SSE writer over a recorder.
+func recordedSSE(t *testing.T) sseWriter {
+	t.Helper()
+	sse, err := openSSE(deadlineRecorder{httptest.NewRecorder()}, time.Minute, t.Context().Done())
+	if err != nil {
+		t.Fatalf("openSSE: %v", err)
+	}
+	return sse
+}
+
 // TestDrainEndsAfterThePageWhenTheSubscriptionDropped checks that a subscription closed
 // during a drain ends it after the current page with errDropped, which the stream turns
 // into a clean end.
@@ -110,10 +126,7 @@ func TestDrainEndsAfterThePageWhenTheSubscriptionDropped(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	storeBacklog(t, w, 2*MaxLimit)
-	sse, err := openSSE(httptest.NewRecorder())
-	if err != nil {
-		t.Fatalf("openSSE: %v", err)
-	}
+	sse := recordedSSE(t)
 	live := make(chan []byte)
 	close(live)
 	lastSent, err := w.svc.drain(t.Context(), sse, w.principals["memberA"], live, 0)

@@ -16,8 +16,9 @@ import (
 const MaxLimit = 500
 
 const (
-	defaultLimit     = 100
-	defaultHeartbeat = 20 * time.Second
+	defaultLimit        = 100
+	defaultHeartbeat    = 20 * time.Second
+	defaultFrameTimeout = 30 * time.Second
 )
 
 // publisher is the broker surface the inbox needs.
@@ -28,18 +29,21 @@ type publisher interface {
 
 // Service stores, reads and acknowledges inbox entries and pushes them live.
 type Service struct {
-	root      context.Context // ends every Wait at shutdown
-	db        *sql.DB
-	pub       publisher
-	now       func() time.Time
-	heartbeat time.Duration
-	presence  *presence
+	root         context.Context // ends every Wait at shutdown
+	db           *sql.DB
+	pub          publisher
+	creds        credentials
+	now          func() time.Time
+	heartbeat    time.Duration
+	frameTimeout time.Duration // longest write of one stream frame
+	presence     *presence
 }
 
-// NewService builds the inbox; root ends every pending Wait, now stamps CreatedAt on
-// inserted entries.
-func NewService(root context.Context, conn *sql.DB, pub publisher, now func() time.Time) *Service {
-	return &Service{root: root, db: conn, pub: pub, now: now, heartbeat: defaultHeartbeat, presence: newPresence()}
+// NewService builds the inbox; root ends every pending Wait, creds re-validates the token
+// of an open stream or a pending Wait, now stamps CreatedAt on inserted entries.
+func NewService(root context.Context, conn *sql.DB, pub publisher, creds credentials, now func() time.Time) *Service {
+	return &Service{root: root, db: conn, pub: pub, creds: creds, now: now,
+		heartbeat: defaultHeartbeat, frameTimeout: defaultFrameTimeout, presence: newPresence()}
 }
 
 func topic(agentID int64) string { return fmt.Sprintf("inbox/%d", agentID) }

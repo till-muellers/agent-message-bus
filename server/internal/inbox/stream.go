@@ -16,53 +16,78 @@ var errDropped = errors.New("inbox subscription dropped")
 // stream subscribes before draining the backlog so nothing published meanwhile
 // is missed. Live messages are only wake-up signals: each one drains the inbox
 // after lastSent, so entries go out once and in id order even when producers
-// publish out of order.
+// publish out of order. Once ctx ends, a write blocked on the client fails within
+// expireGrace.
 func (s *Service) stream(ctx context.Context, w http.ResponseWriter, p auth.Principal) error {
 	live, unsubscribe := s.pub.Subscribe(topic(p.AgentID))
 	defer unsubscribe()
-	sse, err := openSSE(w)
+	sse, err := openSSE(w, s.frameTimeout, ctx.Done())
 	if err != nil {
 		return err
 	}
-	lastSent, err := s.drain(ctx, sse, p, live, 0)
-	if err == nil {
-		err = s.forwardLive(ctx, sse, p, live, lastSent)
-	}
-	if errors.Is(err, errDropped) {
-		return nil
+	finish := sse.expireWhenDone(ctx)
+	err = s.deliver(ctx, sse, p, live)
+	if ferr := finish(); err == nil {
+		err = ferr
 	}
 	return err
 }
 
-// drain sends p's stored entries after lastSent page by page, marks the edges of each sent
-// page noticed (the stream told the agent) and returns the last id sent. After each page it
-// discards the queued wake-up signals, since the next Read covers them, so a long drain
-// under a sender burst does not overflow the subscription.
+// deliver sends the backlog, then live entries, until the stream ends.
+func (s *Service) deliver(ctx context.Context, sse sseWriter, p auth.Principal, live <-chan []byte) error {
+	lastSent, err := s.drain(ctx, sse, p, live, 0)
+	if err != nil {
+		return err
+	}
+	return s.forwardLive(ctx, sse, p, live, lastSent)
+}
+
+// drain sends p's stored entries after lastSent page by page and returns the last id
+// sent. It re-validates p's token after reading and before sending what it read, so a
+// revocation that committed before an entry was stored is seen before that entry goes
+// out, and a woken stream of a dead token ends even when nothing in its scope arrived.
+// Only the empty read right after a page with no wake-up since is not checked, since that
+// page's check covered it: one token query per wake-up and per further page. After each
+// page it discards the queued wake-up signals, since the next Read covers them, so a long
+// drain under a sender burst does not overflow the subscription.
 func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, live <-chan []byte, lastSent int64) (int64, error) {
-	for {
+	for covered := false; ; {
 		page, err := s.Read(ctx, p, lastSent, MaxLimit)
 		if err != nil {
 			return lastSent, fmt.Errorf("reading inbox after %d: %w", lastSent, err)
 		}
-		if len(page) == 0 {
+		if covered && len(page) == 0 {
 			return lastSent, nil
 		}
-		for _, e := range page {
-			if err := sse.send(e); err != nil {
-				return lastSent, err
-			}
-			lastSent = e.ID
-		}
-		if err := s.MarkNoticed(ctx, p, page); err != nil {
+		if err := s.stillValid(ctx, p); err != nil || len(page) == 0 {
 			return lastSent, err
 		}
-		if !coalesce(live) {
+		if lastSent, err = s.sendPage(ctx, sse, p, page, lastSent); err != nil {
+			return lastSent, err
+		}
+		open, woken := coalesce(live)
+		if !open {
 			return lastSent, errDropped
 		}
+		covered = !woken
 	}
 }
 
-// forwardLive drains the inbox on every wake-up signal and pings while idle.
+// sendPage sends page, marks its edges noticed (the stream told the agent) and returns
+// the last id sent.
+func (s *Service) sendPage(ctx context.Context, sse sseWriter, p auth.Principal, page []Entry, lastSent int64) (int64, error) {
+	for _, e := range page {
+		if err := sse.send(e); err != nil {
+			return lastSent, err
+		}
+		lastSent = e.ID
+	}
+	return lastSent, s.MarkNoticed(ctx, p, page)
+}
+
+// forwardLive drains the inbox on every wake-up signal and pings while idle; each ping
+// re-validates p's token first, so an idle stream of a revoked token ends within one
+// heartbeat.
 func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Principal, live <-chan []byte, lastSent int64) error {
 	ping := time.NewTicker(s.heartbeat)
 	defer ping.Stop()
@@ -71,11 +96,14 @@ func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Princip
 		case <-ctx.Done():
 			return nil
 		case <-ping.C:
+			if err := s.stillValid(ctx, p); err != nil {
+				return err
+			}
 			if err := sse.ping(); err != nil {
 				return err
 			}
 		case _, ok := <-live:
-			if !ok || !coalesce(live) {
+			if open, _ := coalesce(live); !ok || !open {
 				return nil
 			}
 			var err error
@@ -87,16 +115,18 @@ func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Princip
 }
 
 // coalesce discards the wake-up signals already queued, since the next drain or page
-// read covers them all. It reports false if the subscription closed.
-func coalesce(live <-chan []byte) bool {
+// read covers them all. It reports whether the subscription is still open and whether it
+// discarded a signal.
+func coalesce(live <-chan []byte) (open, woken bool) {
 	for {
 		select {
 		case _, ok := <-live:
 			if !ok {
-				return false
+				return false, woken
 			}
+			woken = true
 		default:
-			return true
+			return true, woken
 		}
 	}
 }
