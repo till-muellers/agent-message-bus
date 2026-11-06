@@ -3,11 +3,11 @@ package migrations_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io/fs"
 	"maps"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -38,12 +38,12 @@ INSERT INTO invites (hash, space_id, name, expires_at, invited_by, id) VALUES ('
 func TestAutoincrementIDsMigration(t *testing.T) {
 	t.Parallel()
 	conn := seededBefore(t, autoincrement)
-	seeded := rowCounts(t, conn)
+	seeded, shape := rowCounts(t, conn), tableShapes(t, conn)
 	migrateWith(t, conn, migrations.FS)
 	if got := rowCounts(t, conn); !maps.Equal(got, seeded) {
 		t.Fatalf("rows after the migration = %v, want %v", got, seeded)
 	}
-	wantAutoincrement(t, conn, true)
+	wantShapes(t, conn, shape)
 	if ids := queryColumn[int](t, conn, `SELECT id FROM threads ORDER BY id`); !slices.Equal(ids, []int{3, 4}) {
 		t.Fatalf("thread ids = %v, want [3 4]", ids)
 	}
@@ -64,7 +64,7 @@ func TestAutoincrementIDsMigration(t *testing.T) {
 func TestAutoincrementIDsMigrationReverts(t *testing.T) {
 	t.Parallel()
 	conn := seededBefore(t, autoincrement)
-	seeded := rowCounts(t, conn)
+	seeded, shape := rowCounts(t, conn), tableShapes(t, conn)
 	up := migrationFile(t, autoincrement+".up.sql")
 	withRevert := before(t, autoincrement+".up.sql")
 	withRevert[up] = &fstest.MapFile{Data: readMigration(t, up)}
@@ -73,12 +73,19 @@ func TestAutoincrementIDsMigrationReverts(t *testing.T) {
 	if got := rowCounts(t, conn); !maps.Equal(got, seeded) {
 		t.Fatalf("rows after reverting = %v, want %v", got, seeded)
 	}
-	wantAutoincrement(t, conn, false)
+	wantShapes(t, conn, shape)
 	if n := queryColumn[int](t, conn, `SELECT COUNT(*) FROM sqlite_sequence WHERE name IN ('spaces', 'threads')`); n[0] != 0 {
 		t.Fatalf("sqlite_sequence rows of spaces and threads = %d, want 0", n[0])
 	}
 	mustExec(t, conn, `DELETE FROM spaces WHERE id = 2`)
 	wantCascaded(t, conn)
+	mustExec(t, conn, `INSERT INTO spaces (name, created_by, created_at) VALUES ('next', 1, 't')`)
+	if id := queryColumn[int](t, conn, `SELECT id FROM spaces WHERE name = 'next'`); id[0] != 2 {
+		t.Fatalf("new space id = %v, want 2 again (plain INTEGER PRIMARY KEY)", id)
+	}
+	if n := queryColumn[int](t, conn, `SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'spaces'`); n[0] != 0 {
+		t.Fatalf("sqlite_sequence rows of spaces after an insert = %d, want 0 (plain INTEGER PRIMARY KEY)", n[0])
+	}
 }
 
 // seededBefore returns a database migrated up to the migration whose name ends in
@@ -131,15 +138,56 @@ func rowCounts(t *testing.T, conn *sql.DB) map[string]int {
 	return out
 }
 
-// wantAutoincrement asserts whether spaces and threads are declared AUTOINCREMENT.
-func wantAutoincrement(t *testing.T, conn *sql.DB, want bool) {
+// tableShapes returns the columns, foreign keys and indexes of spaces and threads.
+func tableShapes(t *testing.T, conn *sql.DB) map[string][]string {
 	t.Helper()
+	out := map[string][]string{}
 	for _, table := range []string{"spaces", "threads"} {
-		ddl := queryColumn[string](t, conn, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '`+table+`'`)
-		if len(ddl) != 1 || strings.Contains(ddl[0], "AUTOINCREMENT") != want {
-			t.Fatalf("%s ddl = %q, want AUTOINCREMENT %v", table, ddl, want)
-		}
+		out[table] = slices.Concat(
+			queryRows(t, conn, `SELECT * FROM pragma_table_xinfo(?)`, table),
+			queryRows(t, conn, `SELECT * FROM pragma_foreign_key_list(?)`, table),
+			queryRows(t, conn, `SELECT l.name, l."unique", l.origin, l.partial, x.*
+				FROM pragma_index_list(?) AS l, pragma_index_xinfo(l.name) AS x ORDER BY l.name, x.seqno`, table))
 	}
+	return out
+}
+
+// wantShapes asserts that spaces and threads still have the shape tableShapes recorded.
+func wantShapes(t *testing.T, conn *sql.DB, want map[string][]string) {
+	t.Helper()
+	if got := tableShapes(t, conn); !maps.EqualFunc(got, want, slices.Equal) {
+		t.Fatalf("table shapes = %q, want %q", got, want)
+	}
+}
+
+// queryRows returns every row of query, each formatted as its space-separated values.
+func queryRows(t *testing.T, conn *sql.DB, query string, args ...any) []string {
+	t.Helper()
+	rows, err := conn.QueryContext(context.Background(), query, args...)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	cols, err := rows.Columns()
+	if err != nil {
+		t.Fatalf("columns: %v", err)
+	}
+	var out []string
+	for rows.Next() {
+		values := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range values {
+			ptrs[i] = &values[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		out = append(out, fmt.Sprint(values))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	return out
 }
 
 // wantCascaded asserts that deleting space 2 removed every row that hung off it.
