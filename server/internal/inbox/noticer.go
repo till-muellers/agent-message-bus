@@ -14,11 +14,17 @@ type Noticer interface {
 
 // NoticeAfter returns p's pending notice once a tool call has succeeded, for the transport
 // to attach to the result. The call already ran, so a failed notice query is logged, not
-// returned: the edge stays unnoticed and a later result carries it.
+// returned: the edge stays unnoticed and a later result carries it. A caller that went
+// away (ctx done) gets no notice and no log line: nothing would reach it.
 func NoticeAfter(ctx context.Context, n Noticer, p auth.Principal) (Notice, bool) {
+	if ctx.Err() != nil {
+		return Notice{}, false
+	}
 	notice, due, err := n.TakeNotice(ctx, p)
 	if err != nil {
-		slog.ErrorContext(ctx, "taking mail notice failed", "agent_id", p.AgentID, "err", err)
+		if ctx.Err() == nil {
+			slog.ErrorContext(ctx, "taking mail notice failed", "agent_id", p.AgentID, "err", err)
+		}
 		return Notice{}, false
 	}
 	return notice, due
