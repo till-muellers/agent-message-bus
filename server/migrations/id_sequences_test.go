@@ -23,6 +23,8 @@ func TestIDSequencesMigration(t *testing.T) {
 		want               int
 	}{
 		{"thread removed before 0005_autoincrement_ids", autoincrement, removedThread, 10},
+		{"no thread left at 0005_autoincrement_ids", autoincrement, removedThread + `
+DELETE FROM threads;`, 10},
 		{"sequence already past the removed thread", "_id_sequences", removedThread + `
 INSERT INTO threads (id, blackboard_id, title, created_by, created_at) VALUES (12, 7, 'later', 1, 't');
 DELETE FROM threads WHERE id = 12;`, 13},

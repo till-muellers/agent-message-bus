@@ -83,6 +83,9 @@ func TestAutoincrementIDsMigrationReverts(t *testing.T) {
 	if id := queryColumn[int](t, conn, `SELECT id FROM spaces WHERE name = 'next'`); id[0] != 2 {
 		t.Fatalf("new space id = %v, want 2 again (plain INTEGER PRIMARY KEY)", id)
 	}
+	if n := queryColumn[int](t, conn, `SELECT COUNT(*) FROM sqlite_sequence WHERE name = 'spaces'`); n[0] != 0 {
+		t.Fatalf("sqlite_sequence rows of spaces after an insert = %d, want 0 (plain INTEGER PRIMARY KEY)", n[0])
+	}
 }
 
 // seededBefore returns a database migrated up to the migration whose name ends in
