@@ -9,31 +9,43 @@ import (
 
 const logTailLines = 20
 
-// Start launches a detached instance unless one is live and waits until it is healthy.
+// Start launches a detached instance unless one runs and waits until an instance serves the
+// data dir. A running instance not yet confirmed at its url is waited for, not reported.
 func (m Manager) Start(ctx context.Context) error {
-	if st, live, err := Find(ctx, m.Client, m.dir()); err != nil || live {
-		if live {
-			_, _ = fmt.Fprintf(m.Out, "agent-message-bus already running (pid %d) at %s\n", st.PID, st.URL)
-		}
+	inst, err := m.settled(ctx)
+	if err != nil {
 		return err
+	}
+	if inst.Running {
+		_, _ = fmt.Fprintln(m.Out, alreadyRunning(inst))
+		return nil
 	}
 	if err := os.MkdirAll(m.dir(), 0o750); err != nil {
 		return fmt.Errorf("creating data dir %s: %w", m.dir(), err)
 	}
-	if _, err := m.Spawn(m.logPath()); err != nil {
+	pid, err := m.Spawn(m.logPath())
+	if err != nil {
 		return fmt.Errorf("spawning server: %w", err)
 	}
-	var st State
-	ready := m.waitUntil(ctx, func() bool {
-		s, live, _ := Find(ctx, m.Client, m.dir())
-		st = s
-		return live
-	})
-	if !ready {
+	return m.awaitStart(ctx, pid)
+}
+
+// awaitStart waits until an instance serves the data dir: the spawned pid, or another one that
+// claimed the dir first, which the spawned server then leaves to it.
+func (m Manager) awaitStart(ctx context.Context, pid int) error {
+	inst, ok, err := m.watch(ctx, Instance.Serving)
+	if err != nil {
+		return err
+	}
+	if !ok {
 		return fmt.Errorf("agent-message-bus did not become healthy within %s; log tail (%s):\n%s",
 			m.Timeout, m.logPath(), logTail(m.logPath()))
 	}
-	_, _ = fmt.Fprintf(m.Out, "agent-message-bus started (pid %d) at %s; log: %s\n", st.PID, st.URL, m.logPath())
+	if inst.State.PID != pid {
+		_, _ = fmt.Fprintln(m.Out, alreadyRunning(inst))
+		return nil
+	}
+	_, _ = fmt.Fprintf(m.Out, "agent-message-bus started (pid %d) at %s; log: %s\n", pid, inst.State.URL, m.logPath())
 	return nil
 }
 

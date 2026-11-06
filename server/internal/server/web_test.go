@@ -25,7 +25,7 @@ type webWorld struct {
 func newWebWorld(t *testing.T, tls bool) *webWorld {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	h, err := server.Build(ctx, dbtest.Open(t), adminToken, func() {})
+	h, err := server.Build(ctx, dbtest.Open(t), adminToken, instanceID, func() {})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

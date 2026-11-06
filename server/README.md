@@ -25,7 +25,7 @@ agent-message-bus rotate-token   # new admin token, applied live and saved
 agent-message-bus stop           # graceful via POST /v1/admin/shutdown, kill on fallback
 ```
 
-One instance runs per data dir. While it runs, `<datadir>/agent-message-bus.state.json` holds its pid and url; `start` appends output to `<datadir>/agent-message-bus.log`. A foreground run fails with `agent-message-bus already running (pid N) at <url>` while an instance is live; a stale state file is removed. `--help` prints usage.
+One instance runs per data dir: the server holds the OS lock `<datadir>/agent-message-bus.lock` while it runs, and `<datadir>/agent-message-bus.state.json` holds its pid, url and instance id; `start` appends output to `<datadir>/agent-message-bus.log`. A foreground run fails with `agent-message-bus already running (pid N) at <url>` (or `… (state pending)` before that instance has published its url) while an instance holds the lock; with the lock free, a leftover state file is stale and removed. `--help` prints usage.
 
 |Env|Default|Meaning|
 |---|---|---|
@@ -34,7 +34,7 @@ One instance runs per data dir. While it runs, `<datadir>/agent-message-bus.stat
 |`AMB_WEB_ADDR`|`127.0.0.1:8081`|Web GUI listen address (`host:port`; empty or `off` disables the GUI). It must differ from `AMB_ADDR`; the GUI is served only here and the API listener has no `/web` route.|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its directory is created if missing. `<datadir>`: Windows `%LOCALAPPDATA%\agent-message-bus`; macOS `~/Library/Application Support/agent-message-bus`; others `$XDG_DATA_HOME/agent-message-bus`, else `~/.local/share/agent-message-bus`.|
 
-**Upgrade.** Pre-release databases are not upgraded: stop the server and delete `agent-message-bus.db`, `-wal` and `-shm` before starting this version.
+**Upgrade.** Stop a running instance with the binary that started it before you run any command of a newer one: the commands find instances by their data dir lock, which older binaries don't take, so a newer binary treats the older instance's state file as stale and removes it. Pre-release databases are not upgraded: stop the server and delete `agent-message-bus.db`, `-wal` and `-shm` before starting this version.
 
 Optional Docker (local build, no registry; the image sets `AMB_DB_PATH=/data/agent-message-bus.db`). Build the GUI before `docker build`: the image embeds the web GUI from `internal/web/dist/`, and without that step it serves the fallback page.
 
@@ -59,7 +59,7 @@ Tokens don't expire; invite codes do. `bus_revoke_member` is idempotent: it remo
 
 |Route|Auth|Purpose|
 |---|---|---|
-|`GET /healthz`|none|Liveness; returns `ok`.|
+|`GET /healthz`|none|Liveness; returns `ok`, the protocol in `Agent-Bus-Protocol` and the instance id in `Agent-Bus-Instance`.|
 |`POST /mcp`|bearer|MCP streamable HTTP (stateless): the tools, with the agent guide as the server `instructions`.|
 |`GET /v1/tools`|bearer|Tool list: `[{name, description, inputSchema}]`.|
 |`POST /v1/tools/{name}`|bearer|Call a tool. The body is the JSON args. Success returns `{"result": …}`, plus `"mail": {"waiting","critical","spaces"}` on the first result after new mail ("You have mail", see [TOOLS.md](TOOLS.md)); failure returns `{"error":{"code","message"}}`.|
@@ -146,5 +146,5 @@ Layout:
 |`internal/{auth,inbox,spaces,invites,messaging,blackboards}/`|Features. `service.go` holds the logic and `repository.go` holds all SQL. Each feature writes only its own tables; cross-feature effects go through hooks and service methods.|
 |`internal/domain/`|Business rules shared by features (name pattern, body and title limits).|
 |`internal/platform/`|Shared infrastructure: `db` (`DBTX`, `InTx`, `InsertID`, `QueryIDs`, `Timestamp`, migrations), `broker`, `httpx`, `httpserver`, `config`, `apperr`, `instance`, `detach` (launches the server as a background process), plus the test helpers `dbtest` and `apperrtest`.|
-|`internal/platform/instance/`|Local instance management: state file, start/stop/status, admin token file and rotation.|
+|`internal/platform/instance/`|Local instance management: data dir lock (per OS: `lock_windows.go`, `lock_unix.go`), state file, start/stop/status, admin token file and rotation.|
 |`migrations/`|Numbered SQL files; never edit an applied one. `0001_schema.up.sql` is the irreversible baseline (no `.down.sql`); every later migration has a `.down.sql`.|

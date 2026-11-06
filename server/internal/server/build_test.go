@@ -12,10 +12,14 @@ import (
 	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/db/dbtest"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/instance"
 	"github.com/till-muellers/agent-message-bus/server/internal/server"
 )
 
-const adminToken = "admin-token-0123456789-0123456789-abcdef"
+const (
+	adminToken = "admin-token-0123456789-0123456789-abcdef"
+	instanceID = "instance-under-test"
+)
 
 func newServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -28,7 +32,7 @@ func newServer(t *testing.T) *httptest.Server {
 // mustBuild builds the server on a fresh database, fails the test on error and returns the API handler.
 func mustBuild(ctx context.Context, t *testing.T, shutdown func()) http.Handler {
 	t.Helper()
-	h, err := server.Build(ctx, dbtest.Open(t), adminToken, shutdown)
+	h, err := server.Build(ctx, dbtest.Open(t), adminToken, instanceID, shutdown)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -207,7 +211,7 @@ func TestBuildBootstrapError(t *testing.T) {
 	t.Parallel()
 	conn := dbtest.Open(t)
 	dbtest.SeedAgent(t, conn, 1, "admin", "leader")
-	_, err := server.Build(context.Background(), conn, adminToken, func() {})
+	_, err := server.Build(context.Background(), conn, adminToken, instanceID, func() {})
 	if err == nil || !strings.Contains(err.Error(), "agent admin is a leader agent") {
 		t.Fatalf("Build err = %v, want the bootstrap conflict", err)
 	}
@@ -223,6 +227,21 @@ func TestHealthzProtocolHeader(t *testing.T) {
 	defer func() { _ = res.Body.Close() }()
 	if got := res.Header.Get("Agent-Bus-Protocol"); got != "2" {
 		t.Fatalf("Agent-Bus-Protocol = %q, want 2", got)
+	}
+}
+
+// TestHealthzNamesInstance: /healthz names the serving instance, so the CLI acts only on the
+// instance its state file describes.
+func TestHealthzNamesInstance(t *testing.T) {
+	t.Parallel()
+	srv := newServer(t)
+	res, err := srv.Client().Get(srv.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if got := res.Header.Get(instance.IDHeader); got != instanceID {
+		t.Fatalf("%s = %q, want %q", instance.IDHeader, got, instanceID)
 	}
 }
 

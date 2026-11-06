@@ -24,7 +24,7 @@ const usage = `Usage: agent-message-bus [command]
 
 Serves the agent message bus (MCP at /mcp, RPC at /v1/tools, SSE at /v1/inbox/stream, /healthz)
 and the web GUI at /web/ on its own address (AMB_WEB_ADDR).
-One instance runs per data dir.
+One instance runs per data dir: it holds <datadir>/agent-message-bus.lock while it runs.
 
 Commands:
   (none)          serve in the foreground; Ctrl+C or SIGTERM shuts down gracefully
@@ -48,7 +48,8 @@ Environment:
                    Windows: %LOCALAPPDATA%\agent-message-bus
                    macOS:   ~/Library/Application Support/agent-message-bus
                    others:  $XDG_DATA_HOME/agent-message-bus or ~/.local/share/agent-message-bus)
-                   The state file agent-message-bus.state.json lives next to it.
+                   The lock file agent-message-bus.lock and the state file
+                   agent-message-bus.state.json live next to it.
 `
 
 const waitTimeout = 10 * time.Second
@@ -108,13 +109,17 @@ func manager(cfg config.Config) instance.Manager {
 	}
 }
 
+// run serves in the foreground. The data dir lock comes first and stays held until run
+// returns: one instance per data dir, even when two start at once.
 func run(ctx context.Context, cfg config.Config) error {
+	lock, err := instance.Claim(ctx, http.DefaultClient, cfg.DataDir())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Release() }() // the OS releases it at exit anyway
 	token, err := cfg.ResolveAdminToken()
 	if err != nil {
 		return fmt.Errorf("admin token: %w", err)
-	}
-	if err := instance.EnsureNotRunning(ctx, http.DefaultClient, cfg.DataDir()); err != nil {
-		return err
 	}
 	conn, err := db.Open(ctx, cfg.DBPath)
 	if err != nil {
@@ -124,5 +129,5 @@ func run(ctx context.Context, cfg config.Config) error {
 	if err := db.Migrate(ctx, conn, migrations.FS); err != nil {
 		return fmt.Errorf("migrate db: %w", err)
 	}
-	return server.Serve(ctx, cfg, conn, token)
+	return server.Serve(ctx, cfg, conn, token, lock)
 }
