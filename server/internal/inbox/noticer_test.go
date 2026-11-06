@@ -1,8 +1,11 @@
 package inbox_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"reflect"
 	"testing"
 
@@ -61,5 +64,30 @@ func TestNoticeAfterCancelledContextSkipsTheQuery(t *testing.T) {
 	notice, due := inbox.NoticeAfter(ctx, n, auth.Principal{AgentID: 7})
 	if due || !reflect.DeepEqual(notice, inbox.Notice{}) || n.calls != 0 {
 		t.Fatalf("NoticeAfter(cancelled) = %+v, %v after %d queries; want {}, false without a query", notice, due, n.calls)
+	}
+}
+
+// cancellingNoticer is a client leaving while the notice query runs.
+type cancellingNoticer struct{ cancel context.CancelFunc }
+
+func (c cancellingNoticer) TakeNotice(ctx context.Context, _ auth.Principal) (inbox.Notice, bool, error) {
+	c.cancel()
+	return inbox.Notice{}, false, fmt.Errorf("beginning transaction: %w", ctx.Err())
+}
+
+// TestNoticeAfterCancelledMidQueryLogsNothing swaps the default logger, so it must not
+// run in parallel.
+func TestNoticeAfterCancelledMidQueryLogsNothing(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	if _, due := inbox.NoticeAfter(ctx, cancellingNoticer{cancel: cancel}, auth.Principal{AgentID: 7}); due {
+		t.Fatal("NoticeAfter reported a notice for a cancelled query")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("log = %s, want nothing", buf.String())
 	}
 }
