@@ -1,0 +1,2 @@
+-- No-op: the raised threads sequence stays. Lowering it again would hand out the ids of removed threads
+-- that inbox entries still name; reverting 0005_autoincrement_ids next deletes the row anyway.

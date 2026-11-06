@@ -59,9 +59,10 @@ Feature: One fresh schema as the service's first iteration
 
   Rule: A deleted space or thread never gives its id to a new one
 
-    # spaces.id and threads.id are AUTOINCREMENT (migration NNNN_autoincrement_ids), so a
+    # spaces.id and threads.id are AUTOINCREMENT (migration 0005_autoincrement_ids), so a
     # member token, inbox scope or stream of a deleted space never matches a later space,
-    # and an old threadId never opens another thread.
+    # and an old threadId never opens another thread. 0006_id_sequences raises the threads
+    # sequence past every thread id an inbox entry still names.
 
     Scenario: A space created after the newest space was deleted gets a new id
       Given leader "lead" created space "oldsp"
@@ -80,11 +81,26 @@ Feature: One fresh schema as the service's first iteration
       And bus_read_thread with the removed threadId fails with not_found "thread <id> not found"
 
     Scenario: The migration keeps every row, id and foreign key
-      Given a database before NNNN_autoincrement_ids with rows in every table
+      Given a database before 0005_autoincrement_ids with rows in every table
       When the server starts
       Then every table holds the same rows, spaces and threads with the same ids
+      And spaces and threads have the same columns, foreign keys and indexes
       And deleting a space still deletes its tokens, participants, topics, blackboards, threads, posts, subscriptions, inbox entries and invites
-      And its down migration restores the plain INTEGER PRIMARY KEY and keeps every row
+      And its down migration, run with foreign keys off, restores the plain INTEGER PRIMARY KEY with the same columns, foreign keys and indexes and keeps every row
+
+    Scenario: A thread removed before 0005_autoincrement_ids never gives its id to a new thread
+      Given a database before 0005_autoincrement_ids whose thread 9 was removed
+      And a thread_removed entry for thread 9 is still in a mailbox
+      When the server starts
+      And a new thread is created
+      Then the new thread gets id 10
+
+    Scenario: 0006_id_sequences never lowers a thread sequence
+      Given a database at 0005_autoincrement_ids whose threads sequence is 12
+      And the highest thread id an inbox entry names is 9
+      When the server starts
+      And a new thread is created
+      Then the new thread gets id 13
 
   Rule: A binary refuses a database migrated by a newer binary
 
