@@ -33,6 +33,8 @@ Feature: Transports
 
   Rule: Bearer authentication on the web API
 
+    # One parser for every route on both listeners (/v1/*, /mcp, /v1/invites/accept,
+    # POST /web/session): "Bearer", in any case, then whitespace, then exactly one token.
     Scenario Outline: Authorization header "<header>"
       When a client calls GET /v1/tools with Authorization header "<header>"
       Then the response status is <status>
@@ -41,10 +43,14 @@ Feature: Transports
       Examples:
         | header                  | status | outcome                                     |
         | Bearer <admin token>    | 200    | absent; the caller is the admin             |
+        | bearer <admin token>    | 200    | absent; the scheme matches in any case      |
+        | BEARER <leader token>   | 200    | absent; the caller is the leader            |
+        | Bearer  <leader token>  | 200    | absent; any whitespace after the scheme     |
         | Bearer <leader token>   | 200    | absent; the caller is the leader            |
         |                         | 401    | unauthenticated "bearer token required"     |
         | Basic <leader token>    | 401    | unauthenticated "bearer token required"     |
         | Bearer                  | 401    | unauthenticated "bearer token required"     |
+        | Bearer a b              | 401    | unauthenticated "bearer token required"     |
         | Bearer amb_nope         | 401    | unauthenticated "invalid token"             |
 
     Scenario: Calling a tool without a token
@@ -254,13 +260,16 @@ Feature: Transports
       And the error is logged on the server
 
     Scenario Outline: MCP bearer authentication (<case>)
+      # /mcp parses the header and rejects exactly like the /v1 routes (see the bearer table).
       When a client connects to /mcp <how>
       Then the HTTP request is rejected with status 401
+      And the body is the JSON error envelope unauthenticated "<message>"
 
       Examples:
-        | case        | how                                  |
-        | no token    | without an Authorization header      |
-        | bad token   | with bearer token "amb_nope"         |
+        | case         | how                                  | message               |
+        | no token     | without an Authorization header      | bearer token required |
+        | other scheme | with Authorization "Basic <token>"   | bearer token required |
+        | bad token    | with bearer token "amb_nope"         | invalid token         |
 
     Scenario: MCP tokens are the same tokens as the web API
       When a client connects to /mcp with the admin token or a leader or member token

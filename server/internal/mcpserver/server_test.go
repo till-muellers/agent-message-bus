@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -151,4 +152,55 @@ func TestNoTokenRejected(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected failure without token")
 	}
+}
+
+// /mcp rejects like every other route: the §0 JSON envelope, parsed by auth.BearerToken.
+func TestUnauthenticatedEnvelope(t *testing.T) {
+	url, tok := setup(t, testRegistry())
+	tests := []struct {
+		name, header string
+		wantStatus   int
+		wantBody     string
+	}{
+		{"no token", "", 401, `{"error":{"code":"unauthenticated","message":"bearer token required"}}`},
+		{"bad token", "Bearer amb_nope", 401, `{"error":{"code":"unauthenticated","message":"invalid token"}}`},
+		{"other scheme", "Basic " + tok, 401, `{"error":{"code":"unauthenticated","message":"bearer token required"}}`},
+		{"lower-case scheme", "bearer " + tok, 200, `"result"`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			status, ctype, body := postPing(t, url, tc.header)
+			if status != tc.wantStatus || !strings.Contains(body, tc.wantBody) {
+				t.Fatalf("got %d %s, want %d %s", status, body, tc.wantStatus, tc.wantBody)
+			}
+			if status == 401 && ctype != "application/json" {
+				t.Fatalf("Content-Type %q, want application/json", ctype)
+			}
+		})
+	}
+}
+
+// postPing sends a JSON-RPC ping to url with the Authorization header (none when empty).
+func postPing(t *testing.T, url, header string) (status int, contentType, body string) {
+	t.Helper()
+	ping := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, ping)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if header != "" {
+		req.Header.Set("Authorization", header)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.StatusCode, res.Header.Get("Content-Type"), string(b)
 }

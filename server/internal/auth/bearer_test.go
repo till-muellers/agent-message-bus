@@ -18,6 +18,12 @@ func TestBearerToken(t *testing.T) {
 		{name: "missing", header: ""},
 		{name: "wrong scheme", header: "Basic amb_x"},
 		{name: "empty bearer", header: "Bearer "},
+		{name: "lower-case scheme", header: "bearer amb_x", want: "amb_x"},
+		{name: "upper-case scheme", header: "BEARER amb_x", want: "amb_x"},
+		{name: "two spaces", header: "Bearer  amb_x", want: "amb_x"},
+		{name: "tab", header: "Bearer\tamb_x", want: "amb_x"},
+		{name: "two tokens", header: "Bearer amb_x amb_y"},
+		{name: "scheme prefix only", header: "Bearerx amb_x"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

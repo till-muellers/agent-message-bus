@@ -22,8 +22,9 @@ import (
 // errInternal is the protocol error of a failure without apperr kind; the detail stays in the log.
 var errInternal = errors.New("internal error")
 
-// NewHandler returns a bearer-authenticated, stateless MCP HTTP handler serving reg. A
-// successful tool result gains a trailing "You have mail" text block when notices has one.
+// NewHandler returns a stateless MCP HTTP handler serving reg behind auth.Service.Middleware,
+// so /mcp parses and rejects bearer tokens like every other route. A successful tool result
+// gains a trailing "You have mail" text block when notices has one.
 // Every client receives the agent guide as the server instructions.
 func NewHandler(reg *tools.Registry, a *auth.Service, notices inbox.Noticer) http.Handler {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "agent-message-bus", Version: "1"},
@@ -33,8 +34,8 @@ func NewHandler(reg *tools.Registry, a *auth.Service, notices inbox.Noticer) htt
 	}
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
-	mw := sdkauth.RequireBearerToken(verifier(a), &sdkauth.RequireBearerTokenOptions{AllowMissingExpiration: true})
-	return mw(h)
+	mw := sdkauth.RequireBearerToken(verifier, &sdkauth.RequireBearerTokenOptions{AllowMissingExpiration: true})
+	return a.Middleware(mw(h))
 }
 
 func handler(reg *tools.Registry, name string, notices inbox.Noticer) mcp.ToolHandler {

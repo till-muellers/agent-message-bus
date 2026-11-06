@@ -8,26 +8,23 @@ import (
 	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
-	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 )
 
 const principalKey = "principal"
 
-// verifier adapts auth.Service.Authenticate to the SDK bearer-token verifier.
-func verifier(a *auth.Service) sdkauth.TokenVerifier {
-	return func(ctx context.Context, token string, _ *http.Request) (*sdkauth.TokenInfo, error) {
-		p, err := a.Authenticate(ctx, token)
-		if k, ok := apperr.KindOf(err); ok && k == apperr.Unauthenticated {
-			return nil, fmt.Errorf("%w: %v", sdkauth.ErrInvalidToken, err)
-		}
-		if err != nil {
-			return nil, fmt.Errorf("authenticating: %w", err)
-		}
-		return &sdkauth.TokenInfo{
-			UserID: fmt.Sprintf("%s:%d", p.Kind, p.AgentID),
-			Extra:  map[string]any{principalKey: p},
-		}, nil
+// verifier hands the principal that auth.Service.Middleware stored in the request context to
+// the SDK, which passes it on to the tool handlers. The middleware already rejected every
+// request without a valid token with the §0 envelope; a request without a principal can only
+// come from wiring without it.
+func verifier(_ context.Context, _ string, r *http.Request) (*sdkauth.TokenInfo, error) {
+	p, ok := auth.FromContext(r.Context())
+	if !ok {
+		return nil, sdkauth.ErrInvalidToken
 	}
+	return &sdkauth.TokenInfo{
+		UserID: fmt.Sprintf("%s:%d", p.Kind, p.AgentID),
+		Extra:  map[string]any{principalKey: p},
+	}, nil
 }
 
 // principalOf extracts the principal stored by verifier.
