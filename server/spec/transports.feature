@@ -52,6 +52,15 @@ Feature: Transports
       Then the response status is 401
       And the call fails with unauthenticated "bearer token required"
 
+    Scenario: An early error reaches a client whose body arrives after the headers
+      # Applies to every route on both listeners: any answer given without reading the body
+      # (401, 403, 404, 405). The server reads up to 1 MiB of the unread body, waiting at most
+      # 5 s, before it closes the connection.
+      When a client sends POST /v1/tools/bus_whoami with "Connection: close" and Authorization header "Bearer amb_nope"
+      And it sends the 5-byte body only after the server answered
+      Then the client reads the response status 401 instead of a connection reset
+      And the call fails with unauthenticated "invalid token"
+
   Rule: Listing tools (GET /v1/tools)
 
     Scenario: The list holds all 34 tools sorted by name
