@@ -63,16 +63,24 @@ func TestStart(t *testing.T) {
 		name          string
 		kind          instanceKind
 		failures      int32 // /healthz probes the running instance fails first
-		spawnedPID    int   // pid the spawned server publishes; 0: none becomes healthy
+		holds, down   bool  // the spawned server takes the data dir lock; it never answers /healthz
+		spawnedPID    int   // pid in the state file the spawned server publishes; 0: none
+		wantKill      bool  // start kills the spawned pid 9 on its timeout
 		wantErr, want string
 	}{
 		{name: "already running", kind: serving, want: "agent-message-bus already running (pid 7) at http://"},
 		{name: "running, confirmed while start waits", kind: serving, failures: 3,
 			want: "agent-message-bus already running (pid 7) at http://"},
 		{name: "running, pending for the whole timeout", kind: pending, wantErr: "is running (state pending)"},
-		{name: "started", spawnedPID: 9, want: "agent-message-bus started (pid 9) at http://"},
-		{name: "another start won the race", spawnedPID: 5, want: "agent-message-bus already running (pid 5) at http://"},
-		{name: "timeout", wantErr: "did not become healthy within 500ms; log tail"},
+		{name: "started", holds: true, spawnedPID: 9, want: "agent-message-bus started (pid 9) at http://"},
+		{name: "another start won the race", holds: true, spawnedPID: 5, want: "agent-message-bus already running (pid 5) at http://"},
+		{name: "timeout, the server exited", wantErr: "did not become healthy within 500ms; log tail"},
+		{name: "timeout, the server holds the data dir unpublished", holds: true, wantKill: true,
+			wantErr: "did not become healthy within 500ms and was stopped (pid 9); log tail"},
+		{name: "timeout, the server published but doesn't answer", holds: true, down: true, spawnedPID: 9, wantKill: true,
+			wantErr: "did not become healthy within 500ms and was stopped (pid 9); log tail"},
+		{name: "timeout, another pid's unanswered state", holds: true, down: true, spawnedPID: 5,
+			wantErr: "did not become healthy within 500ms; log tail"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -80,19 +88,17 @@ func TestStart(t *testing.T) {
 			m, out := newManager(t, "")
 			f := setUp(t, m, tc.kind, true)
 			f.failures.Store(tc.failures)
-			spawned := false
+			spawned, killed := false, 0
 			m.Spawn = func(logPath string) (int, error) {
 				spawned = true
 				_ = os.WriteFile(logPath, []byte("boom line\n"), 0o600)
-				if tc.spawnedPID != 0 {
-					f.adopt(mustClaim(t, m.dir()))
-					f.publish(t, tc.spawnedPID)
-				}
+				spawn(t, f, tc.holds, tc.down, tc.spawnedPID)
 				return 9, nil
 			}
+			m.Kill = func(pid int) error { killed = pid; f.crash(); return nil }
 			err := m.Start(context.Background())
-			if spawned != (tc.kind == none) {
-				t.Fatalf("spawned = %v with a running instance = %v", spawned, tc.kind != none)
+			if spawned != (tc.kind == none) || (killed == 9) != tc.wantKill {
+				t.Fatalf("spawned = %v, killed %d", spawned, killed)
 			}
 			expectResult(t, err, tc.wantErr, out.String(), tc.want)
 			if spawned && err != nil && !strings.Contains(err.Error(), "boom line") {
@@ -100,6 +106,18 @@ func TestStart(t *testing.T) {
 			}
 		})
 	}
+}
+
+// spawn plays the spawned server on f: it takes the data dir lock and publishes pid, or not.
+func spawn(t *testing.T, f *fakeBus, holds, down bool, pid int) {
+	t.Helper()
+	if holds {
+		f.adopt(mustClaim(t, f.dir))
+	}
+	if pid != 0 {
+		f.publish(t, pid)
+	}
+	f.healthy.Store(!down)
 }
 
 func TestStop(t *testing.T) {

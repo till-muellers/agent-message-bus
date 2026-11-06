@@ -26,6 +26,13 @@ Feature: Local instance management
       And the state file holds its pid and url
       And the output is "agent-message-bus started (pid <pid>) at <url>; log: <datadir>/agent-message-bus.log"
 
+    Scenario: start stops its server when it does not become healthy
+      Given the started server takes the data dir lock but never answers /healthz with its instance id
+      When I run "agent-message-bus start"
+      Then after 10 s the spawned server process is killed
+      And start fails with "agent-message-bus did not become healthy within 10s and was stopped (pid <pid>); log tail (<datadir>/agent-message-bus.log):" and the log tail
+      And a server that exited on its own, or a lock holder whose state file names another pid, is not killed
+
     Scenario: start is idempotent
       Given an instance is running with pid 42 at "http://127.0.0.1:8080"
       When I run "agent-message-bus start"
