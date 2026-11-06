@@ -275,6 +275,29 @@ Feature: Transports
       When a client connects to /mcp with the admin token or a leader or member token
       Then its tool calls run as that admin, leader or member
 
+    Scenario Outline: /mcp ignores the Host header on a loopback connection (<host>)
+      # A TLS reverse proxy on the same host reaches the default loopback listener and forwards the
+      # public Host. The Host decides nothing, on /mcp as on /v1: the MCP SDK's DNS-rebinding guard
+      # (403 text/plain "Forbidden: invalid Host header") is off, because it runs after the bearer
+      # check and a rebinding page can't present a token (a browser never adds the Authorization
+      # header by itself; the API listener sends no CORS headers and accepts no cookie).
+      Given the bus listens on a loopback address
+      When a client connected to that address sends POST /mcp with the Host header "<host>" and a leader token
+      Then the response status is 200
+      And the MCP calls of that client succeed as with any other Host
+
+      Examples:
+        | host              |
+        | bus.example.com   |
+        | example.com:8443  |
+        | localhost:8080    |
+
+    Scenario: A foreign Host does not replace the bearer token
+      Given the bus listens on a loopback address
+      When a client connected to that address sends POST /mcp with the Host header "bus.example.com" and no Authorization header
+      Then the HTTP request is rejected with status 401
+      And the body is the JSON error envelope unauthenticated "bearer token required"
+
   Rule: Admin endpoints are loopback-only and need the admin token
 
     # POST /v1/admin/shutdown and POST /v1/admin/admin-token serve the local CLI (stop, rotate-token).

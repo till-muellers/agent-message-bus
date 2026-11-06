@@ -32,10 +32,20 @@ func NewHandler(reg *tools.Registry, a *auth.Service, notices inbox.Noticer) htt
 	for _, t := range reg.List() {
 		srv.AddTool(&mcp.Tool{Name: t.Name, Description: t.Description, InputSchema: t.Schema}, handler(reg, t.Name, notices))
 	}
-	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
-		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, streamableOptions())
 	mw := sdkauth.RequireBearerToken(verifier, &sdkauth.RequireBearerTokenOptions{AllowMissingExpiration: true})
 	return a.Middleware(mw(h))
+}
+
+// streamableOptions turns the SDK's DNS-rebinding guard off. The guard answers 403 to a request
+// that arrives on a loopback address with a Host other than localhost, which is every request
+// of a same-host TLS reverse proxy forwarding the public Host; /v1 never had it, so behind such
+// a proxy only /mcp broke. It protects nothing here: it runs after the bearer check, and a
+// rebinding page cannot present a token (the browser never adds the bearer header by itself, no
+// cookie or other ambient credential authenticates on this listener, and the server sends no
+// CORS headers), while whoever holds a token calls /v1 or /mcp directly.
+func streamableOptions() *mcp.StreamableHTTPOptions {
+	return &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, DisableLocalhostProtection: true}
 }
 
 func handler(reg *tools.Registry, name string, notices inbox.Noticer) mcp.ToolHandler {
