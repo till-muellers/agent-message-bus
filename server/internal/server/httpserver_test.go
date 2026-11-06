@@ -2,7 +2,6 @@ package server
 
 import (
 	"bufio"
-	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -12,19 +11,15 @@ import (
 	"time"
 )
 
-// countingBody records how many bytes were read and whether EOF was reached.
+// countingBody records how many bytes were read.
 type countingBody struct {
 	r    io.Reader
 	read int
-	eof  bool
 }
 
 func (b *countingBody) Read(p []byte) (int, error) {
 	n, err := b.r.Read(p)
 	b.read += n
-	if errors.Is(err, io.EOF) {
-		b.eof = true
-	}
 	return n, err
 }
 

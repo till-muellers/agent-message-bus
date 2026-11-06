@@ -15,11 +15,12 @@ const (
 	drainTimeout = 5 * time.Second
 )
 
-// drainUnreadBody sends the answer of a Connection: close request whose body the handler did
-// not read to EOF, then reads the rest of the body. net/http skips its own discard for such
-// requests and closes the socket at once, so a body still in flight makes the server's stack
-// answer with a reset and the client loses the response (an early 401, 404 or 405).
-// Keep-alive requests are drained by net/http itself.
+// drainUnreadBody flushes the status line, headers and buffered body of the answer to a
+// Connection: close request whose body the handler did not read to EOF, then reads the rest
+// of the request body; the answer ends (final chunk, close) after that. net/http skips its
+// own discard for such requests and closes the socket at once, so a body still in flight
+// makes the server's stack answer with a reset and the client loses the response (an early
+// 401, 404 or 405). Keep-alive requests are drained by net/http itself.
 func drainUnreadBody(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !r.Close || r.ContentLength == 0 {
@@ -35,8 +36,9 @@ func drainUnreadBody(next http.Handler) http.Handler {
 	})
 }
 
-// drain flushes the answer, then discards up to maxDrainBytes of body within drainTimeout.
-// Its errors are dropped on purpose: a failed flush or drain only leaves the close as it was.
+// drain flushes what the handler wrote, then discards up to maxDrainBytes of body within
+// drainTimeout. Its errors are dropped on purpose: a failed flush or drain only leaves the
+// close as it was.
 func drain(w http.ResponseWriter, body io.ReadCloser) {
 	rc := http.NewResponseController(w)
 	_ = rc.Flush()
