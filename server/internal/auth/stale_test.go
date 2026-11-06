@@ -29,14 +29,14 @@ func TestStaleAdminCannotMint(t *testing.T) {
 	for _, p := range []Principal{ops, root} {
 		_, err := s.MintAdmin(ctx, p, "ops")
 		apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
-		_, err = s.MintLeader(ctx, p, "lead")
+		_, err = s.MintLeader(ctx, p, "late")
 		apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
 	}
 	admins, err := listAdmins(ctx, s.db)
 	if err != nil || len(admins) != 2 || admins[1].Name != "ops" || admins[1].Tokens != 0 {
 		t.Fatalf("admins = %+v, %v; want ops without tokens", admins, err)
 	}
-	if _, _, found, err := findAgent(ctx, s.db, "lead"); found || err != nil {
-		t.Fatalf("leader lead created: found %v, %v", found, err)
+	if _, _, found, err := findAgent(ctx, s.db, "late"); found || err != nil {
+		t.Fatalf("leader late created: found %v, %v", found, err)
 	}
 }

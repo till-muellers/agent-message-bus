@@ -159,12 +159,13 @@ Feature: Authentication and leader minting
 
   Rule: A call is re-validated inside its write transaction; a revocation that commits first wins
 
-    # The token is checked at the door and again inside the transaction that acts on it
-    # (spaces.Resolver for every space-scoped call, plus create, join, mint and
-    # bus_revoke_admin). A call authenticated just before a revocation (bus_revoke_admin,
-    # bus_revoke_member, leaving, deleting the space) or a rotation of the instance admin
-    # token, whose transaction runs after it, fails and leaves nothing behind. Only the
-    # token that authenticated the call counts: another token of the same agent does not.
+    # The token is checked at the door and again inside the transaction that acts on it:
+    # in the space access gate (every space-scoped call) and in bus_create_space,
+    # bus_join_space, bus_mint_admin, bus_mint_leader and bus_revoke_admin. A call
+    # authenticated just before a revocation (bus_revoke_admin, bus_revoke_member, leaving,
+    # deleting the space) or a rotation of the instance admin token, whose transaction runs
+    # after it, fails and leaves nothing behind. Only the token that authenticated the call
+    # counts: another token of the same agent does not.
 
     Scenario Outline: A revoked admin's call in flight fails and leaves nothing behind (<call>)
       Given the admin minted leader "lead"
@@ -176,7 +177,7 @@ Feature: Authentication and leader minting
       Then the call fails with unauthenticated "invalid token"
       And no space "orphan" exists
       And space "demo" still has participants "lead" and "worker", and admin "ops" is none of them
-      And admin "web" still has its token, and admin "ops" has none
+      And admin "web" still has its token
 
       Examples:
         | call                                                          |
@@ -186,8 +187,21 @@ Feature: Authentication and leader minting
         | bus_revoke_member {"space":"demo","name":"worker"}            |
         | bus_revoke_admin {"name":"web"}                               |
         | bus_delete_space {"space":"demo"}                             |
-        | bus_mint_admin {"name":"ops"}                                 |
-        | bus_mint_leader {"name":"late"}                               |
+
+    Scenario Outline: A mint in flight across the caller's revocation issues no token (<caller>, <call>)
+      Given the admin minted admin "ops"
+      And <caller> was authenticated for <call>
+      When <revocation> before that call's transaction runs
+      Then the call fails with unauthenticated "invalid token"
+      And no token was issued
+      And no agent "late" exists
+
+      Examples:
+        | caller                                  | call                             | revocation                                  |
+        | admin "ops"                             | bus_mint_admin {"name":"ops"}    | the admin revokes admin "ops"               |
+        | admin "ops"                             | bus_mint_leader {"name":"late"}  | the admin revokes admin "ops"               |
+        | the admin with the instance admin token | bus_mint_admin {"name":"ops"}    | the instance admin token is rotated         |
+        | the admin with the instance admin token | bus_mint_leader {"name":"late"}  | the instance admin token is rotated         |
 
     Scenario: The old token of a re-invited member does not act for the new membership
       Given the admin minted leader "lead"

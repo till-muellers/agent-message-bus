@@ -2,13 +2,58 @@ package spaces
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"maps"
 	"testing"
+	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
 	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr/apperrtest"
+	"github.com/till-muellers/agent-message-bus/server/internal/platform/db"
 )
+
+// txOnly fails every re-validation that does not run inside a transaction.
+type txOnly struct{ credentials }
+
+func (c txOnly) StillValid(ctx context.Context, q db.DBTX, p auth.Principal) error {
+	if _, ok := q.(*sql.Tx); !ok {
+		return errors.New("credential re-validated outside the write transaction")
+	}
+	return c.credentials.StillValid(ctx, q, p)
+}
+
+// TestWritesRevalidateInTheirTransaction: every write re-validates its caller inside its
+// own transaction, not before it, so no revocation can commit in between.
+func TestWritesRevalidateInTheirTransaction(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	e := newEnv(t, nil, nil)
+	r := NewResolver(txOnly{e.auth})
+	e.svc, e.adm = NewService(e.db, r, e.auth, e.inbox, time.Now, Hooks{}), NewAdmitter(r, e.auth, time.Now)
+	root := bootstrapRoot(t, e)
+	lead := leader(t, e, 50, "lead")
+	_, ops := mintedAdmin(t, e, root, "ops")
+	mintedAdmin(t, e, root, "web")
+	writes := []struct {
+		name string
+		call func() error
+	}{
+		{"create", func() error { return e.svc.Create(ctx, lead, "demo") }},
+		{"join", func() error { return e.svc.Join(ctx, ops, "demo") }},
+		{"invite", func() error { _, err := invite(ctx, e, lead, "demo", "worker"); return err }},
+		{"revoke member", func() error { _, err := e.svc.Revoke(ctx, lead, "demo", "worker"); return err }},
+		{"leave", func() error { return e.svc.Leave(ctx, ops, "demo") }},
+		{"revoke admin", func() error { _, err := e.svc.RevokeAdmin(ctx, root, "web"); return err }},
+		{"delete", func() error { return e.svc.Delete(ctx, lead, "demo") }},
+	}
+	for _, w := range writes {
+		if err := w.call(); err != nil {
+			t.Fatalf("%s: %v", w.name, err)
+		}
+	}
+}
 
 // TestRevokedAdminActsNowhere: a call authenticated before bus_revoke_admin committed and
 // run after it fails unauthenticated and leaves nothing behind: no participation, no
