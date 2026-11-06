@@ -97,12 +97,16 @@ function content({ route, view }: AppState, identity: Identity, intents: Intents
 	}
 }
 
-/** An open confirmation, else the outcome of the last mutation: a secret shown once, or the notice (an alert when refused). */
+/**
+ * An open confirmation, else the outcome of the last mutation: a secret shown once, or the notice (an alert when refused).
+ * Each is `.outcome`: it sticks to the top of the viewport, so it is in view wherever the triggering button was.
+ */
 function outcome({ confirm, shownOnce, notice }: AppState, intents: Intents): ChildArg {
 	if (confirm) return confirmView(confirm, intents);
 	if (shownOnce) return shownOnceView(shownOnce);
 	if (!notice) return null;
-	return h("p", { key: "notice", role: notice.alert ? "alert" : "status" }, notice.message);
+	const role = notice.alert ? "alert" : "status";
+	return h("p", { key: "notice", class: "outcome", role }, notice.message);
 }
 
 /** The whole page for state: the login, or the signed-in shell with the current route's view. */

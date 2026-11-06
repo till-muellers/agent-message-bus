@@ -4,7 +4,7 @@ import { thread } from "../fixtures.ts";
 import { byTag, findAll, textOf } from "../tree.ts";
 
 describe("the thread page", () => {
-	const view = threadView("demo", thread, { post: () => {} });
+	const view = threadView("demo", thread, { post: async () => true });
 
 	test("shows the title, its blackboard and its author", () => {
 		expect(findAll(view, byTag("h1")).map(textOf)).toEqual(["plan"]);

@@ -13,4 +13,13 @@ describe("a secret shown once", () => {
 	test("says it cannot be shown again", () => {
 		expect(textOf(view)).toContain("it cannot be shown again");
 	});
+
+	test("takes the focus when it appears and stays in view while the page scrolls", () => {
+		expect(view.attrs).toMatchObject({ autofocus: "", tabindex: "-1", class: "outcome" });
+	});
+
+	test("another secret is another node, so it takes the focus again", () => {
+		const next = shownOnceView({ label: "Token of admin ops", secret: "amb_admin_y" });
+		expect(next.key).not.toBe(view.key);
+	});
 });

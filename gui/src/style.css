@@ -6,6 +6,7 @@
 
 body {
 	margin: 0;
+	overflow-wrap: break-word;
 }
 
 header {
@@ -19,6 +20,7 @@ header {
 
 header p {
 	margin: 0;
+	min-width: 0;
 	font-weight: 600;
 }
 
@@ -38,6 +40,26 @@ main {
 	padding: 1rem 1.5rem;
 }
 
+/* A confirmation, a secret shown once and a notice stay at the top of the viewport while the page scrolls: the button that caused them may be far below. */
+.outcome {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	margin: 0 0 1rem;
+	padding: 0.5rem 1rem;
+	background: Canvas;
+	border: 2px solid color-mix(in srgb, currentColor 40%, transparent);
+}
+
+.outcome code {
+	font-size: 1.25em;
+	user-select: all;
+}
+
+.outcome p {
+	margin: 0.25rem 0;
+}
+
 form {
 	display: flex;
 	flex-wrap: wrap;
@@ -51,6 +73,10 @@ form {
 
 table {
 	border-collapse: collapse;
+}
+
+.scroll-x {
+	overflow-x: auto;
 }
 
 th,
@@ -100,5 +126,6 @@ section > form {
 
 [role="alertdialog"] p {
 	margin: 0;
+	min-width: 0;
 	flex-basis: 100%;
 }

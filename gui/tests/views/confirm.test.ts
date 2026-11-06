@@ -26,4 +26,32 @@ describe("the confirmation", () => {
 		map.get("Cancel")?.();
 		expect(calls).toEqual(["yes delete-space", "no"]);
 	});
+
+	describe("is impossible to miss and to leave without a mouse", () => {
+		const none = { confirmed: () => {}, dismiss: () => {} };
+		const del: PendingConfirm = { kind: "delete-space", space: "demo" };
+
+		test("takes the focus when it appears and stays in view while the page scrolls", () => {
+			const view = confirmView(del, none);
+			expect(view.attrs).toMatchObject({ autofocus: "", tabindex: "-1", class: "outcome" });
+		});
+
+		test("another confirmation is another node, so it takes the focus again", () => {
+			const revoke: PendingConfirm = { kind: "revoke", space: "demo", name: "w", role: "member" };
+			const other: PendingConfirm = { kind: "revoke", space: "demo", name: "x", role: "member" };
+			const keys = [del, revoke, other].map((pending) => confirmView(pending, none).key);
+			expect(new Set(keys).size).toBe(3);
+		});
+
+		test("Escape dismisses it, any other key does not", () => {
+			const calls: string[] = [];
+			const view = confirmView(del, { confirmed: () => void calls.push("yes"), dismiss: () => void calls.push("no") });
+			const press = (key: string): void => view.on.keydown?.(Object.assign(new Event("keydown"), { key }));
+			press("Enter");
+			press("Tab");
+			expect(calls).toEqual([]);
+			press("Escape");
+			expect(calls).toEqual(["no"]);
+		});
+	});
 });

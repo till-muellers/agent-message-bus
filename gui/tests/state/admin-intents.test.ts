@@ -26,4 +26,11 @@ describe("the admin intents", () => {
 			{ type: "notice/shown", message: "Nothing was removed: admin ghost has no token and joined no space.", alert: false },
 		]);
 	});
+
+	test("a mint reports whether it went through, so the form keeps a refused name", async () => {
+		const ok = intents(api);
+		const refused = intents({ ...api, mint: async () => Promise.reject(new Error("name must match")) });
+		expect(await ok.admin.mintAdmin("ops")).toBe(true);
+		expect(await refused.admin.mintAdmin("Bad Name")).toBe(false);
+	});
 });

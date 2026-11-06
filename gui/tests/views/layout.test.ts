@@ -8,15 +8,16 @@ import { admins, entries, spaceDetail, spaceList, thread, threadInfos } from "..
 import { byTag, findAll, textOf } from "../tree.ts";
 
 const noop = (): void => {};
+const went = async (): Promise<boolean> => true;
 const intents = {
 	signIn: noop,
 	signOut: noop,
-	mintAdmin: noop,
+	mintAdmin: went,
 	revokeAdmin: noop,
-	invite: noop,
+	invite: went,
 	cancelInvite: noop,
-	send: noop,
-	post: noop,
+	send: went,
+	post: went,
 	ask: noop,
 	confirmed: noop,
 	dismiss: noop,
@@ -141,6 +142,19 @@ describe("the layout", () => {
 	test("an open confirmation is shown above the page", () => {
 		const state: AppState = { ...signedIn(admin), confirm: { kind: "delete-space", space: "demo" } };
 		expect(mainOf(state)).toContain("Delete space demo");
+	});
+
+	test("a confirmation, a secret and a notice all stay in view while the page scrolls", () => {
+		const outcomes: Partial<AppState>[] = [
+			{ confirm: { kind: "delete-space", space: "demo" } },
+			{ shownOnce: { label: "Token of admin ops", secret: "amb_admin_x" } },
+			{ notice: { message: "Post 3 added.", alert: false } },
+			{ notice: { message: "agent lead is a leader agent", alert: true } },
+		];
+		for (const outcome of outcomes) {
+			const [first] = findAll(render({ ...signedIn(admin), ...outcome }, intents), byTag("main"))[0]?.children ?? [];
+			expect(typeof first === "string" ? undefined : first?.attrs.class).toBe("outcome");
+		}
 	});
 
 	test("a success notice is a status, not an alert", () => {

@@ -10,17 +10,19 @@ export interface MutationDeps {
 /**
  * Awaits a mutation and dispatches its outcome, then refreshes the page; never rejects.
  * A 401 signs out with the reason; any other failure shows the server's message.
+ * Resolves true when the mutation went through and false when it was refused, so a form keeps what was typed.
  */
-export async function mutate<T>(deps: MutationDeps, call: Promise<T>, done: (result: T) => Action): Promise<void> {
+export async function mutate<T>(deps: MutationDeps, call: Promise<T>, done: (result: T) => Action): Promise<boolean> {
 	let result: T;
 	try {
 		result = await call;
 	} catch (err) {
 		deps.dispatch(refused(err));
-		return;
+		return false;
 	}
 	deps.dispatch(done(result));
 	deps.refresh();
+	return true;
 }
 
 function refused(err: unknown): Action {

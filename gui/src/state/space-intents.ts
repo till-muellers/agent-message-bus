@@ -4,15 +4,16 @@ import type { Action } from "./actions.ts";
 import type { PendingConfirm, Route } from "./app-state.ts";
 import { type MutationDeps, mutate } from "./mutate.ts";
 
+/** Every mutation resolves true when it went through and false when it was refused (the form keeps what was typed). */
 export interface SpaceIntents {
-	invite(space: string, name: string, task: string): Promise<void>;
-	cancelInvite(space: string, invite: PendingInvite): Promise<void>;
-	post(space: string, threadId: number, body: string): Promise<void>;
-	send(space: string, topic: string, body: string, critical: boolean): Promise<void>;
+	invite(space: string, name: string, task: string): Promise<boolean>;
+	cancelInvite(space: string, invite: PendingInvite): Promise<boolean>;
+	post(space: string, threadId: number, body: string): Promise<boolean>;
+	send(space: string, topic: string, body: string, critical: boolean): Promise<boolean>;
 	/** Opens the confirmation of a revoke or a space deletion. */
 	ask(confirm: PendingConfirm): void;
 	/** Runs a confirmed revoke or space deletion. */
-	confirmed(confirm: PendingConfirm): Promise<void>;
+	confirmed(confirm: PendingConfirm): Promise<boolean>;
 	dismiss(): void;
 }
 
@@ -41,7 +42,7 @@ export function createSpaceIntents(api: Mutations, deps: MutationDeps, nav: Navi
 		if ("space" in here && here.space === space) nav.go({ name: "spaces" });
 		return told(`Space ${space} deleted.`);
 	};
-	const run = (confirm: PendingConfirm): Promise<void> => {
+	const run = (confirm: PendingConfirm): Promise<boolean> => {
 		if (confirm.kind === "delete-space") return mutate(deps, api.deleteSpace(confirm.space), () => spaceDeleted(confirm.space));
 		const { space, name, role } = confirm;
 		const removed = `${capitalized(role)} ${name} revoked from space ${space}.`;

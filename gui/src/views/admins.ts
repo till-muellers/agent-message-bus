@@ -1,6 +1,6 @@
 import type { AdminInfo } from "../api/types.ts";
-import { takeField } from "../view/form-field.ts";
-import { type ChildArg, h, type Handler, type VNode } from "../view/h.ts";
+import { type ChildArg, h, type VNode } from "../view/h.ts";
+import { onSubmit } from "./forms.ts";
 import type { Intents } from "./intents.ts";
 import { type Row, table } from "./table.ts";
 
@@ -17,18 +17,11 @@ function row(admin: AdminInfo, intents: AdminAreaIntents): Row {
 	return { key: admin.name, cells };
 }
 
-function submitName(mint: (name: string) => void): Handler {
-	return (event) => {
-		event.preventDefault();
-		const name = takeField(event, "name");
-		if (name !== "") mint(name);
-	};
-}
-
 function mintForm(intents: AdminAreaIntents): VNode {
+	const submit = onSubmit((fields) => intents.mintAdmin(fields.get("name") ?? ""));
 	return h(
 		"form",
-		{ key: "mint", on: { submit: submitName((name) => intents.mintAdmin(name)) } },
+		{ key: "mint", on: { submit } },
 		h("label", { for: "admin-name" }, "New admin name"),
 		h("input", { id: "admin-name", name: "name", autocomplete: "off", required: true }),
 		h("button", { type: "submit" }, "Mint admin"),
