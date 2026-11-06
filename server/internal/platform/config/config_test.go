@@ -33,7 +33,17 @@ func TestLoad(t *testing.T) {
 		{
 			name:    "short token",
 			env:     map[string]string{"AMB_ADMIN_TOKEN": "short"},
-			wantErr: "AMB_ADMIN_TOKEN must be at least 32 characters",
+			wantErr: "AMB_ADMIN_TOKEN: admin token must be 32..512 visible ASCII characters",
+		},
+		{
+			name: "token trimmed",
+			env:  map[string]string{"AMB_ADMIN_TOKEN": " " + valid + "\r\n", "AMB_DB_PATH": "x.db"},
+			want: Config{Addr: "127.0.0.1:8080", WebAddr: "127.0.0.1:8081", DBPath: "x.db", AdminToken: valid},
+		},
+		{
+			name:    "blank token does not fall back to the file",
+			env:     map[string]string{"AMB_ADMIN_TOKEN": strings.Repeat(" ", 40)},
+			wantErr: "AMB_ADMIN_TOKEN: admin token must be 32..512 visible ASCII characters",
 		},
 	}
 	for _, tc := range tests {

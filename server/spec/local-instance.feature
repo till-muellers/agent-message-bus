@@ -95,6 +95,26 @@ Feature: Local instance management
       When I run "agent-message-bus admin-token"
       Then the output is "env-token-0123456789-0123456789-abcdef"
 
+    Scenario: The env token is trimmed like the file token
+      Given AMB_ADMIN_TOKEN is " env-token-0123456789-0123456789-abcdef " with surrounding spaces
+      When I run "agent-message-bus admin-token"
+      Then the output is "env-token-0123456789-0123456789-abcdef"
+
+    Scenario Outline: An unusable admin token fails the start (<case>)
+      # One rule for AMB_ADMIN_TOKEN, the token file and POST /v1/admin/admin-token: after
+      # trimming, 32..512 visible ASCII characters, so every accepted token can be sent as
+      # "Bearer <token>". A blank AMB_ADMIN_TOKEN does not fall back to the file.
+      Given <source> holds <value>
+      When I run "agent-message-bus start"
+      Then it fails with "<prefix>admin token must be 32..512 visible ASCII characters"
+
+      Examples:
+        | case              | source                 | value              | prefix                                      |
+        | short env token   | AMB_ADMIN_TOKEN        | "short"            | AMB_ADMIN_TOKEN:                            |
+        | blank env token   | AMB_ADMIN_TOKEN        | 40 spaces          | AMB_ADMIN_TOKEN:                            |
+        | inner space, file | <datadir>/admin-token  | "<16 chars> <16 chars>" | admin token in <datadir>/admin-token: |
+        | too long, file    | <datadir>/admin-token  | 513 characters     | admin token in <datadir>/admin-token:       |
+
   Rule: rotate-token replaces the admin token live
 
     Scenario: rotate-token swaps the token on the running instance

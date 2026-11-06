@@ -20,7 +20,7 @@ PO decisions applied (2026-10-26): PO-1 one log line per GUI change; PO-2 tiers 
 | Error kinds | `invalid` 400, `unauthenticated` 401, `forbidden` 403, `not_found` 404, `conflict` 409, `internal` 500 (`"internal error"`). **No new `apperr` kind.** The one exception on the wire is the web sign-in limiter's local `429 rate_limited` (§10.1, [AD-9], Q-A9), written by `internal/web` only. | `platform/apperr/apperr.go:13-19` |
 | MCP error | tool result `isError: true`, text `<code>: <message>`; an error without kind fails the call as a JSON-RPC error with message `internal error` (detail only in the server log, like the HTTP 500). An unknown tool name never reaches the registry: the MCP SDK answers it with a JSON-RPC error | `mcpserver/server.go` |
 | MCP success | one `TextContent` = JSON; `structuredContent` when the result is an object | `mcpserver/server.go` |
-| Args | closed schema (`additionalProperties:false`); unknown field → `invalid "invalid arguments: …"`, and keys match property names exactly (a key differing only in case is unknown); missing → `invalid "<field> is required"`. The web GUI's JSON request bodies (`/web/api/*`) decode the same way and fail with the same message | `tools/decode.go`, `tools/exact_keys.go`, `tools/schema.go` |
+| Args | closed schema (`additionalProperties:false`); unknown field → `invalid "invalid arguments: …"`, and keys match property names exactly (a key differing only in case is unknown); the body is exactly one JSON value, so trailing data fails with `invalid "invalid arguments: trailing data after the JSON value"`; a duplicate key is accepted and its last value wins (encoding/json); missing → `invalid "<field> is required"`. The web GUI's JSON request bodies (`/web/api/*`) and the admin token swap decode the same way and fail with the same message | `tools/decode.go`, `tools/exact_keys.go`, `tools/schema.go` |
 | Unknown tool | `Registry.Call` → `not_found "tool <name> not found"`, the same on `POST /v1/tools/{name}` and on a `/web/api/*` route whose tool is not registered. RPC reads the body first, so a body error (`request body exceeds 1 MiB`, `reading request body: …`) wins over the unknown name | `tools/registry.go` |
 | Names | `^[a-z0-9][a-z0-9_-]{0,62}$`; error `invalid "<field> must match …"` | `domain/text.go:13,22-28` |
 | Timestamps | RFC3339Nano UTC strings | `platform/db/dbtx.go:35` |
@@ -242,7 +242,7 @@ Server rule, decided in exactly one place (`server/internal/inbox/class.go`, `Cl
 | loopback, leader/member token | 403 `forbidden "admin token required"` |
 | loopback, minted admin, `POST /v1/admin/admin-token` | 403 `forbidden "only the bootstrap admin may replace the instance admin token"` |
 | loopback, any admin, `POST /v1/admin/shutdown` | 200 `{"ok": true}` |
-| loopback, bootstrap admin, `POST /v1/admin/admin-token {"token"}` | 200 `{"ok": true}`; bootstrap sessions/tokens switch, minted admins unaffected |
+| loopback, bootstrap admin, `POST /v1/admin/admin-token {"token"}` | 200 `{"ok": true}`; bootstrap sessions/tokens switch, minted admins unaffected. The body (at most 4 KiB) decodes like tool arguments (§0 Args); the token is trimmed and must be 32..512 visible ASCII characters, the same rule as `AMB_ADMIN_TOKEN` and the token file, else 400 and the old token stays |
 
 Admin tools have no loopback rule (`POST /v1/tools/bus_mint_admin` from `10.0.0.2` → 200).
 MCP token user id: `admin:<agent id>` for every admin (was `admin:0`, `mcpserver/verifier.go:27`).
@@ -373,6 +373,9 @@ New (all existing kinds):
 | internal (MCP) | JSON-RPC error `internal error` (replaces the internal detail as the JSON-RPC error message) | R14 |
 | invalid | `invalid arguments: json: unknown field "<key>"` also for a key that matches a property name only in another case (`threadID` for `threadId`), which was accepted | jcu |
 | invalid | `limit must be 1..500` also for an explicit `limit` 0 (`bus_inbox_read`, `GET /web/api/inbox`), which read the default page of 100 | hs3 |
+| invalid | `invalid arguments: trailing data after the JSON value` for a body with more after its JSON value (`{} junk`, two objects), which was accepted and the rest dropped | 088 |
+| invalid | `admin token must be 32..512 visible ASCII characters` for the token swap (replaces `admin token must be at least 32 characters`; surrounding whitespace is trimmed first). At start, `AMB_ADMIN_TOKEN: …` and `admin token in <file>: …` carry the same rule | b3k, foy |
+| invalid | `invalid arguments: …`, `request body exceeds 4 KiB`, `reading request body: …` for a bad token swap body (replaces `invalid JSON body: …`) | e3j |
 
 Removed: `admin token cannot act in spaces; mint a leader with bus_mint_leader` (4c), `admin token has no inbox; mint a leader with bus_mint_leader` (4d). Narrowed: `last leader cannot leave; delete the space instead` only while other participants remain (5). Unchanged and still asserted: `only leaders may send to all`, `only leaders may send critical messages`, `space demo has other leaders; they must leave first` (leader caller), `not a participant of space demo`, `token is not valid for space demo`, `invalid or expired invite code`.
 

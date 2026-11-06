@@ -8,14 +8,15 @@ import (
 	"testing"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
-	"github.com/till-muellers/agent-message-bus/server/internal/platform/apperr"
+	"github.com/till-muellers/agent-message-bus/server/internal/domain"
 )
 
 type fakeSetter struct{ got string }
 
 func (f *fakeSetter) SetAdminToken(tok string) error {
-	if len(tok) < 32 {
-		return apperr.New(apperr.Invalid, "admin token must be at least 32 characters")
+	tok, err := domain.AdminToken(tok)
+	if err != nil {
+		return err
 	}
 	f.got = tok
 	return nil
@@ -50,8 +51,12 @@ func TestMount(t *testing.T) {
 		{name: "remote", path: "/v1/admin/shutdown", remote: "10.0.0.2:5", token: "admin", wantStatus: 403, wantBody: "admin endpoints are only available from localhost"},
 		{name: "leader", path: "/v1/admin/shutdown", remote: "127.0.0.1:5", token: "leader", wantStatus: 403, wantBody: "admin token required"},
 		{name: "rotate", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{"token":"` + long + `"}`, wantStatus: 200, wantToken: long},
-		{name: "rotate short", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{"token":"x"}`, wantStatus: 400, wantBody: "at least 32"},
-		{name: "rotate bad json", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{`, wantStatus: 400},
+		{name: "rotate short", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{"token":"x"}`, wantStatus: 400, wantBody: "admin token must be 32..512 visible ASCII characters"},
+		{name: "rotate bad json", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{`, wantStatus: 400, wantBody: "invalid arguments: unexpected EOF"},
+		{name: "rotate key in other case", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{"TOKEN":"` + long + `"}`, wantStatus: 400, wantBody: `invalid arguments: json: unknown field \"TOKEN\"`},
+		{name: "rotate unknown key", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{"token":"` + long + `","bogus":1}`, wantStatus: 400, wantBody: `invalid arguments: json: unknown field \"bogus\"`},
+		{name: "rotate trailing data", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{"token":"` + long + `"} junk`, wantStatus: 400, wantBody: "invalid arguments: trailing data after the JSON value"},
+		{name: "rotate body too large", path: "/v1/admin/admin-token", remote: "127.0.0.1:5", token: "bootstrap", body: `{"token":"` + strings.Repeat("n", 4<<10) + `"}`, wantStatus: 400, wantBody: "request body exceeds 4 KiB"},
 		{name: "rotate remote", path: "/v1/admin/admin-token", remote: "192.168.1.1:5", token: "bootstrap", body: `{"token":"` + long + `"}`, wantStatus: 403},
 	}
 	for _, tc := range tests {

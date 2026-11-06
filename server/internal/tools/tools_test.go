@@ -27,6 +27,11 @@ func TestDecode(t *testing.T) {
 		{"unknown field", `{"x":1}`, sample{}, true},
 		{"wrong type", `{"n":"x"}`, sample{}, true},
 		{"malformed", `{`, sample{}, true},
+		{"trailing junk", `{} junk`, sample{}, true},
+		{"two objects", `{"n":1}{"n":2}`, sample{}, true},
+		{"unfinished second value", `{"n":1} {`, sample{}, true},
+		{"trailing scalar", `{"n":1} 2`, sample{}, true},
+		{"trailing whitespace", "{\"n\":1} \n", sample{N: 1}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -41,6 +46,16 @@ func TestDecode(t *testing.T) {
 				t.Fatalf("got %+v, %v", got, err)
 			}
 		})
+	}
+}
+
+// A body is one JSON value (RFC 8259); a stream decoder alone would stop after the first.
+func TestDecodeRejectsTrailingData(t *testing.T) {
+	t.Parallel()
+	_, err := Decode[sample](json.RawMessage(`{"space":"first"}{"space":"second"}`))
+	want := "invalid arguments: trailing data after the JSON value"
+	if k, _ := apperr.KindOf(err); k != apperr.Invalid || err.Error() != want {
+		t.Fatalf("got %v, want invalid %q", err, want)
 	}
 }
 

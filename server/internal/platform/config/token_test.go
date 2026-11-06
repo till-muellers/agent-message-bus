@@ -15,7 +15,9 @@ func TestResolveAdminToken(t *testing.T) {
 	}{
 		{name: "env wins", override: env, file: strings.Repeat("f", 32), want: env},
 		{name: "file", file: strings.Repeat("f", 32) + "\n", want: strings.Repeat("f", 32)},
-		{name: "short file", file: "short\n", wantErr: "at least 32 characters"},
+		{name: "short file", file: "short\n", wantErr: "admin token must be 32..512 visible ASCII characters"},
+		{name: "file with inner space", file: strings.Repeat("f", 16) + " " + strings.Repeat("f", 16) + "\n", wantErr: "admin token must be 32..512 visible ASCII characters"},
+		{name: "file too long", file: strings.Repeat("f", 513), wantErr: "admin token must be 32..512 visible ASCII characters"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

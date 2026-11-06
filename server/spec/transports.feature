@@ -154,6 +154,8 @@ Feature: Transports
         | key case      | {"N":3}    | invalid arguments: json: unknown field "N"                                  |
         | wrong type    | {"n":"x"}  | invalid arguments: json: cannot unmarshal string into Go struct field ... |
         | malformed     | {          | invalid arguments: unexpected EOF                                           |
+        | trailing data | {} junk    | invalid arguments: trailing data after the JSON value                       |
+        | two objects   | {"n":1}{"n":2} | invalid arguments: trailing data after the JSON value                   |
 
     Scenario: Unknown argument on a real tool
       When the admin calls POST /v1/tools/bus_mint_leader with body {"name":"x","bogus":1}
@@ -293,21 +295,36 @@ Feature: Transports
         | ::1       |
 
     Scenario: Swapping the admin token
-      Given a new token of at least 32 characters
+      Given a new token of 32..512 visible ASCII characters
       When a loopback client calls POST /v1/admin/admin-token with the admin token and body {"token":"<new token>"}
       Then the response status is 200 with body {"ok":true}
       And the old admin token gets 401 unauthenticated
       And the new admin token is accepted
 
+    Scenario: A swapped token is trimmed
+      When a loopback client calls POST /v1/admin/admin-token with the admin token and body {"token":" <new token>\n"}
+      Then the response status is 200 with body {"ok":true}
+      And the new admin token without the surrounding whitespace is accepted
+
     Scenario Outline: Invalid token swap: <case>
+      # The same token rule guards AMB_ADMIN_TOKEN and the token file at start (see
+      # local-instance.feature); every accepted token can be sent as "Bearer <token>".
       When a loopback client calls POST /v1/admin/admin-token with the admin token and body <body>
       Then the response status is 400
       And the error is invalid with a message starting with "<message>"
+      And the old admin token is still accepted
 
       Examples:
-        | case      | body          | message                                    |
-        | too short | {"token":"x"} | admin token must be at least 32 characters |
-        | bad JSON  | {             | invalid JSON body                          |
+        | case              | body                                 | message                                               |
+        | too short         | {"token":"x"}                        | admin token must be 32..512 visible ASCII characters  |
+        | blank             | {"token":"<40 spaces>"}              | admin token must be 32..512 visible ASCII characters  |
+        | inner space       | {"token":"<16 chars> <16 chars>"}    | admin token must be 32..512 visible ASCII characters  |
+        | too long          | {"token":"<513 chars>"}              | admin token must be 32..512 visible ASCII characters  |
+        | bad JSON          | {                                    | invalid arguments: unexpected EOF                     |
+        | key in other case | {"TOKEN":"<new token>"}              | invalid arguments: json: unknown field "TOKEN"        |
+        | unknown key       | {"token":"<new token>","bogus":1}    | invalid arguments: json: unknown field "bogus"        |
+        | trailing data     | {"token":"<new token>"} junk         | invalid arguments: trailing data after the JSON value |
+        | body over 4 KiB   | {"token":"<4097 chars>"}             | request body exceeds 4 KiB                            |
 
   Rule: The web GUI is not served on the API listener
 
