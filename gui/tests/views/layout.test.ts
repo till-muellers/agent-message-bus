@@ -157,6 +157,17 @@ describe("the layout", () => {
 		}
 	});
 
+	test("a secret still showing stays in the page, hidden, while a confirmation is open, so it does not take the focus back", () => {
+		const shownOnce = { label: "Invite code for new in space demo", secret: "33p8-76ch" };
+		const state: AppState = { ...signedIn(admin), shownOnce, confirm: { kind: "delete-space", space: "demo" } };
+		const [main] = findAll(render(state, intents), byTag("main"));
+		const sections = (main?.children ?? []).flatMap((child) => (typeof child === "string" || child.tag !== "section" ? [] : [child]));
+		expect(sections.map((s) => s.attrs.role)).toEqual(["alertdialog", "status"]);
+		expect(sections.map((s) => s.attrs.hidden)).toEqual([undefined, ""]);
+		const shown = findAll(render({ ...state, confirm: undefined }, intents), (n) => n.attrs.role === "status");
+		expect(shown.map((s) => s.key)).toEqual([sections[1]?.key]);
+	});
+
 	test("a success notice is a status, not an alert", () => {
 		const notice: AppState = { ...signedIn(admin), notice: { message: "Admin ops revoked.", alert: false } };
 		const [status] = findAll(render(notice, intents), (n) => n.attrs.role === "status");

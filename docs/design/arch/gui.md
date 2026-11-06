@@ -64,7 +64,7 @@ gui/
       h.ts              h(tag, props, ...children) → VNode (plain objects)
       plan-patch.ts     planPatch(previous, next) (pure): which old child each new child patches in place (tag + key, keyed moves), which old ones go
       mount.ts          VNode → DOM: applies planPatch per parent (reuses nodes; keeps focus and input values); a newly created node with the `autofocus` attribute takes the focus, and the focus goes back to where it was when such a node is removed while it holds it
-      form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state); submitForm(event, act): hands all fields to act and resets the form only when act resolves true (a refused submit keeps the input; a second submit while one is unanswered is ignored)
+      form-field.ts     takeField(event, name): reads and clears a form field (the token never reaches state); submitForm(event, act): hands all fields to act and resets the form only when act resolves true and the form still holds what was sent (a refused submit and text typed meanwhile are kept; a second submit while one is unanswered is ignored)
     views/
       intents.ts        Intents: the one contract of what the operator can do; each view takes the Pick it needs. The state/*-intents.ts modules implement it structurally (state never imports views); main.ts only spreads them into one object
       layout.ts         header (signed-in name/kind, nav, sign out), confirm/outcome section, error banner; the notice is `.outcome`
@@ -78,7 +78,7 @@ gui/
       inbox.ts          the signed-in agent's own inbox, read-only ("Inbox of <kind> <name>", no acknowledge)
       admins.ts         (W2) admin list, mint form, revoke button per minted admin (none for the bootstrap admin)
       confirm.ts        (W3) confirm section (role alertdialog, `.outcome`) naming space / target / role; takes the focus when it appears (another confirmation is another key) and Escape dismisses it
-      shown-once.ts     (W2/W3) invite code or admin token shown once (`.outcome`); takes the focus when it appears
+      shown-once.ts     (W2/W3) invite code or admin token shown once (`.outcome`); takes the focus when it appears; hidden (not removed) while a confirmation is open, so it takes no focus when the confirmation closes
       forms.ts          (W3) invite (space view, leader rights), post (thread view), send-to-topic (space view) forms; submitted through submitForm
     format/
       time.ts           server time → local "YYYY-MM-DD HH:MM" (absolute: a deep-equal poll does not re-render, so a relative time would go stale)
@@ -138,7 +138,7 @@ export function createStore(reducer: (s: AppState, a: Action) => AppState, initi
 - Any `401` from any call dispatches `session/signed-out` (session revoked, rotated token, expired cookie: `gui-access.feature:103-140`). `403` shows the error message in place (e.g. a leader opening `#/admins`).
 - `view/mount.ts` patches by tag + `key` prop: same tag and key reuse the node and update props/text; an `<input>`/`<textarea>` that has focus keeps its value. This keeps forms usable while polling re-renders (W3).
 - Outcomes stay in view (`.outcome` in `style.css`: `position: sticky; top: 0` inside `<main>`): the confirmation, the secret shown once and the notice are the first children of `<main>`, but the button that caused them may be far down a long page. Sticky keeps them at the top of the viewport while the page scrolls; they leave with their state (a secret and a notice on the next navigation, a confirmation on dismiss, confirm or navigation). The confirmation and the secret also carry `autofocus` and `tabindex="-1"`: `mount.ts` focuses them when they appear (a screen reader reads the dialog name or the secret), Tab then reaches the confirmation's buttons, Escape dismisses the confirmation and the focus goes back to the button that opened it. A notice does not take the focus (the operator keeps typing; its `status` and `alert` roles are announced).
-- A form clears only when its mutation went through: `submitForm` resets it once the intent resolves true, so a refused invite, mint, reply or topic message keeps the typed text next to the server's error. The sign-in token field is the exception: it is cleared at once (`takeField`).
+- A form clears only when its mutation went through: `submitForm` resets it once the intent resolves true and the form still holds what was submitted, so a refused invite, mint, reply or topic message keeps the typed text next to the server's error, and text typed while the answer was pending is not wiped. The sign-in token field is the exception: it is cleared at once (`takeField`).
 - Long unbroken text wraps (`overflow-wrap: break-word` on `body`, `min-width: 0` on the flex paragraphs of the header and the confirmation); a table wider than the window scrolls inside its `.scroll-x` box. At 360 px the page itself never scrolls sideways.
 
 ### 3.3 Polling

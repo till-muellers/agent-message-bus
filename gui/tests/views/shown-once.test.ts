@@ -22,4 +22,11 @@ describe("a secret shown once", () => {
 		const next = shownOnceView({ label: "Token of admin ops", secret: "amb_admin_y" });
 		expect(next.key).not.toBe(view.key);
 	});
+
+	test("can be hidden without leaving the page, and is shown by default", () => {
+		const secret = { label: "Token of admin ops", secret: "amb_admin_x" };
+		expect(shownOnceView(secret, true).attrs.hidden).toBe("");
+		expect(shownOnceView(secret, true).key).toBe(view.key);
+		expect(view.attrs.hidden).toBeUndefined();
+	});
 });
