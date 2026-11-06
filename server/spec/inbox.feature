@@ -247,6 +247,52 @@ Feature: Agent inbox
       When the live channel drops the stream's subscription because its buffer is full
       Then the server ends the stream
 
+    Scenario Outline: The stream ends when its token stops authenticating (<how>)
+      # The stream re-checks its token before every page it sends and on every
+      # heartbeat, so a dead token gets nothing more, even when the same name is
+      # invited again into the same space.
+      Given member "worker" opened the inbox stream with its "alpha" token
+      And the stream sent entries "a1, a2"
+      When <how>
+      And leader "lead" invites "worker" into space "alpha" again with task "secret task"
+      Then the server ends the stream without sending "secret task"
+      And the new token of "worker" can open the inbox stream
+
+      Examples:
+        | how                                          |
+        | leader "lead" revokes member "worker"        |
+        | member "worker" leaves space "alpha"         |
+        | leader "lead" deletes space "alpha" and creates it again |
+
+    Scenario: The bootstrap admin's stream ends when the admin token is rotated
+      Given the admin joined space "alpha" and opened the inbox stream
+      When the instance admin token is rotated
+      And leader "lead" sends a direct message "secret after rotation" to "admin" in space "alpha"
+      Then the server ends the stream without sending "secret after rotation"
+
+    Scenario: An idle stream ends within one heartbeat of its token stopping to authenticate
+      Given the stream heartbeat interval is 1 millisecond
+      And member "worker" opened the inbox stream with its "alpha" token
+      When leader "lead" revokes member "worker"
+      Then the server ends the stream
+      And the stream slot of "worker" is free
+
+    Scenario: The stream drops a client that stops reading
+      # Every frame must reach the client within 30 seconds; the client
+      # reconnects and gets the unacknowledged backlog again.
+      Given the frame write timeout is 200 milliseconds
+      And member "worker" opened the inbox stream from a client that never reads
+      When more entries are stored for "worker" than the connection buffers hold
+      Then the server ends the stream
+      And the stream slot of "worker" is free
+
+    Scenario: Shutdown ends a stream blocked writing to a client that stops reading
+      Given member "worker" opened the inbox stream from a client that never reads
+      And the stream is blocked writing its backlog
+      When the server cancels all streams
+      Then the server ends the stream at once
+      And the stream slot of "worker" is free
+
     Scenario: A fast reader keeps its stream while senders burst during a long backlog
       # The stream discards the wake-up signals queued behind each page it has read,
       # since its next read covers them, so the subscription overflows only when more
@@ -288,7 +334,8 @@ Feature: Agent inbox
 
     # One identity per agent: each agent has one stream slot, held from the
     # moment its stream is accepted until that stream ends for any reason
-    # (client disconnect, server shutdown or a dropped live subscription).
+    # (client disconnect, server shutdown, a dropped live subscription, a token
+    # that stopped authenticating or a client that stopped reading).
     # The slot is per agent, not per token, so a member's space tokens share it.
     # Tool calls are not restricted.
 

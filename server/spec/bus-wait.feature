@@ -140,6 +140,19 @@ Feature: Waiting for mail (bus_wait)
       When the live channel drops the wait's subscription because its buffer is full
       Then the call reads the mailbox once more and returns the matching entries, possibly []
 
+    Scenario: A wait whose token stopped authenticating fails instead of returning the next mail
+      # Every read and every heartbeat re-checks the token the wait started with.
+      Given member "worker" is in bus_wait with timeoutSeconds 15
+      When leader "lead" revokes member "worker" and invites "worker" again
+      And leader "lead" sends a direct message "wait-leak" to "worker" in space "alpha"
+      Then the call fails with unauthenticated "invalid token"
+      And it returns no entry
+
+    Scenario: An idle wait ends within one heartbeat of its token stopping to authenticate
+      Given member "worker" is in bus_wait with timeoutSeconds 300
+      When leader "lead" revokes member "worker"
+      Then the call fails with unauthenticated "invalid token" within one heartbeat
+
     Scenario: Waiting does not take the inbox stream slot
       Given member "worker" opened the inbox stream with its "alpha" token
       When member "worker" calls bus_wait with its "alpha" token and timeoutSeconds 5

@@ -64,7 +64,7 @@ Tokens don't expire; invite codes do. `bus_revoke_member` is idempotent: it remo
 |`GET /v1/tools`|bearer|Tool list: `[{name, description, inputSchema}]`.|
 |`POST /v1/tools/{name}`|bearer|Call a tool. The body is the JSON args. Success returns `{"result": …}`, plus `"mail": {"waiting","critical","spaces"}` on the first result after new mail ("You have mail", see [TOOLS.md](TOOLS.md)); failure returns `{"error":{"code","message"}}`.|
 |`POST /v1/invites/accept`|invite code|Redeem an invite code (the bearer) once for a member token: 200 `{"name","space","token"}`; the invite's task, if any, is stored in the same transaction as a `direct_message` from the inviter. An unknown, used, revoked or expired code gets 401 `invalid or expired invite code`.|
-|`GET /v1/inbox/stream`|bearer|SSE: the backlog, then live `event: inbox` frames. Ack with `bus_inbox_ack {upTo}`.|
+|`GET /v1/inbox/stream`|bearer|SSE: the backlog, then live `event: inbox` frames. Ack with `bus_inbox_ack {upTo}`. Ends when its token stops authenticating (re-checked before every page and heartbeat) or a frame cannot be written within 30 s.|
 |`GET /v1/guide`|bearer (any kind)|The agent guide as `text/markdown; charset=utf-8` (`internal/guide/guide.md` verbatim, ≤ 4000 characters). Without a bearer: 401 `bearer token required`.|
 |`POST /v1/admin/shutdown`|any admin, loopback only|Graceful shutdown (used by `stop`).|
 |`POST /v1/admin/admin-token`|bootstrap admin, loopback only|Swap the instance admin token live; body `{"token"}` (used by `rotate-token`). Minted admins get 403.|
@@ -118,7 +118,7 @@ Sessions live in memory (a restart signs everybody out) for at most 8 hours and 
   - Every entry carries a delivery class, derived by `inbox.ClassOf(type, critical)` and never stored: `interrupt` (any critical entry: reach the agent now), `queue` (`direct_message`, `topic_message`, `thread_post`: next step, wakes an idle agent) or `deferred` (`topic_closed`, `thread_removed`, `blackboard_removed`: next turn, never wakes). A new entry type adds its row to `classByType` in `inbox/class.go`; a test fails when one is missing.
   - Every new stream connection replays from the lowest unacked id; `Last-Event-ID` is ignored.
 - **At-least-once delivery.** Clients ack after handling an entry. If an ack fails, the entry is redelivered.
-- **One consumer per agent.** One identity per agent is an enforced invariant: the inbox service holds one stream slot per agent, so a second concurrent `GET /v1/inbox/stream` for the same agent gets 409 `conflict` while the first keeps streaming. The slot frees when that stream ends for any reason (disconnect, server shutdown, dropped subscription). Tool calls aren't restricted.
+- **One consumer per agent.** One identity per agent is an enforced invariant: the inbox service holds one stream slot per agent, so a second concurrent `GET /v1/inbox/stream` for the same agent gets 409 `conflict` while the first keeps streaming. The slot frees when that stream ends for any reason (disconnect, server shutdown, dropped subscription, a token that stopped authenticating, a client that stopped reading for 30 s). Tool calls aren't restricted.
 - **Admin token swap.** `SetAdminToken` replaces the admin credential atomically; requests after the swap see only the new token.
 
 ## Develop

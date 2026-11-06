@@ -10,12 +10,17 @@ import (
 	"time"
 )
 
-// finalWriteTimeout bounds the end of the response after the stream ended.
-const finalWriteTimeout = time.Second
+const (
+	// expireGrace lets a write in flight when the stream ends finish, so a reading client
+	// still sees a clean end, while a write blocked on a stalled client fails soon after.
+	expireGrace = 250 * time.Millisecond
+	// finalWriteTimeout bounds the end of the response after the stream ended.
+	finalWriteTimeout = time.Second
+)
 
 // sseWriter frames server-sent events and flushes each one to the client. Every frame
 // write has a deadline of frameTimeout, so a client that stops reading fails the write;
-// once done is closed, writes fail at once.
+// once done is closed, writes fail within expireGrace.
 type sseWriter struct {
 	w            io.Writer
 	rc           *http.ResponseController
@@ -70,10 +75,10 @@ func (s sseWriter) armDeadline() error {
 	}
 }
 
-// expire makes every pending and later write fail at once, which ends a write blocked on
-// a client that stopped reading.
+// expire makes every pending and later write fail within expireGrace, which ends a write
+// blocked on a client that stopped reading.
 func (s sseWriter) expire() error {
-	if err := s.rc.SetWriteDeadline(time.Now()); err != nil {
+	if err := s.rc.SetWriteDeadline(time.Now().Add(expireGrace)); err != nil {
 		return fmt.Errorf("expiring the stream's write deadline: %w", err)
 	}
 	return nil
