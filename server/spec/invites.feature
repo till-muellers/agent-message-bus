@@ -8,7 +8,8 @@ Feature: Invite codes
   # An invite may carry a task. It is stored with the inviter's name and, when the code is
   # accepted, delivered as the member's first inbox entry: a direct_message from the inviter.
   # bus_revoke_member cancels every pending code for the revoked name in the space.
-  # Redeeming is case-insensitive and ignores dashes and other separators.
+  # Redeeming is case-insensitive and ignores dashes and other separators; the code is the one
+  # bearer token of the Authorization header, so it holds no whitespace (see transports.feature).
 
   Background:
     Given the admin minted leader "lead"
