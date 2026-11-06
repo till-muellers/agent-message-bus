@@ -15,7 +15,8 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/migrations"
 )
 
-const autoincrement = "0005_autoincrement_ids"
+// autoincrement is the name suffix of the migration under test; its number is set at merge time.
+const autoincrement = "_autoincrement_ids"
 
 // seedEveryTable fills every table, with space 2 holding one row of each space-scoped table.
 const seedEveryTable = `
@@ -37,10 +38,10 @@ INSERT INTO invites (hash, space_id, name, expires_at, invited_by, id) VALUES ('
 func TestAutoincrementIDsMigration(t *testing.T) {
 	t.Parallel()
 	conn := seededBefore(t, autoincrement)
-	before := rowCounts(t, conn)
+	seeded := rowCounts(t, conn)
 	migrateWith(t, conn, migrations.FS)
-	if got := rowCounts(t, conn); !maps.Equal(got, before) {
-		t.Fatalf("rows after the migration = %v, want %v", got, before)
+	if got := rowCounts(t, conn); !maps.Equal(got, seeded) {
+		t.Fatalf("rows after the migration = %v, want %v", got, seeded)
 	}
 	wantAutoincrement(t, conn, true)
 	if ids := queryColumn[int](t, conn, `SELECT id FROM threads ORDER BY id`); !slices.Equal(ids, []int{3, 4}) {
@@ -51,8 +52,10 @@ func TestAutoincrementIDsMigration(t *testing.T) {
 	mustExec(t, conn, `INSERT INTO spaces (name, created_by, created_at) VALUES ('next', 1, 't')`)
 	mustExec(t, conn, `INSERT INTO blackboards (id, space_id, name, owner_id, created_at) VALUES (8, 1, 'b', 1, 't')`)
 	mustExec(t, conn, `INSERT INTO threads (blackboard_id, title, created_by, created_at) VALUES (8, 'next', 1, 't')`)
-	if ids := queryColumn[int](t, conn, `SELECT MAX(id) FROM spaces UNION ALL SELECT MAX(id) FROM threads`); !slices.Equal(ids, []int{3, 5}) {
-		t.Fatalf("new space and thread ids = %v, want [3 5] (2 and 4 were deleted)", ids)
+	space := queryColumn[int](t, conn, `SELECT id FROM spaces WHERE name = 'next'`)
+	thread := queryColumn[int](t, conn, `SELECT id FROM threads WHERE title = 'next'`)
+	if space[0] != 3 || thread[0] != 5 {
+		t.Fatalf("new space id %v, thread id %v; want 3 and 5 (2 and 4 were deleted)", space, thread)
 	}
 }
 
@@ -61,12 +64,14 @@ func TestAutoincrementIDsMigration(t *testing.T) {
 func TestAutoincrementIDsMigrationReverts(t *testing.T) {
 	t.Parallel()
 	conn := seededBefore(t, autoincrement)
-	before := rowCounts(t, conn)
-	withRevert := through(t, autoincrement+".up.sql")
-	withRevert["9999_revert.up.sql"] = &fstest.MapFile{Data: readMigration(t, autoincrement+".down.sql")}
+	seeded := rowCounts(t, conn)
+	up := migrationFile(t, autoincrement+".up.sql")
+	withRevert := before(t, autoincrement+".up.sql")
+	withRevert[up] = &fstest.MapFile{Data: readMigration(t, up)}
+	withRevert["9999_revert.up.sql"] = &fstest.MapFile{Data: readMigration(t, migrationFile(t, autoincrement+".down.sql"))}
 	migrateWith(t, conn, withRevert)
-	if got := rowCounts(t, conn); !maps.Equal(got, before) {
-		t.Fatalf("rows after reverting = %v, want %v", got, before)
+	if got := rowCounts(t, conn); !maps.Equal(got, seeded) {
+		t.Fatalf("rows after reverting = %v, want %v", got, seeded)
 	}
 	wantAutoincrement(t, conn, false)
 	if n := queryColumn[int](t, conn, `SELECT COUNT(*) FROM sqlite_sequence WHERE name IN ('spaces', 'threads')`); n[0] != 0 {
@@ -76,25 +81,28 @@ func TestAutoincrementIDsMigrationReverts(t *testing.T) {
 	wantCascaded(t, conn)
 }
 
-// seededBefore returns a database migrated up to the migration named name, with seedEveryTable.
-func seededBefore(t *testing.T, name string) *sql.DB {
+// seededBefore returns a database migrated up to the migration whose name ends in
+// suffix+".up.sql", holding seedEveryTable.
+func seededBefore(t *testing.T, suffix string) *sql.DB {
 	t.Helper()
 	conn, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	migrateWith(t, conn, before(t, "_"+strings.SplitN(name, "_", 2)[1]+".up.sql"))
+	migrateWith(t, conn, before(t, suffix+".up.sql"))
 	mustExec(t, conn, seedEveryTable)
 	return conn
 }
 
-// through returns the up migrations of migrations.FS up to and including name.
-func through(t *testing.T, name string) fstest.MapFS {
+// migrationFile returns the name of the one migration file ending in suffix.
+func migrationFile(t *testing.T, suffix string) string {
 	t.Helper()
-	out := before(t, strings.TrimPrefix(name, name[:4]))
-	out[name] = &fstest.MapFile{Data: readMigration(t, name)}
-	return out
+	names, err := fs.Glob(migrations.FS, "*"+suffix)
+	if err != nil || len(names) != 1 {
+		t.Fatalf("migrations ending in %s = %v, %v; want one", suffix, names, err)
+	}
+	return names[0]
 }
 
 func readMigration(t *testing.T, name string) []byte {
@@ -127,7 +135,7 @@ func rowCounts(t *testing.T, conn *sql.DB) map[string]int {
 func wantAutoincrement(t *testing.T, conn *sql.DB, want bool) {
 	t.Helper()
 	for _, table := range []string{"spaces", "threads"} {
-		ddl := queryColumn[string](t, conn, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, table)
+		ddl := queryColumn[string](t, conn, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = '`+table+`'`)
 		if len(ddl) != 1 || strings.Contains(ddl[0], "AUTOINCREMENT") != want {
 			t.Fatalf("%s ddl = %q, want AUTOINCREMENT %v", table, ddl, want)
 		}

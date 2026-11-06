@@ -14,9 +14,14 @@ type DBTX interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+// beginner starts transactions: the pool (*sql.DB) or one connection of it (*sql.Conn).
+type beginner interface {
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+}
+
 // InTx runs fn in one transaction, committing on success and rolling back otherwise.
 // fn MUST use only tx: the pool has one connection, so touching conn inside fn deadlocks.
-func InTx(ctx context.Context, conn *sql.DB, fn func(tx *sql.Tx) error) error {
+func InTx(ctx context.Context, conn beginner, fn func(tx *sql.Tx) error) error {
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("beginning transaction: %w", err)

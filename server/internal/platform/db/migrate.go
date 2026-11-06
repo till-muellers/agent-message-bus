@@ -54,6 +54,8 @@ func listMigrations(fsys fs.FS) ([]migration, error) {
 	return out, nil
 }
 
+// applyMigration runs m in one transaction on a connection with foreign keys off (see
+// withoutForeignKeys), unless schema_migrations already records it.
 func applyMigration(ctx context.Context, db *sql.DB, fsys fs.FS, m migration) error {
 	var n int
 	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, m.version).Scan(&n)
@@ -67,15 +69,24 @@ func applyMigration(ctx context.Context, db *sql.DB, fsys fs.FS, m migration) er
 	if err != nil {
 		return fmt.Errorf("reading migration %s: %w", m.name, err)
 	}
-	return InTx(ctx, db, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, string(body)); err != nil {
-			return fmt.Errorf("applying migration %s: %w", m.name, err)
-		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
-			m.version, Timestamp(time.Now()))
-		if err != nil {
-			return fmt.Errorf("recording migration %s: %w", m.name, err)
-		}
-		return nil
+	return withoutForeignKeys(ctx, db, func(conn *sql.Conn) error {
+		return InTx(ctx, conn, func(tx *sql.Tx) error { return runMigration(ctx, tx, m, body) })
 	})
+}
+
+// runMigration applies body through tx, checks that it left no dangling foreign key and
+// records m.
+func runMigration(ctx context.Context, tx *sql.Tx, m migration, body []byte) error {
+	if _, err := tx.ExecContext(ctx, string(body)); err != nil {
+		return fmt.Errorf("applying migration %s: %w", m.name, err)
+	}
+	if err := checkForeignKeys(ctx, tx); err != nil {
+		return fmt.Errorf("applying migration %s: %w", m.name, err)
+	}
+	_, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
+		m.version, Timestamp(time.Now()))
+	if err != nil {
+		return fmt.Errorf("recording migration %s: %w", m.name, err)
+	}
+	return nil
 }
