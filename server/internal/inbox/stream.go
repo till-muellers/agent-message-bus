@@ -2,12 +2,16 @@ package inbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/till-muellers/agent-message-bus/server/internal/auth"
 )
+
+// errDropped ends a stream whose live subscription the broker closed.
+var errDropped = errors.New("inbox subscription dropped")
 
 // stream subscribes before draining the backlog so nothing published meanwhile
 // is missed. Live messages are only wake-up signals: each one drains the inbox
@@ -20,16 +24,21 @@ func (s *Service) stream(ctx context.Context, w http.ResponseWriter, p auth.Prin
 	if err != nil {
 		return err
 	}
-	lastSent, err := s.drain(ctx, sse, p, 0)
-	if err != nil {
-		return err
+	lastSent, err := s.drain(ctx, sse, p, live, 0)
+	if err == nil {
+		err = s.forwardLive(ctx, sse, p, live, lastSent)
 	}
-	return s.forwardLive(ctx, sse, p, live, lastSent)
+	if errors.Is(err, errDropped) {
+		return nil
+	}
+	return err
 }
 
 // drain sends p's stored entries after lastSent page by page, marks the edges of each sent
-// page noticed (the stream told the agent) and returns the last id sent.
-func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, lastSent int64) (int64, error) {
+// page noticed (the stream told the agent) and returns the last id sent. After each page it
+// discards the queued wake-up signals, since the next Read covers them, so a long drain
+// under a sender burst does not overflow the subscription.
+func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, live <-chan []byte, lastSent int64) (int64, error) {
 	for {
 		page, err := s.Read(ctx, p, lastSent, MaxLimit)
 		if err != nil {
@@ -46,6 +55,9 @@ func (s *Service) drain(ctx context.Context, sse sseWriter, p auth.Principal, la
 		}
 		if err := s.MarkNoticed(ctx, p, page); err != nil {
 			return lastSent, err
+		}
+		if !coalesce(live) {
+			return lastSent, errDropped
 		}
 	}
 }
@@ -67,7 +79,7 @@ func (s *Service) forwardLive(ctx context.Context, sse sseWriter, p auth.Princip
 				return nil
 			}
 			var err error
-			if lastSent, err = s.drain(ctx, sse, p, lastSent); err != nil {
+			if lastSent, err = s.drain(ctx, sse, p, live, lastSent); err != nil {
 				return err
 			}
 		}
