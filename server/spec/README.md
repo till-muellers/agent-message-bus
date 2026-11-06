@@ -97,7 +97,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [topics.feature](topics.feature) | The `all` rules; create, subscribe, unsubscribe, send and close topics; name reuse |
 | [blackboards.feature](blackboards.feature) | Blackboards, threads, posts, thread subscriptions and their permissions |
 | [inbox.feature](inbox.feature) | Reading and acknowledging the inbox; the SSE stream |
-| [local-instance.feature](local-instance.feature) | `start`, `stop`, `status`, `admin-token`, `rotate-token`; the state file; single instance per data dir |
+| [local-instance.feature](local-instance.feature) | `start`, `stop`, `status`, `admin-token`, `rotate-token`; the state file; single instance per data dir; a brief external write lock delays calls instead of failing them |
 | [transports.feature](transports.feature) | RPC routes, error bodies and status codes, argument validation, MCP, admin endpoints |
 | [schema.feature](schema.feature) | The single irreversible `0001_schema` migration with kind/role `admin`; later numbered migrations apply on top |
 | [tool-descriptions.feature](tool-descriptions.feature) | Tool descriptions: purpose first, a separate access sentence, pitfalls, the critical property, and the `bus_spawn_worker` entry in TOOLS.md |
