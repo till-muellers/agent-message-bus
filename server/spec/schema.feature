@@ -85,3 +85,17 @@ Feature: One fresh schema as the service's first iteration
       Then every table holds the same rows, spaces and threads with the same ids
       And deleting a space still deletes its tokens, participants, topics, blackboards, threads, posts, subscriptions, inbox entries and invites
       And its down migration restores the plain INTEGER PRIMARY KEY and keeps every row
+
+  Rule: A binary refuses a database migrated by a newer binary
+
+    # Without this check an older binary would run on a schema it does not know: v0.2.0
+    # on a database with 0004_invites_id stores every invite with id '' and fails the
+    # second one with UNIQUE constraint failed: invites.id. Released v0.2.0 and v0.3.0
+    # lack the check, so DEPLOYMENT.md §8 tells operators to restore the backup instead.
+
+    Scenario: The server does not start on a newer schema
+      Given the newest migration of this binary has version N
+      And schema_migrations holds version N+1
+      When the server starts
+      Then it exits with "migrate db: database schema version <N+1> is newer than this binary (latest <N>); run a newer agent-message-bus or restore the backup taken before the upgrade"
+      And no migration runs and the database is unchanged
