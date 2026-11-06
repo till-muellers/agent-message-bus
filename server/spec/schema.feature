@@ -89,9 +89,10 @@ Feature: One fresh schema as the service's first iteration
   Rule: A binary refuses a database migrated by a newer binary
 
     # Without this check an older binary would run on a schema it does not know: v0.2.0
-    # on a database with 0004_invites_id stores every invite with id '' and fails the
-    # second one with UNIQUE constraint failed: invites.id. Released v0.2.0 and v0.3.0
-    # lack the check, so DEPLOYMENT.md §8 tells operators to restore the backup instead.
+    # on a database with 0004_invites_id stores a new invite with id '' and then fails every
+    # further bus_invite_member with UNIQUE constraint failed: invites.id until that invite is
+    # used or expires. Released v0.2.0 and v0.3.0 lack the check, so DEPLOYMENT.md §8 tells
+    # operators to restore the backup instead.
 
     Scenario: The server does not start on a newer schema
       Given the newest migration of this binary has version N
