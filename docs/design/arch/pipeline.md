@@ -77,7 +77,7 @@ There are **two** numbers, and they must not be confused.
 
 | Number | Meaning | Single source | Read by |
 |---|---|---|---|
-| Plugin version (Semantic Versioning 2.0.0 core `MAJOR.MINOR.PATCH`, e.g. `0.2.0`) | which extension code a copy holds; "extension protocol version" in `plugin-version-skew.feature` | root `package.json` `version` (:3) | `omp plugin list` (manifest of the installed commit); `extension/lib/version/plugin-version.ts` at load; release tag check |
+| Plugin version (Semantic Versioning 2.0.0 `MAJOR.MINOR.PATCH[-PRERELEASE]`, e.g. `0.2.0`, `0.5.0-rc.1`; precedence in `extension/lib/version/plugin-version.ts` `isOlderVersion`) | which extension code a copy holds; "extension protocol version" in `plugin-version-skew.feature` | root `package.json` `version` (:3) | `omp plugin list` (manifest of the installed commit); `extension/lib/version/plugin-version.ts` at load; release tag check |
 | Server protocol (integer, e.g. `2`) | which server contracts exist | Go constant `Protocol` in `server/internal/server/protocol.go` (Arch-server, contracts.md) | `GET /healthz` header `Agent-Bus-Protocol`; extension compares with `MIN_SERVER_PROTOCOL` |
 
 ### 3.1 Plugin version
@@ -95,7 +95,7 @@ There are **two** numbers, and they must not be confused.
 | Check | Where | Fails when |
 |---|---|---|
 | `tests/version/protocol-sync.test.ts` | bun, `ci-typescript` and `full` | `MIN_SERVER_PROTOCOL` > the `Protocol` constant parsed from `server/internal/server/protocol.go` (a plugin at HEAD would refuse the server at HEAD) |
-| `scripts/release_version.py` + `tests/test_release_version.py` | python, `release.yml`, `ci-python` and `full` | the tag `vX.Y.Z` ≠ `package.json` version; message `package version 0.1.0 does not match tag v0.2.0` (`plugin-version-skew.feature:88-91`) |
+| `scripts/release_version.py` + `tests/test_release_version.py` | python, `release.yml`, `ci-python` and `full` | the tag is no `vMAJOR.MINOR.PATCH[-PRERELEASE]` SemVer string or ≠ `package.json` version; message `package version 0.1.0 does not match tag v0.2.0` (`plugin-version-skew.feature:88-91`) |
 | `tests/layout.test.ts` | bun | an import edge outside `client.md` §1.3 |
 
 `scripts/release_version.py` is its own file (one responsibility; `build.py` stays "build"):
@@ -139,17 +139,17 @@ permissions:
       - name: Build release binaries (GUI first)
         run: python scripts/build.py --version "${GITHUB_REF_NAME#v}"
       - name: Create GitHub Release
-        run: gh release create … (unchanged)
+        run: gh release create … (`--prerelease` when the version contains `-`)
 ```
 
 The two checks run first, so a bad tag fails in seconds and publishes nothing:
 
-- **Version check** (`scripts/release_version.py`): the tag is `vMAJOR.MINOR.PATCH` (regex `v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)`: no leading zeros, no pre-release, no build metadata, `v` required) and equals the `package.json` version. A `v*` tag publishes a release, hence the strict form; any other tag fails in this first step with the expected form. It needs no network.
+- **Version check** (`scripts/release_version.py`): the tag is `v` plus a SemVer 2.0.0 version `MAJOR.MINOR.PATCH[-PRERELEASE]` (no leading zeros, pre-release identifiers alphanumeric or numeric without leading zeros, e.g. `v0.5.0-rc.1`, `v3.5.1-prerelease01`; `v3.5.1-01`, `v1.2`, `1.2.3` fail) and equals the `package.json` version exactly. Build metadata (`+build`) is refused: precedence ignores it and it is awkward in asset names. A `v*` tag publishes a release, hence the strictness; any other tag fails in this first step with the expected form. It needs no network.
 - **Full-tier gate** (`scripts/release_ci_gate.py`, pytest `tests/test_release_ci_gate.py`): it requires a `push` run of the `full` workflow (`full.yml`) for the tagged commit that concluded `success`. `pull_request` runs do not count (the full tier has none; the filter keeps a broken query from passing), and the script drops runs of other commits. One successful run is enough: normally the run of the merge to `main`, otherwise the run of the tag push itself (when no run of `main` covered the commit, `full.yml` runs the suites on the tag). The tag push starts its own `full` run, which may still be in progress while the release checks. No run, only failed runs or only running runs → exit 1 with the commit and the listed runs; re-run the release workflow once the full tier passed.
 
 ### 4.2 Release procedure (documented in the root `README.md` "Releasing" section)
 
-1. Branch `release/X.Y.Z` from `develop` (Git Flow; SemVer: a release from `develop` bumps MINOR, or MAJOR for breaking changes, and while MAJOR is 0 anything may change on MINOR; the tag must equal `package.json` `version`): bump `package.json` `version` (R1); if a server contract the extension needs changed in this release, check `protocol.go` is at least `MIN_SERVER_PROTOCOL` (the fitness test enforces `MIN_SERVER_PROTOCOL` ≤ `Protocol`). Only stabilizing fixes after that. Local checks.
+1. Branch `release/X.Y.Z` from `develop` (Git Flow; SemVer: a release from `develop` bumps MINOR, or MAJOR for breaking changes, and while MAJOR is 0 anything may change on MINOR; the tag must equal `package.json` `version`): bump `package.json` `version` (R1); if a server contract the extension needs changed in this release, check `protocol.go` is at least `MIN_SERVER_PROTOCOL` (the fitness test enforces `MIN_SERVER_PROTOCOL` ≤ `Protocol`). Only stabilizing fixes after that. Local checks. A release candidate is tagged on the release branch with `package.json` at `X.Y.Z-rc.N` (`vX.Y.Z-rc.N`); `release.yml` creates it with `--prerelease`, so it never becomes `releases/latest`, which the extension's `/bus server start` downloads (`extension/lib/local-server/download.ts`, `RELEASES_URL`). No push to `main` covers a release-branch commit, so the full-tier run of the candidate's tag push runs the suites itself (`covered` finds nothing) and the release workflow, started at the same time, fails its gate: re-run it after the full-tier run passed. Cheapest correct option: no extra trigger, no polling job, no repeated suites; the cost is one manual re-run per candidate. The final tag `vX.Y.Z` is on the merge commit on `main`, which the push to `main` already covered.
 2. Merge `release/X.Y.Z` into `main` with a merge commit and push: that starts `full.yml`. When it is green, tag the merge commit `vX.Y.Z`, push the tag, merge the release branch back into `develop` → `release.yml` checks the version and the full-tier run, builds GUI + 6 server binaries + `SHA256SUMS`, publishes the GitHub Release.
 3. A `hotfix/<name>` branch (from `main`, PATCH bump in `package.json`) takes the same way: merge into `main`, full tier, tag `vX.Y.Z` with the new patch, merge into `develop`.
 4. Users: `omp plugin upgrade @till-muellers/omp-agent-message-bus` (the targeted form; findings R4) and replace the server binary. README states both.
