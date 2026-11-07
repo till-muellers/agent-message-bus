@@ -49,11 +49,7 @@ cp -rf source dest          # NOT: cp -r source dest
 
 ## Git workflow
 
-This repo uses Git Flow; the rules are in `.omp/AGENTS.md` ("Git Flow and CI") and `.omp/RULES.md`. They take precedence over the generic session-close steps in the Beads blocks below:
-
-- Work on `feature/<name>` branched from `develop`; land it on `develop` after `git fetch && git rebase origin/develop` and the local checks, by a pull request (reduced CI on the merge result) or a direct merge. Never commit or push to `main` (only a pull request from `release/*`, `hotfix/*` or `develop` changes it).
-- Where the Beads block says `git pull --rebase` and `git push`, that means the rebase on `origin/develop` and a push of your feature branch or `develop`. `bd dolt push` stays the last step of a session.
-- Never trigger, poll or wait for CI runs. The local checks are the gate.
+Git Flow: see [`.omp/AGENTS.md`](.omp/AGENTS.md) ("Git workflow and CI") and [`.omp/RULES.md`](.omp/RULES.md). They take precedence over the generic session-close steps in the Beads blocks below: `git pull --rebase` there means `git fetch && git rebase origin/develop`, and `git push` pushes your feature branch or `develop`. `bd dolt push` stays the last step of a session.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker

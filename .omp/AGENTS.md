@@ -7,7 +7,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - omp plugin: TypeScript on Bun (`extension/`), typechecked with `tsc --noEmit`.
 - Web GUI: strict TypeScript on Bun without a framework (`gui/`, its own `package.json` and `tsconfig.json`), bundled into `server/internal/web/dist/` and embedded by the server.
 - Python: release tooling only (`scripts/build.py`, `scripts/release_version.py`).
-- CI: GitHub Actions in `.github/workflows/`, on pull requests only: the reduced suite `ci-go.yml`, `ci-typescript.yml`, `ci-web.yml`, `ci-python.yml`, the full suite `full.yml`; the tag publisher `release.yml` (see "Git Flow and CI").
+- CI: GitHub Actions ([`.github/workflows/`](../.github/workflows/)); see [Git workflow and CI](#git-workflow-and-ci-git-flow).
 
 ## Layout
 
@@ -24,7 +24,7 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ## Commands
 - Go test: `cd server && go test ./...` (single pkg: `go test ./internal/<feature>/...`, single test: `go test -run TestName ./path`)
-- Go race + cover: `go test -race -cover ./...` (needs CGO; part of the local checks; only the full suite of CI runs it)
+- Go race + cover: `go test -race -cover ./...` (needs CGO)
 - Go lint/format: `gofmt -l .`, `go vet ./...`, `golangci-lint run ./...`
 - TS: `bun test tests/`, `bun run typecheck`
 - GUI: `cd gui && bun test && bun run typecheck`; build into the embed dir with `bun run build:gui` (repo root). Go builds and tests work without it (fallback page at `/web/`).
@@ -61,7 +61,7 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ### Turn specs into plan
 - Plan first: restate the task, list the files you'll touch, write a todo list.
-- One feature or behaviour per change: small, reviewable diffs on a `feature/<name>` branch that lands on `develop` (see "Git Flow and CI"; `main` takes only releases).
+- One feature or behaviour per change: small, reviewable diffs on a `feature/<name>` branch ([Git workflow and CI](#git-workflow-and-ci-git-flow)).
 - Every functionality gets its own file. Don't grow existing files into catch-alls.
 - Add logical steps. Aim for small commits.
 
@@ -88,26 +88,23 @@ Conventions and working method for contributors and coding agents in this repo.
 - Any new dependency? It needs approval first.
 - Tool changed? `server/TOOLS.md` regenerated, extension README and the agent guide `server/internal/guide/guide.md` still accurate.
 
-## Git Flow and CI
+## Git workflow and CI (Git Flow)
 
 ### Branches
-- `main`: released states only. The only way in is a pull request into `main` (the full CI suite runs on the merge result and is a required check): `release/*` → `main` (release finish), `hotfix/*` → `main` (hotfix finish) or `develop` → `main`. Never commit or push to it directly.
-- `develop`: the integration branch. Finished work lands here.
-- `feature/<name>`: one branch per task, branched from `develop`; put the slice or bead id in the name (`feature/E1-delivery-class`). Before landing: `git fetch && git rebase origin/develop`, run the local checks (below), then land it on `develop` in one of two ways: a pull request into `develop` (the reduced CI suite runs on the merge result) or a direct merge or push after the local checks (no CI runs). Bug fixes and docs changes are features too.
-- `release/<x.y.z>`: branched from `develop` for a version jump (`<x.y.z>` = the planned release version); only stabilizing fixes go in (pull requests into the branch run the reduced suite). Release candidates are tagged on this branch (`v0.5.0-rc.1` on `release/0.5.0`; `release.yml` publishes them as pre-releases). Finish: pull request `release/<x.y.z>` → `main`, merge with a merge commit (no squash, no rebase), tag `v<x.y.z>` on the merge commit, merge back into `develop`. Steps: README "Releasing".
-- `hotfix/<name>`: branched from `main` for an urgent fix; bump PATCH in `package.json`; pull request into `main` (full suite), tag `v<x.y.z>` on the merge commit, merge into `develop`.
-- **Versions** follow Semantic Versioning 2.0.0: `MAJOR.MINOR.PATCH[-PRERELEASE]`. The `version` in `package.json` is the single source and carries the exact string being tagged; the tag is `v` plus it. A release from `develop` bumps MINOR (MAJOR for breaking changes; while MAJOR is 0, anything may change on MINOR; leaving 0.x is a later owner decision), a hotfix bumps PATCH. A release candidate has a pre-release suffix (`0.5.0-rc.1`, `0.5.0-prerelease01`; numeric identifiers without leading zeros): the release branch commits bump `package.json` once per tag (`0.5.0-rc.1`, `0.5.0-rc.2`, then `0.5.0`). No build metadata (`+build`: precedence ignores it, asset names suffer). A `v*` tag publishes a release, so `scripts/release_version.py` fails fast on any other form or on a tag that differs from `package.json`. A pre-release tag is published as a GitHub pre-release, so `releases/latest` (what `/bus server start` downloads) stays the last stable release. The wire `Protocol` integer (`server/internal/server/protocol.go`) and the extension's `MIN_SERVER_PROTOCOL` are a separate number; never confuse them with the version.
+- `main`: released states. Only `release/*` and `hotfix/*` merges reach it.
+- `develop`: integration branch; finished work lands here.
+- `feature/<name>`: one per task, branched from `develop`. Before landing: `git fetch && git rebase origin/develop`, run the local checks, then PR into `develop` (or merge directly after the local checks).
+- `release/<version>`: branched from `develop`, stabilizing fixes only. Finish: PR into `main`, tag `v<version>` on the merge commit, merge `main` back into `develop`. Release candidates are tagged on this branch.
+- `hotfix/<name>`: branched from `main`; PR into `main`, tag the new patch version, merge into `develop`.
+
+### Versions
+SemVer 2.0.0. `package.json` `version` is the single source; the tag is `v` plus that exact string (`v0.5.0`, `v0.5.0-rc.1`). Release from `develop` bumps MINOR (MAJOR for breaking changes; at MAJOR 0 anything may change on MINOR), a hotfix bumps PATCH. The wire `Protocol` integer is a separate number. Validation: [`scripts/release_version.py`](../scripts/release_version.py).
 
 ### CI
-CI costs money. The local checks are the regular gate. Agents never trigger, poll or wait for a CI run (no `gh run watch`, no `gh pr checks --watch`): rely on the local checks and report them. CI runs on pull requests only, on the merge result, never on a branch push: a feature branch without a pull request and a direct merge into `develop` cost nothing.
-- **Reduced suite** (`ci-*.yml`): a pull request into `develop`, `release/**` or `hotfix/**`. Build, unit tests and linters, no `-race`. One workflow per area, each run only when its paths change: `server/**` (go), `extension/**` and `tests/**` (typescript), `gui/**` and `server/internal/web/testdata/**` (web: GUI typecheck, tests, bundle build), `scripts/**` and `tests/test_*.py` (python). Never a required check (a skipped path-filtered job would block the merge).
-- **Full suite** (`full.yml`): a pull request into `main`; never path-filtered, so its jobs `full-go`, `full-typescript`, `full-web`, `full-python`, `full-package` are the required checks of `main`. Everything: Go with `-race`, the TypeScript, GUI and Python suites, the real-bundle web build, the packaging build. Details, settings and cost: `docs/design/arch/pipeline.md` §2.
-- Draft pull requests are skipped; a newer commit cancels the superseded run of the same pull request. `workflow_dispatch` is the manual escape hatch (for example the full suite on a release branch before a release candidate tag).
-- Every workflow runs on `ubuntu-latest` only, never on Windows or macOS: we develop on Windows, so Windows and macOS are covered by local runs. To check for a Linux-only failure locally: `wsl -e bash -lc "cd /mnt/d/repos/<worktree>/server && go test ./..."` (WSL has go and gcc; its Go build cache is separate, so the first run is slow; add `-race` for the full-suite run).
-- **Manual only**: none today (no suite needs a display or GPU).
-- `release.yml` (tag `v*`) only publishes: strict SemVer check of the tag against `package.json`, build, GitHub release (`--prerelease` for a version with `-`). It repeats no suite and consults no earlier run: the full suite passed on the pull request into `main`.
-- No third-party action beyond `actions/*`, `oven-sh/setup-bun` and `golangci/golangci-lint-action` without approval; `tests/workflows.test.ts` enforces the workflow rules.
-- Session close: commit the feature branch including the tracked bead audit log (`.beads/interactions.jsonl` changes when a bead is closed), so the bead state lands with the code; land it on `develop` as above; then `bd dolt push` (the Dolt data under `refs/dolt/data` is separate from the git push and stays the last step of a session).
+- Local checks are the regular gate (see [Commands](#commands)). CI runs on Linux only; to reproduce a Linux-only failure locally: `wsl -e bash -lc "cd /mnt/d/repos/<worktree>/server && go test ./..."`.
+- The target branch of a PR picks the suite: `develop`, `release/**`, `hotfix/**` get the reduced, path-filtered suite; `main` gets the full suite. Workflows: [`.github/workflows/`](../.github/workflows/); rationale and cost: [`docs/design/arch/pipeline.md`](../docs/design/arch/pipeline.md).
+- Repository settings that are not in the workflow files: `main` accepts PRs only, the full-suite jobs are its required checks, branches must be up to date. Path-filtered jobs are not required checks.
+- A `v*` tag starts [`release.yml`](../.github/workflows/release.yml) (build and publish only; the full suite already ran on the PR into `main`). A release candidate on a release branch has only the reduced suite behind it; start the full suite by hand (`workflow_dispatch`) before tagging if you want it.
 
 ## Code conventions
 
@@ -201,9 +198,9 @@ A slice is done when all hold:
 8. **Docs**: README/DEPLOYMENT/extension README lines updated; the slice's `.omp/AGENTS.md` correction applied.
 9. **Local checks** clean (below).
 10. **Review**: self-review with the review checklist; no unrelated changes (or mentioned in the commit message); reviewer approval.
-11. **Delivery**: branch `feature/<name>`, rebased on `origin/develop`, the local checks (below) clean, landed on `develop` by a pull request (reduced CI on the merge result) or by a direct merge after the local checks. The local checks are the gate; nobody waits for CI. `main` is reached only by a pull request from `release/*`, `hotfix/*` or `develop`.
+11. **Delivery**: branch `feature/<name>`, rebased on `origin/develop`, local checks clean, landed on `develop` ([Git workflow and CI](#git-workflow-and-ci-git-flow)).
 
-Local checks, THE gate before a feature lands on `develop` (the reduced CI suite of a pull request re-runs only the areas it touches, on Linux, without `-race`):
+Local checks, THE gate before a feature lands on `develop` (the reduced CI suite re-runs only the areas a PR touches, without `-race`):
 
 ```sh
 cd server

@@ -34,7 +34,7 @@ A slice is done when **all** hold:
 8. **Docs**: README/DEPLOYMENT/extension README lines named in R10 updated; the slice's `.omp/AGENTS.md` correction applied.
 9. **Local checks** clean (AGENTS.md:146-156): `gofmt -l .` prints nothing; `go vet ./...`; `golangci-lint run ./...`; `go test -race ./...`; `bun test`; `bun run typecheck`; `pytest tests`.
 10. **Review**: self-review with the AGENTS.md:78-84 checklist; no unrelated changes (or mentioned in the commit message); reviewer approval.
-11. **Delivery**: branch `feature/<name>` (slice id in the name), rebased on `origin/develop`, the local checks (item 9) clean, landed on `develop` by a pull request (reduced CI on the merge result) or a direct merge after the local checks. The local checks are the gate; nobody waits for CI. `main` is reached only by a pull request from `release/*`, `hotfix/*` or `develop` (`.omp/AGENTS.md` "Git Flow and CI").
+11. **Delivery**: branch `feature/<name>` (slice id in the name), rebased on `origin/develop`, the local checks (item 9) clean, landed on `develop` (`.omp/AGENTS.md`, "Git workflow and CI").
 
 Proposed amendment to `.omp/AGENTS.md` (X9, slice 1): replace lines 143-156 with §2 items 1–11 (keeping the command block) and add §1 as "Definition of ready".
 

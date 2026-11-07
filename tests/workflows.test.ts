@@ -1,5 +1,5 @@
 /**
- * Workflow policy fitness (`docs/design/arch/pipeline.md` §2, `.omp/AGENTS.md` "Git Flow and CI"): CI costs money, so
+ * Workflow policy fitness (`docs/design/arch/pipeline.md` §2, `.omp/AGENTS.md` "Git workflow and CI"): CI costs money, so
  * nothing runs on a branch push. A pull request into `develop`, `release/**` or `hotfix/**` runs the reduced suite
  * (`ci-*.yml`, path-filtered); a pull request into `main` runs the full suite (`full.yml`, never path-filtered, so its
  * jobs can be required checks); a `v*` tag only publishes (`release.yml`). Drafts are skipped, superseded runs are
@@ -11,7 +11,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const WORKFLOWS = resolve(import.meta.dir, "..", ".github", "workflows");
-/** The base branches of the reduced suite (`.omp/AGENTS.md` "Git Flow and CI"). */
+/** The base branches of the reduced suite (`.omp/AGENTS.md` "Git workflow and CI"). */
 const REDUCED_BASES = ["develop", "release/**", "hotfix/**"];
 const DRAFT_GUARD = "github.event.pull_request.draft != true";
 const CONCURRENCY_GROUP = "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}";

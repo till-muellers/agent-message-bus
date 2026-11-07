@@ -2,7 +2,7 @@
 
 > **Committed in slice 0.** Design paths use `docs/design/specs/…` and `docs/design/arch/…`.
 
-Owner: Arch-client. Files: `.github/workflows/ci-go.yml`, `ci-typescript.yml`, `ci-web.yml`, `ci-python.yml` (reduced suite, §2), `full.yml` (full suite, §2), `release.yml` (publisher, §4), `scripts/build.py` (GUI build, then Go cross-compile for the targets), `server/Dockerfile` (context `server/`), root `package.json` (`version`, `omp.extensions`, `files`). The branch model they serve is Git Flow (`.omp/AGENTS.md` "Git Flow and CI").
+Owner: Arch-client. Files: `.github/workflows/ci-go.yml`, `ci-typescript.yml`, `ci-web.yml`, `ci-python.yml` (reduced suite, §2), `full.yml` (full suite, §2), `release.yml` (publisher, §4), `scripts/build.py` (GUI build, then Go cross-compile for the targets), `server/Dockerfile` (context `server/`), root `package.json` (`version`, `omp.extensions`, `files`). The branch model they serve is Git Flow (`.omp/AGENTS.md` "Git workflow and CI").
 Distribution: **GitHub only, no npm** (findings item 8, PO round 2). PO decisions: PO-10 (GUI build before `go build`, committed placeholder), PO-11 (S1 spawn-time version check). `CA/` = `node_modules/@oh-my-pi/pi-coding-agent/src/` (omp 18.12.6). Server-side contracts: `docs/design/arch/contracts.md` §6 (protocol), §10.5 (static assets).
 
 ---
@@ -26,40 +26,25 @@ The Go binary embeds `server/internal/web/dist/` (Arch-server owns `embed.go`, `
 
 ## 2. CI: pull requests only, the local checks are the gate
 
-CI costs money (billed per minute). The regular gate is the local checks (`.omp/AGENTS.md` "Local checks"); agents never trigger, poll or wait for CI. CI runs on pull requests only, on the merge result (GitHub's default `pull_request` ref: the head merged into the base), never on a branch push: a feature branch without a pull request, a direct merge into `develop` and the merge of a pull request cost nothing. Every workflow runs on `ubuntu-latest` only (a Windows minute costs about twice and a macOS minute about ten times a Linux minute): we develop on Windows, so Windows is covered by the local runs, CI is the Linux check, and a Linux-only failure can be reproduced locally in WSL (below); macOS is covered by whoever has a Mac.
+CI costs money (billed per minute), so the regular gate is the local checks (`.omp/AGENTS.md`, "Git workflow and CI"). CI runs on pull requests only, on the merge result (GitHub's default `pull_request` ref), never on a branch push: a feature branch without a pull request and a direct merge into `develop` cost nothing. Every workflow runs on `ubuntu-latest`: we develop on Windows, so Windows is covered by the local runs, and a Linux-only failure is reproduced locally in WSL (command in `.omp/AGENTS.md`).
 
-| Workflow | Runs for | Paths | Jobs (check names) | Concurrency |
-|---|---|---|---|---|
-| `ci-go.yml` | pull request into `develop`, `release/**`, `hotfix/**`; `workflow_dispatch` | `server/**`, itself | `ci-go`: gofmt, `go build`, `go vet`, `go test ./...` (no `-race`), golangci-lint v2.15.0 | one run per workflow and PR (`cancel-in-progress`) |
-| `ci-typescript.yml` | same | `extension/**`, `tests/**` (not `tests/test_*.py`), `package.json`, `bun.lock`, `bunfig.toml`, `tsconfig.json`, `gui/package.json` (the bun pin), `server/TOOLS.md` and `server/internal/server/protocol.go` (read by the tests), `.github/workflows/**` (read by `tests/workflows.test.ts`) | `ci-typescript`: `bun install --frozen-lockfile`, typecheck, `bun test tests/` | same |
-| `ci-web.yml` | same | `gui/**`, `server/internal/web/testdata/**` (the contract fixtures `gui/tests/api/contract.test.ts` decodes), `package.json`, itself | `ci-web`: GUI typecheck, GUI tests, `bun run build:gui` | same |
-| `ci-python.yml` | same | `scripts/**`, `tests/test_*.py`, `ruff.toml`, itself | `ci-python`: `ruff format --check`, `ruff check` (ruff 0.17.3), `pytest tests` | same |
-| `full.yml` | pull request into `main`; `workflow_dispatch` | none | `full-go`, `full-typescript`, `full-web`, `full-python`, `full-package` | same |
-| `release.yml` | push of a `v*` tag | none | `release` (publishes) | none |
+The target branch of the pull request picks the suite. The triggers, jobs and steps are in the workflow files; this table lists only what is not obvious from them:
 
-Rules:
-- A pull request whose base is changed to `main` after it was opened gets no full run (the `edited` type is not listened to, so title edits cost nothing): close and reopen it or push a commit. No `push` trigger on any branch. The only `push` trigger is the `v*` tag of `release.yml`. `workflow_dispatch` is the manual escape hatch (the file must exist on the default branch to be dispatchable).
-- Draft pull requests are skipped (`if: github.event.pull_request.draft != true` on every job; the `ready_for_review` type starts the run when a draft is marked ready). A run for the same workflow and pull request is cancelled when a newer commit arrives.
-- Pinned tools as before: bun through `bun-version-file: gui/package.json` (Q-P3), ruff `==0.17.3` (the version `ruff.toml` requires, so a local ruff of another version refuses to run instead of formatting differently), Go through `server/go.mod`.
-- The reduced suite's path filters are native `paths:` filters, one small workflow per area, so no third-party action and no filter job are needed. The filter counts the workflow's own file. A change outside every filter (docs, `.omp/`, `.beads/`) starts no job. The reduced jobs are never required checks: a skipped (path-filtered) required check blocks a merge.
-- The full suite is never path-filtered, so its jobs always report and can be required checks of `main`. Its job names (`full-*`) are unique across the workflows, so a required check names exactly one job.
-- `tests/workflows.test.ts` (typescript area) fails when a reduced workflow loses its `paths:`, draft guard or `cancel-in-progress`, when a workflow triggers on a branch push, runs on another OS or uses a matrix, when `full.yml` gains a path filter or another base branch, when `release.yml` runs a suite or consults an earlier run, or when a workflow uses an action other than `actions/*`, `oven-sh/setup-bun` and `golangci/golangci-lint-action`.
-- The `web` jobs run the GUI tests and build through the root scripts `test:gui` and `build:gui` (§5), so the commands contributors run locally are the ones CI runs. `go test` in the reduced `go` job runs without a GUI bundle (the fallback page); `go build` and `go test ./internal/web/...` against the real bundle run only in the full suite and in the local checks. `tests/package.test.ts` scans every tracked text file; the reduced suite runs it only when a TypeScript-area path changed, the full suite always.
+| Workflow | Pull request into | Why these paths |
+|---|---|---|
+| `ci-go.yml` | `develop`, `release/**`, `hotfix/**` | `server/**` |
+| `ci-typescript.yml` | same | the extension and its tests, plus files the tests read: `server/TOOLS.md`, `server/internal/server/protocol.go`, the bun pin `gui/package.json`, the workflows (`tests/workflows.test.ts`) |
+| `ci-web.yml` | same | `gui/**` and the contract fixtures `server/internal/web/testdata/**` that `gui/tests/api/contract.test.ts` decodes |
+| `ci-python.yml` | same | `scripts/**`, `tests/test_*.py`, `ruff.toml` |
+| `full.yml` | `main` | none: always everything |
+| `release.yml` | a `v*` tag push, no pull request | none |
 
-### Full suite
-
-`full.yml` runs for every pull request into `main` (release finish `release/*` → `main`, hotfix finish `hotfix/*` → `main`, or `develop` → `main`) and adds to the reduced suite:
-- every area on every run, not path-filtered: Go, TypeScript, GUI and Python, including the generated-docs golden test and the `/web` contract fixtures (inside the Go and GUI suites);
-- the race detector (`go test -race ./...`, needs CGO; the runner has gcc). The Go code has platform files (`detach`, `instance` lock, `server` listen); CI compiles and tests only the Linux ones, so the Windows files are covered by the local runs on the development machine;
-- the real-bundle Go build (`go build ./...` and `go test ./internal/web/...` after `bun run build:gui`);
-- the packaging smoke build (`full-package`: `scripts/build.py`, the GUI, six binaries and `SHA256SUMS`, checked and discarded; nothing is published);
-- `golangci-lint` and `gofmt` once more.
-
-Because it runs on the merge result of the pull request into `main` and nothing else may reach `main`, a green full suite is what a release rests on; `release.yml` does not repeat it and does not look at it (§4).
-
-### Linux checks locally
-
-When a Linux-only failure is suspected (or to reproduce a CI failure), run the Go checks in WSL, where `go` and `gcc` are installed: `wsl -e bash -lc "cd /mnt/d/repos/<worktree>/server && go test ./..."` (add `-race` for the full-suite run). WSL keeps its own Go build cache, so the first run compiles everything.
+- **Reduced suite** (`ci-*.yml`): build, unit tests and linters of the area a pull request touches, without `-race`. A change outside every filter (docs, `.omp/`, `.beads/`) starts no job. Its jobs are never required checks: a skipped path-filtered required check blocks a merge.
+- **Full suite** (`full.yml`): never path-filtered, so its jobs `full-go`, `full-typescript`, `full-web`, `full-python`, `full-package` always report and are the required checks of `main`; their names are unique across the workflows. It adds the race detector (needs CGO; the runner has gcc), every area on every run, the Go build against the real GUI bundle (`go build ./...`, `go test ./internal/web/...` after `bun run build:gui`) and the packaging smoke build (`scripts/build.py`, six binaries and `SHA256SUMS`, discarded). It runs on the merge result of every pull request into `main` (release finish, hotfix finish, `develop` → `main`), and nothing else reaches `main`, so a release rests on a green full suite; `release.yml` neither repeats nor consults it (§4).
+- Drafts are skipped and a newer commit cancels the run of the same workflow and pull request. A pull request whose base is changed to `main` after it was opened gets no full run (the `edited` type is not listened to, so title edits cost nothing): close and reopen it or push a commit. `workflow_dispatch` on the reduced and the full workflows is the manual escape hatch (the file must exist on the default branch to be dispatchable), for example the full suite on a release branch before a release candidate tag.
+- Tools are pinned: bun through `bun-version-file: gui/package.json` (Q-P3), ruff `==0.17.3` (what `ruff.toml` requires), Go through `server/go.mod`. No third-party action beyond `actions/*`, `oven-sh/setup-bun` and `golangci/golangci-lint-action`.
+- The `web` jobs run the GUI tests and build through the root scripts `test:gui` and `build:gui` (§5), so contributors run locally what CI runs. `tests/package.test.ts` scans every tracked text file; the reduced suite runs it only when a TypeScript-area path changed, the full suite always.
+- `tests/workflows.test.ts` keeps these rules from rotting (triggers, paths, draft guard, concurrency, runner, actions, publisher).
 
 ### Repository settings (owner, one time, outside the code)
 
@@ -124,33 +109,13 @@ def main(argv: list[str] | None = None) -> int:   # --tag "$GITHUB_REF_NAME"
 
 `release.yml` is a plain publisher: it runs no suite and consults no earlier CI run. The full suite already passed on the pull request into `main`, and the required checks of `main` (§2 "Repository settings") guarantee that nothing reached `main` without it; that is a one-time repository setting, not a per-release step.
 
-```yaml
-on:
-  push:
-    tags: ['v*']
-permissions:
-  contents: write
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with: { python-version: '3.x' }
-      - name: Tag is a SemVer version and matches package version
-        run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"
-      - uses: actions/setup-go@v7
-        with: { go-version-file: server/go.mod, cache-dependency-path: server/go.sum }
-      - uses: oven-sh/setup-bun@v2
-        with: { bun-version-file: gui/package.json }
-      - name: Build release binaries (GUI first)
-        run: python scripts/build.py --version "${GITHUB_REF_NAME#v}"
-      - name: Create GitHub Release
-        run: gh release create … (`--prerelease` when the version contains `-`)
-```
+Steps (`release.yml`): the version check, then `scripts/build.py --version <tag without v>` (GUI first), then `gh release create` (`--prerelease` when the version contains `-`).
 
 The version check runs first, so a bad tag fails in seconds and publishes nothing (`scripts/release_version.py`, pytest `tests/test_release_version.py`): the tag is `v` plus a SemVer 2.0.0 version `MAJOR.MINOR.PATCH[-PRERELEASE]` (no leading zeros, pre-release identifiers alphanumeric or numeric without leading zeros, e.g. `v0.5.0-rc.1`, `v3.5.1-prerelease01`; `v3.5.1-01`, `v1.2`, `1.2.3` fail) and equals the `package.json` version exactly. Build metadata (`+build`) is refused: precedence ignores it and it is awkward in asset names. A `v*` tag publishes a release, hence the strictness; any other tag fails in this first step with the expected form. It needs no network.
 
 ### 4.2 Release procedure (documented in the root `README.md` "Releasing" section)
 
-1. Branch `release/X.Y.Z` from `develop` (Git Flow; SemVer: a release from `develop` bumps MINOR, or MAJOR for breaking changes, and while MAJOR is 0 anything may change on MINOR; the tag must equal `package.json` `version`): bump `package.json` `version` (R1); if a server contract the extension needs changed in this release, check `protocol.go` is at least `MIN_SERVER_PROTOCOL` (the fitness test enforces `MIN_SERVER_PROTOCOL` ≤ `Protocol`). Only stabilizing fixes after that, through pull requests into `release/X.Y.Z` (reduced suite) or direct merges after the local checks.
+1. Branch `release/X.Y.Z` from `develop` (Git Flow; SemVer: a release from `develop` bumps MINOR, or MAJOR for breaking changes, and while MAJOR is 0 anything may change on MINOR; the tag must equal `package.json` `version`): bump `package.json` `version` (R1); if a server contract the extension needs changed in this release, check `protocol.go` is at least `MIN_SERVER_PROTOCOL` (the fitness test enforces `MIN_SERVER_PROTOCOL` ≤ `Protocol`). Only stabilizing fixes after that.
 2. Optional release candidate: `package.json` at `X.Y.Z-rc.N` on the release branch, tag `vX.Y.Z-rc.N` on that commit. `release.yml` creates it with `--prerelease`, so it never becomes `releases/latest`, which the extension's `/bus server start` downloads (`extension/lib/local-server/download.ts`, `RELEASES_URL`). The assurance for a candidate is the reduced suite of the pull requests into the release branch plus the local checks. To run everything before the tag, dispatch `full.yml` on the release branch by hand (`workflow_dispatch`, available once `full.yml` is on `main`); nothing requires it.
 3. Pull request `release/X.Y.Z` → `main`: the full suite runs on its merge result and is a required check. The last commit of the release branch sets the final `X.Y.Z` in `package.json`. Merge with a merge commit, tag the merge commit `vX.Y.Z`, push the tag, then merge `release/X.Y.Z` back into `develop` (direct, or by pull request). `release.yml` checks the version, builds GUI + 6 server binaries + `SHA256SUMS` and publishes the GitHub Release.
 4. A `hotfix/<name>` branch (from `main`, PATCH bump in `package.json`) takes the same way: pull request into `main` (full suite), tag `vX.Y.Z` with the new patch version, merge into `develop`.
