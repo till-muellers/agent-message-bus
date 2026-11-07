@@ -143,9 +143,9 @@ Branches, versions (SemVer 2.0.0, tag `v` plus the `package.json` version) and C
 
 1. Branch `release/X.Y.Z` from `develop` and set the `version` in `package.json`. If a server contract the extension needs changed, raise `Protocol` in `server/internal/server/protocol.go` and the extension's `MIN_SERVER_PROTOCOL`; `tests/version/protocol-sync.test.ts` fails when `Protocol` is below `MIN_SERVER_PROTOCOL`. Only stabilizing fixes go in after that. Run the local checks.
 2. Optional release candidate: set `package.json` to `X.Y.Z-rc.1`, commit, tag `vX.Y.Z-rc.1` and push the tag. `release.yml` publishes it as a GitHub pre-release, so `/bus server start` keeps downloading the last stable release. The next candidate is `-rc.2`; the last commit of the branch sets the final `X.Y.Z`.
-3. Finish: PR `release/X.Y.Z` → `main`, merge with a merge commit, tag the merge commit `vX.Y.Z` and push the tag, merge the release branch back into `develop`.
+3. Finish: PR `release/X.Y.Z` → `main`, merge with a merge commit, tag the merge commit `vX.Y.Z` and push the tag, then open a PR `main` → `develop`.
 4. The tag starts `release.yml`: it checks the tag against `package.json`, builds the web GUI and `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads the latest release.
-5. Hotfix: branch `hotfix/<name>` from `main`, fix it and bump PATCH, PR into `main`, tag the new version, merge into `develop`.
+5. Hotfix: branch `hotfix/<name>` from `main`, fix it and bump PATCH, PR into `main`, tag the new version, PR `main` into `develop`.
 6. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
 
 ```sh
