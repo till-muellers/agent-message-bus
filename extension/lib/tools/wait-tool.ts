@@ -5,7 +5,8 @@
  * forwards the call to the server's `bus_wait`, which acks nothing. What a forwarded call returns is claimed from the
  * ledger: an entry the session's stream delivered meanwhile is left out, and one it delivers later is skipped there.
  * When that leaves nothing, the call waits on after the newest entry for the time left (in the ledger once the session's
- * stream is open, else at the server), so [] still means timeout.
+ * stream is open, else at the server), so [] still means timeout. The tool is `interruptible`: an entry queued for the
+ * model ends the wait with [] and reaches the model itself.
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { BusError, type RemoteTool } from "../bus/client.ts";
@@ -87,14 +88,21 @@ async function wait(args: WaitArgs, deps: WaitToolDeps, signal?: AbortSignal): P
 	return source ? local(source, args, seconds * 1000, signal) : forwarded(args, seconds, deps, signal);
 }
 
+/**
+ * omp's agent loop aborts the signal of a running `interruptible` tool with the interrupt reason once an aside, steer or
+ * interrupt is queued; `ToolDefinition` does not declare the field, `applyToolProxy` copies it onto the running tool.
+ */
+export type WaitToolDefinition = Parameters<ExtensionAPI["registerTool"]>[0] & { interruptible: true };
+
 /** The local `bus_wait` of a main session, built on the server tool `tool` from `GET /v1/tools`, whose name it keeps. */
-export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool, deps: WaitToolDeps): Parameters<ExtensionAPI["registerTool"]>[0] {
+export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool, deps: WaitToolDeps): WaitToolDefinition {
 	return {
 		name: tool.name,
 		label: tool.name,
 		description: tool.description,
 		parameters: toZod(tool.inputSchema, pi.zod),
 		...presentationOf(tool.name),
+		interruptible: true,
 		execute: (_toolCallId: string, params: WaitArgs, signal: AbortSignal | undefined): Promise<ToolResult> =>
 			toolResult(() => wait(params, deps, signal)),
 	};

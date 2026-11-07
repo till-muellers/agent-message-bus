@@ -82,6 +82,10 @@ describe("the local bus_wait", () => {
 		expect([tool.loadMode, tool.approval]).toEqual(["essential", "read"]);
 	});
 
+	test("it is interruptible, so omp ends a running wait when an aside, steer or critical entry is queued", () => {
+		expect(setup(true).tool.interruptible).toBe(true);
+	});
+
 	test("with a live stream it waits in the ledger and claims nothing", async () => {
 		const { run, waits, forwards, claims } = setup(true, [entry(4, { from: "lead" })]);
 		expect(await run({ from: "lead", threadId: 7, after: 3, timeoutSeconds: 5 })).toEqual([entry(4, { from: "lead" })]);
