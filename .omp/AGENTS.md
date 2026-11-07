@@ -6,8 +6,8 @@ Conventions and working method for contributors and coding agents in this repo.
 - Server: Go (`server/`), SQLite embedded via pure-Go `modernc.org/sqlite`, MCP via `github.com/modelcontextprotocol/go-sdk`. One static binary, `CGO_ENABLED=0`.
 - omp plugin: TypeScript on Bun (`extension/`), typechecked with `tsc --noEmit`.
 - Web GUI: strict TypeScript on Bun without a framework (`gui/`, its own `package.json` and `tsconfig.json`), bundled into `server/internal/web/dist/` and embedded by the server.
-- Python: release tooling only (`scripts/build.py`, `scripts/release_version.py`, `scripts/release_ci_gate.py`).
-- CI: GitHub Actions (`.github/workflows/ci.yml`, `release.yml`).
+- Python: release tooling only (`scripts/build.py`, `scripts/release_version.py`).
+- CI: GitHub Actions ([`.github/workflows/`](../.github/workflows/)); see [Git workflow and CI](#git-workflow-and-ci-git-flow).
 
 ## Layout
 
@@ -18,13 +18,13 @@ Conventions and working method for contributors and coding agents in this repo.
 |`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_*.py` (pytest) for `scripts/`.|
 |`gui/`|Web GUI: `src/` (browser code), `tests/` (bun), `scripts/build.ts` (bundles into `server/internal/web/dist/`), `index.html` (shell template).|
 |`scripts/build.py`|Release build: builds the GUI (`--skip-gui` to skip), cross-compiles the server and writes `SHA256SUMS`.|
-|`scripts/release_*.py`|Release gates run first by `release.yml`: `release_ci_gate.py` (a `ci` run of the tagged commit passed), `release_version.py` (tag matches the `package.json` version).|
-|`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only by PR.|
+|`scripts/release_version.py`|First step of `release.yml`: the tag is a SemVer version `v<MAJOR.MINOR.PATCH[-PRERELEASE]>` equal to the `package.json` version.|
+|`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only in the feature that changes a contract or the backlog.|
 |`.omp/`|This guide and the hard rules (`RULES.md`).|
 
 ## Commands
 - Go test: `cd server && go test ./...` (single pkg: `go test ./internal/<feature>/...`, single test: `go test -run TestName ./path`)
-- Go race + cover: `go test -race -cover ./...` (needs CGO; CI runs it)
+- Go race + cover: `go test -race -cover ./...` (needs CGO)
 - Go lint/format: `gofmt -l .`, `go vet ./...`, `golangci-lint run ./...`
 - TS: `bun test tests/`, `bun run typecheck`
 - GUI: `cd gui && bun test && bun run typecheck`; build into the embed dir with `bun run build:gui` (repo root). Go builds and tests work without it (fallback page at `/web/`).
@@ -61,7 +61,7 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ### Turn specs into plan
 - Plan first: restate the task, list the files you'll touch, write a todo list.
-- One feature or behaviour per change: small, reviewable diffs on a branch, merged by pull request (`main` is protected).
+- One feature or behaviour per change: small, reviewable diffs on a `feature/<name>` branch ([Git workflow and CI](#git-workflow-and-ci-git-flow)).
 - Every functionality gets its own file. Don't grow existing files into catch-alls.
 - Add logical steps. Aim for small commits.
 
@@ -87,6 +87,24 @@ Conventions and working method for contributors and coding agents in this repo.
 - Are errors handled and wrapped with context?
 - Any new dependency? It needs approval first.
 - Tool changed? `server/TOOLS.md` regenerated, extension README and the agent guide `server/internal/guide/guide.md` still accurate.
+
+## Git workflow and CI (Git Flow)
+
+### Branches
+- `main`: released states. Only `release/*` and `hotfix/*` merges reach it.
+- `develop`: integration branch; finished work lands here.
+- `feature/<name>`: one per task, branched from `develop`. Before landing: `git fetch && git rebase origin/develop`, run the local checks, then PR into `develop` (or merge directly after the local checks).
+- `release/<version>`: branched from `develop`, stabilizing fixes only. Finish: PR into `main`, tag `v<version>` on the merge commit, merge `main` back into `develop`. Release candidates are tagged on this branch.
+- `hotfix/<name>`: branched from `main`; PR into `main`, tag the new patch version, merge into `develop`.
+
+### Versions
+SemVer 2.0.0. `package.json` `version` is the single source; the tag is `v` plus that exact string (`v0.5.0`, `v0.5.0-rc.1`). Release from `develop` bumps MINOR (MAJOR for breaking changes; at MAJOR 0 anything may change on MINOR), a hotfix bumps PATCH. The wire `Protocol` integer is a separate number. Validation: [`scripts/release_version.py`](../scripts/release_version.py).
+
+### CI
+- Local checks are the regular gate (see [Commands](#commands)). CI runs on Linux only; to reproduce a Linux-only failure locally: `wsl -e bash -lc "cd /mnt/d/repos/<worktree>/server && go test ./..."`.
+- The target branch of a PR picks the suite: `develop`, `release/**`, `hotfix/**` get the reduced, path-filtered suite; `main` gets the full suite. Workflows: [`.github/workflows/`](../.github/workflows/); rationale and cost: [`docs/design/arch/pipeline.md`](../docs/design/arch/pipeline.md).
+- Repository settings that are not in the workflow files: `main` accepts PRs only, the full-suite jobs are its required checks, branches must be up to date. Path-filtered jobs are not required checks.
+- A `v*` tag starts [`release.yml`](../.github/workflows/release.yml) (build and publish only; the full suite already ran on the PR into `main`). A release candidate on a release branch has only the reduced suite behind it; start the full suite by hand (`workflow_dispatch`) before tagging if you want it.
 
 ## Code conventions
 
@@ -161,7 +179,7 @@ A slice is ready when (`docs/design/arch/definition-of-ready.md` §1):
 - **Specs approved**: the rules to move are named by file and line, their folder has no open REVIEW finding and no unresolved `@po-decision`; pure refactors state "no behaviour change".
 - **No blocking question** open in `docs/design/arch/QUESTIONS.md`.
 - **Contracts fixed**: every client-visible change is in `docs/design/arch/contracts.md`.
-- **Dependencies merged**: every server slice it depends on is on `main`.
+- **Dependencies merged**: every server slice it depends on is on `develop`.
 - **Shared-code approval** for `internal/platform/**` or `internal/domain/**`; **no new dependency** without approval.
 - **Acceptance tests named** with their RED reason.
 - **Schema decided** in `docs/design/arch/schema.md` (or "—").
@@ -170,7 +188,7 @@ A slice is ready when (`docs/design/arch/definition-of-ready.md` §1):
 
 ## Definition of done
 A slice is done when all hold:
-1. **TDD evidence**: each acceptance test failed first for the stated reason (RED noted in the PR description) and passes now; bug fixes start with a reproducing test.
+1. **TDD evidence**: each acceptance test failed first for the stated reason (RED noted in the commit message or the bead) and passes now; bug fixes start with a reproducing test.
 2. **Spec in sync**: the named rules are in `server/spec/*.feature` (verbatim scenario text), replaced lines are gone, `spec/README.md` features table/glossary updated. Only PO-decided scenarios are moved.
 3. **Generated files**: tool changes → `server/TOOLS.md` regenerated, golden test green; the absolute tool count set at all sites.
 4. **Contracts**: implementation matches `contracts.md`; deviations are updated there first; extension-facing change → `server/internal/server/protocol.go` bumped per policy.
@@ -179,10 +197,10 @@ A slice is done when all hold:
 7. **Shared code** only as approved; no unapproved dependency.
 8. **Docs**: README/DEPLOYMENT/extension README lines updated; the slice's `.omp/AGENTS.md` correction applied.
 9. **Local checks** clean (below).
-10. **Review**: self-review with the review checklist; no unrelated changes (or mentioned in the PR); reviewer approval.
-11. **Delivery**: branch `slice/<id>-<slug>`, PR to protected `main`, CI `go`, `typescript`, `web`, `python` green, merged by PR.
+10. **Review**: self-review with the review checklist; no unrelated changes (or mentioned in the commit message); reviewer approval.
+11. **Delivery**: branch `feature/<name>`, rebased on `origin/develop`, local checks clean, landed on `develop` ([Git workflow and CI](#git-workflow-and-ci-git-flow)).
 
-Locally:
+Local checks, THE gate before a feature lands on `develop` (the reduced CI suite re-runs only the areas a PR touches, without `-race`):
 
 ```sh
 cd server
@@ -194,6 +212,7 @@ cd ..
 bun test
 bun run typecheck
 (cd gui && bun test && bun run typecheck)
+bun run build:gui && (cd server && go test ./internal/web/...)   # only when gui/ or server/internal/web/ changed: tests against the real bundle
 pytest tests
-ruff format --check . && ruff check .
+uvx ruff@0.17.3 format --check . && uvx ruff@0.17.3 check .
 ```

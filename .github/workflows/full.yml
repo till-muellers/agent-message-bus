@@ -1,14 +1,26 @@
-name: ci
+# Full suite on the merge result of a pull request into main (release/* or hotfix/* finish, develop -> main).
+# Not path-filtered, so its jobs can be required checks of main: they always report. Beyond the reduced suite it
+# adds the race detector, the Go build against the real GUI bundle and the packaging smoke build.
+# workflow_dispatch is the manual escape hatch, e.g. to run it on a release branch before a release candidate tag.
+name: full
 
 on:
-  push:
   pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   go:
+    name: full-go
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,7 +39,8 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      - name: go test
+      # Includes the generated-docs golden test and the /web contract fixtures.
+      - name: go test -race
         run: go test -race ./...
 
       - name: golangci-lint
@@ -37,6 +50,8 @@ jobs:
           working-directory: server
 
   typescript:
+    name: full-typescript
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -55,6 +70,8 @@ jobs:
         run: bun test tests/
 
   web:
+    name: full-web
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -76,6 +93,7 @@ jobs:
         run: bun run typecheck
         working-directory: gui
 
+      # Includes gui/tests/api/contract.test.ts, which decodes the /web wire fixtures with the GUI's decoders.
       - name: Test GUI
         run: bun run test:gui
 
@@ -87,6 +105,8 @@ jobs:
         working-directory: server
 
   python:
+    name: full-python
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -104,4 +124,31 @@ jobs:
           ruff check .
 
       - name: Test
-        run: python -m pytest tests/test_build.py tests/test_release_version.py tests/test_release_ci_gate.py
+        run: python -m pytest tests
+
+  # Packaging smoke: the release build (GUI, then six cross-compiled binaries and SHA256SUMS), not published.
+  package:
+    name: full-package
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
+
+      - name: Build every release target
+        run: python scripts/build.py --version ci
+
+      - name: Six binaries and SHA256SUMS exist
+        run: test "$(ls dist | wc -l)" -eq 7 && (cd dist && sha256sum -c SHA256SUMS)

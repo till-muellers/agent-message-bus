@@ -47,6 +47,10 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Git workflow
+
+Git Flow: see [`.omp/AGENTS.md`](.omp/AGENTS.md) ("Git workflow and CI") and [`.omp/RULES.md`](.omp/RULES.md). They take precedence over the generic session-close steps in the Beads blocks below: `git pull --rebase` there means `git fetch && git rebase origin/develop`, and `git push` pushes your feature branch or `develop`. `bd dolt push` stays the last step of a session.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
 

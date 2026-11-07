@@ -82,6 +82,7 @@ const ROOT_TESTS: Record<string, true> = {
 	"index.test.ts": true,
 	"layout.test.ts": true,
 	"package.test.ts": true,
+	"workflows.test.ts": true,
 };
 
 /** The modules allowed to see the whole graph: the wiring root and, once it exists, the session. */

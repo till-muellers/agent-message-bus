@@ -106,7 +106,7 @@ Open `http://127.0.0.1:8081/web/` and sign in with an admin token (`agent-messag
 |`tests/`|Extension tests (`bun test`) and build script tests (`pytest`).|
 |`gui/`|Web GUI (strict TypeScript, no framework, its own `package.json`); built into `server/internal/web/dist/`, which the server embeds.|
 |`scripts/build.py`|Builds the web GUI, then cross-compiles release binaries and `SHA256SUMS`.|
-|`.github/workflows/release.yml`|Builds and publishes a release for every `v*` tag.|
+|`.github/workflows/`|Pull requests only: `ci-*.yml` (reduced suite per area, into `develop`, `release/**`, `hotfix/**`), `full.yml` (full suite, into `main`). `release.yml` builds and publishes a release for every `v*` tag.|
 |`.omp/`|Project guide (`AGENTS.md`) and hard rules (`RULES.md`) for contributors and coding agents.|
 
 ## Development
@@ -135,16 +135,29 @@ From the repo root, `bun run test:gui` runs the GUI tests and `bun run build:gui
 
 `python scripts/build.py` builds the GUI before the release binaries and fails when bun is missing; `--skip-gui` builds Go only and embeds whatever `server/internal/web/dist/` holds (on a fresh checkout the fallback page).
 
-Contributor conventions, working method and the definition of done are in [`.omp/AGENTS.md`](.omp/AGENTS.md); hard rules in [`.omp/RULES.md`](.omp/RULES.md).
+Contributor conventions, working method, the Git Flow branches, the CI tiers and the definition of done are in [`.omp/AGENTS.md`](.omp/AGENTS.md); hard rules in [`.omp/RULES.md`](.omp/RULES.md).
 
 ## Releasing
 
-1. Branch `release/vX.Y.Z`: bump the `version` in `package.json` (semver; the release check rejects a tag that differs from it). The plugin version is distinct from the server's `Protocol` integer in `server/internal/server/protocol.go`: if a server contract the extension needs changed, raise `Protocol` and the extension's `MIN_SERVER_PROTOCOL`; `tests/version/protocol-sync.test.ts` fails when `Protocol` is below `MIN_SERVER_PROTOCOL`. Open a pull request, let CI go green, merge.
-2. Wait until the `ci` run of the merge commit on `main` is green, then tag the merge commit `vX.Y.Z` and push the tag. The release workflow first checks that a `ci` run of the tagged commit passed and that the tag matches the package version (it fails in seconds and publishes nothing when either does not; if `ci` was still running, re-run the release workflow once it passed), runs the server tests, builds the web GUI and then `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads from the latest release.
-3. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
+Branches, versions (SemVer 2.0.0, tag `v` plus the `package.json` version) and CI are described in [`.omp/AGENTS.md`](.omp/AGENTS.md) ("Git workflow and CI"); the CI design and the repository settings are in [`docs/design/arch/pipeline.md`](docs/design/arch/pipeline.md).
+
+1. Branch `release/X.Y.Z` from `develop` and set the `version` in `package.json`. If a server contract the extension needs changed, raise `Protocol` in `server/internal/server/protocol.go` and the extension's `MIN_SERVER_PROTOCOL`; `tests/version/protocol-sync.test.ts` fails when `Protocol` is below `MIN_SERVER_PROTOCOL`. Only stabilizing fixes go in after that. Run the local checks.
+2. Optional release candidate: set `package.json` to `X.Y.Z-rc.1`, commit, tag `vX.Y.Z-rc.1` and push the tag. `release.yml` publishes it as a GitHub pre-release, so `/bus server start` keeps downloading the last stable release. The next candidate is `-rc.2`; the last commit of the branch sets the final `X.Y.Z`.
+3. Finish: PR `release/X.Y.Z` → `main`, merge with a merge commit, tag the merge commit `vX.Y.Z` and push the tag, merge the release branch back into `develop`.
+4. The tag starts `release.yml`: it checks the tag against `package.json`, builds the web GUI and `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads the latest release.
+5. Hotfix: branch `hotfix/<name>` from `main`, fix it and bump PATCH, PR into `main`, tag the new version, merge into `develop`.
+6. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
 
 ```sh
+git fetch origin && git switch -c release/X.Y.Z origin/develop
+# set package.json, stabilize, run the local checks
+git push -u origin release/X.Y.Z
+gh pr create --base main --head release/X.Y.Z
+# after the merge:
+git switch main && git pull --ff-only
 git tag vX.Y.Z && git push origin vX.Y.Z
+git switch develop && git pull --ff-only && git merge --no-ff release/X.Y.Z && git push origin develop
+git branch -d release/X.Y.Z
 ```
 
 ## License
