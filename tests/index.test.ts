@@ -50,7 +50,7 @@ describe("inbox streaming", () => {
 
 	test("session_start streams the inbox: the class decides the mechanism and the message carries the entry", async () => {
 		const { sent, warnings } = await runSession("tui");
-		expect(sent).toEqual([
+		expect(sent.map(({ message, options }) => ({ message, options }))).toEqual([
 			{ message: busMessage(entry(1)), options: { deliverAs: "aside", triggerTurn: false } },
 			{ message: busMessage(entry(2, { class: "interrupt" })), options: { deliverAs: "steer", triggerTurn: true } },
 		]);
@@ -814,6 +814,34 @@ describe("tool activation and credentials", () => {
 		await app.run(`login ${URL_} mem`);
 		await app.emit("session_shutdown");
 		expect(app.active()).toEqual(["read", "bus_foreign", "bus_list_spaces", "bus_spawn_worker"]);
+	});
+
+	test("the bus tools are active before the first entry reaches the model: a turn it starts lists them", async () => {
+		const env = { OMP_AGENT_BUS_DIR: await tempDir() };
+		await createCredentialStore(env).save({ url: URL_, token: "mem" });
+		const bus = memberBus({ streams: [() => new Response(streamOf([frame(entry(1))]))] });
+		const app = await boot({ fetchFn: bus.fetchFn, env }, { slowActivation: true });
+		await app.emit("session_start");
+		await app.warning("invalid token");
+		await app.emit("session_shutdown");
+		expect(app.sent).toHaveLength(1);
+		expect(app.sent[0].activeTools).toEqual(["read", "bus_foreign", "bus_list_spaces", "bus_spawn_worker"]);
+	});
+
+	test("a failed tool activation warns and opens no inbox stream", async () => {
+		const env = { OMP_AGENT_BUS_DIR: await tempDir() };
+		await createCredentialStore(env).save({ url: URL_, token: "mem" });
+		const bus = memberBus({ streams: [() => new Response(streamOf([frame(entry(1))]))] });
+		const extension = createBusExtension({ sleep: noSleep, fetchFn: bus.fetchFn, env });
+		const refused = async () => {
+			throw new Error("tool registry refresh failed");
+		};
+		const app = await bootExtension(pi => extension({ ...pi, setActiveTools: refused }));
+		await app.emit("session_start");
+		await app.warning("tool registry refresh failed");
+		await app.emit("session_shutdown");
+		expect(callsTo(bus, "/v1/inbox/stream")).toEqual([]);
+		expect(app.sent).toEqual([]);
 	});
 
 	test("logout deactivates every bus_* tool and keeps the others; calls fail until login re-activates them with the new token", async () => {
