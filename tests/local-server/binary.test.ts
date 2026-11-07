@@ -73,7 +73,7 @@ describe("binary resolution", () => {
 		] as const)
 			expect(assetName("1.0.0", platform, arch)).toBe(name);
 		expect(() => assetName("1.0.0", "darwin", "arm64")).toThrow(
-			"no agent-message-bus release for darwin/arm64; build from source: cd server && go build",
+			"no agent-message-bus release for darwin/arm64; build from source (cd server && go build -o agent-message-bus .) and set AGENT_BUS_BIN",
 		);
 		expect(() => assetName("1.0.0", "aix", "ppc64")).toThrow("no agent-message-bus release for aix/ppc64");
 	});

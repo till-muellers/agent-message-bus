@@ -35,7 +35,7 @@ export function binaryName(platform: string): string {
 export function assetName(version: string, platform: string, arch: string): string {
 	const os = OS[platform];
 	const goarch = ARCH[arch];
-	if (!os || !goarch) throw new Error(`no agent-message-bus release for ${platform}/${arch}; build from source: cd server && go build`);
+	if (!os || !goarch) throw new Error(`no agent-message-bus release for ${platform}/${arch}; build from source (cd server && go build -o agent-message-bus .) and set AGENT_BUS_BIN`);
 	return `agent-message-bus_${version}_${os}_${goarch}${platform === "win32" ? ".exe" : ""}`;
 }
 

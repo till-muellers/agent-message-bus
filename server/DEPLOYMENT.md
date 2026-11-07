@@ -29,7 +29,7 @@ chmod +x agent-message-bus_X.Y.Z_linux_amd64
 python scripts/build.py --version X.Y.Z --out dist   # windows, linux × amd64/arm64 + dist/SHA256SUMS
 ```
 
-Releases ship Windows and Linux (amd64, arm64) binaries. macOS is not supported; build from source with `cd server && go build`.
+Releases ship Windows and Linux (amd64, arm64) binaries. macOS is not supported; build from source with `cd server && go build -o agent-message-bus .` (or `scripts/build.py`).
 
 Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` (the examples below assume that).
 
