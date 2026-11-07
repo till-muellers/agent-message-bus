@@ -39,7 +39,7 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      # Includes the tests that read server/spec/*.feature, the generated-docs golden test and the /web contract fixtures.
+      # Includes the generated-docs golden test and the /web contract fixtures.
       - name: go test -race
         run: go test -race ./...
 

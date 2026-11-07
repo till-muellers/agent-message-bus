@@ -6,8 +6,8 @@ Conventions and working method for contributors and coding agents in this repo.
 - Server: Go (`server/`), SQLite embedded via pure-Go `modernc.org/sqlite`, MCP via `github.com/modelcontextprotocol/go-sdk`. One static binary, `CGO_ENABLED=0`.
 - omp plugin: TypeScript on Bun (`extension/`), typechecked with `tsc --noEmit`.
 - Web GUI: strict TypeScript on Bun without a framework (`gui/`, its own `package.json` and `tsconfig.json`), bundled into `server/internal/web/dist/` and embedded by the server.
-- Python: release tooling only (`scripts/build.py`, `scripts/release_version.py`, `scripts/release_ci_gate.py`).
-- CI: GitHub Actions in `.github/workflows/`: the cheap tier `ci-go.yml`, `ci-typescript.yml`, `ci-web.yml`, `ci-python.yml`, the full tier `full.yml`, the publisher `release.yml` (see "Git Flow and CI").
+- Python: release tooling only (`scripts/build.py`, `scripts/release_version.py`).
+- CI: GitHub Actions in `.github/workflows/`, on pull requests only: the reduced suite `ci-go.yml`, `ci-typescript.yml`, `ci-web.yml`, `ci-python.yml`, the full suite `full.yml`; the tag publisher `release.yml` (see "Git Flow and CI").
 
 ## Layout
 
@@ -18,13 +18,13 @@ Conventions and working method for contributors and coding agents in this repo.
 |`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_*.py` (pytest) for `scripts/`.|
 |`gui/`|Web GUI: `src/` (browser code), `tests/` (bun), `scripts/build.ts` (bundles into `server/internal/web/dist/`), `index.html` (shell template).|
 |`scripts/build.py`|Release build: builds the GUI (`--skip-gui` to skip), cross-compiles the server and writes `SHA256SUMS`.|
-|`scripts/release_*.py`|Release gates run first by `release.yml`: `release_version.py` (tag matches the `package.json` version), `release_ci_gate.py` (a successful full-tier run of the tagged commit exists).|
+|`scripts/release_version.py`|First step of `release.yml`: the tag is a SemVer version `v<MAJOR.MINOR.PATCH[-PRERELEASE]>` equal to the `package.json` version.|
 |`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only in the feature that changes a contract or the backlog.|
 |`.omp/`|This guide and the hard rules (`RULES.md`).|
 
 ## Commands
 - Go test: `cd server && go test ./...` (single pkg: `go test ./internal/<feature>/...`, single test: `go test -run TestName ./path`)
-- Go race + cover: `go test -race -cover ./...` (needs CGO; part of the local checks, the cheap tier of CI does not run it)
+- Go race + cover: `go test -race -cover ./...` (needs CGO; part of the local checks; only the full suite of CI runs it)
 - Go lint/format: `gofmt -l .`, `go vet ./...`, `golangci-lint run ./...`
 - TS: `bun test tests/`, `bun run typecheck`
 - GUI: `cd gui && bun test && bun run typecheck`; build into the embed dir with `bun run build:gui` (repo root). Go builds and tests work without it (fallback page at `/web/`).
@@ -91,21 +91,22 @@ Conventions and working method for contributors and coding agents in this repo.
 ## Git Flow and CI
 
 ### Branches
-- `main`: released states only. It changes only through `release/*` or `hotfix/*` merges; never commit or push to it directly.
+- `main`: released states only. The only way in is a pull request into `main` (the full CI suite runs on the merge result and is a required check): `release/*` → `main` (release finish), `hotfix/*` → `main` (hotfix finish) or `develop` → `main`. Never commit or push to it directly.
 - `develop`: the integration branch. Finished work lands here.
-- `feature/<name>`: one branch per task, branched from `develop`; put the slice or bead id in the name (`feature/E1-delivery-class`). Before landing: `git fetch && git rebase origin/develop`, run the local checks (below), then merge or push to `develop`. Bug fixes and docs changes are features too.
-- `release/<x.y.z>`: branched from `develop` for a version jump (`<x.y.z>` = the planned release version); only stabilizing fixes go in. Release candidates are tagged on this branch (`v0.5.0-rc.1` on `release/0.5.0`). Finish: merge into `main` with a merge commit (no squash, no rebase), tag `v<x.y.z>` on the merge commit, merge back into `develop`. Steps: README "Releasing".
-- `hotfix/<name>`: branched from `main` for an urgent fix; bump PATCH in `package.json`, merge into `main`, tag `v<x.y.z>`, merge into `develop`.
+- `feature/<name>`: one branch per task, branched from `develop`; put the slice or bead id in the name (`feature/E1-delivery-class`). Before landing: `git fetch && git rebase origin/develop`, run the local checks (below), then land it on `develop` in one of two ways: a pull request into `develop` (the reduced CI suite runs on the merge result) or a direct merge or push after the local checks (no CI runs). Bug fixes and docs changes are features too.
+- `release/<x.y.z>`: branched from `develop` for a version jump (`<x.y.z>` = the planned release version); only stabilizing fixes go in (pull requests into the branch run the reduced suite). Release candidates are tagged on this branch (`v0.5.0-rc.1` on `release/0.5.0`; `release.yml` publishes them as pre-releases). Finish: pull request `release/<x.y.z>` → `main`, merge with a merge commit (no squash, no rebase), tag `v<x.y.z>` on the merge commit, merge back into `develop`. Steps: README "Releasing".
+- `hotfix/<name>`: branched from `main` for an urgent fix; bump PATCH in `package.json`; pull request into `main` (full suite), tag `v<x.y.z>` on the merge commit, merge into `develop`.
 - **Versions** follow Semantic Versioning 2.0.0: `MAJOR.MINOR.PATCH[-PRERELEASE]`. The `version` in `package.json` is the single source and carries the exact string being tagged; the tag is `v` plus it. A release from `develop` bumps MINOR (MAJOR for breaking changes; while MAJOR is 0, anything may change on MINOR; leaving 0.x is a later owner decision), a hotfix bumps PATCH. A release candidate has a pre-release suffix (`0.5.0-rc.1`, `0.5.0-prerelease01`; numeric identifiers without leading zeros): the release branch commits bump `package.json` once per tag (`0.5.0-rc.1`, `0.5.0-rc.2`, then `0.5.0`). No build metadata (`+build`: precedence ignores it, asset names suffer). A `v*` tag publishes a release, so `scripts/release_version.py` fails fast on any other form or on a tag that differs from `package.json`. A pre-release tag is published as a GitHub pre-release, so `releases/latest` (what `/bus server start` downloads) stays the last stable release. The wire `Protocol` integer (`server/internal/server/protocol.go`) and the extension's `MIN_SERVER_PROTOCOL` are a separate number; never confuse them with the version.
 
 ### CI
-CI costs money. The local checks are the regular gate; CI does not repeat them, and an agent never triggers, polls or waits for a CI run (no `gh run watch`, no `gh pr checks --watch`): it relies on the local checks and reports them.
-- **Cheap tier** (`ci-*.yml`): on every push to `develop`, `feature/**`, `release/**`, `hotfix/**` and on pull requests; build, unit tests and linters on `ubuntu-latest`, no `-race`. One workflow per area, each run only when its paths change: `server/**` (go), `extension/**` and `tests/**` (typescript), `gui/**` and `server/internal/web/testdata/**` (web: GUI typecheck, tests, bundle build), `scripts/**` and `tests/test_*.py` (python). Superseded runs of the same branch are cancelled.
-- **Full tier** (`full.yml`): only on pushes to `main` (release and hotfix merges) and on `v*` tags, or by hand: everything (Go with `-race`, the TypeScript, GUI and Python suites, the real-bundle web build, a packaging build). Details and cost rationale: `docs/design/arch/pipeline.md` §2.
-- Every workflow runs on `ubuntu-latest` only, never on Windows or macOS: we develop on Windows, so Windows and macOS are covered by local runs. To check for a Linux-only failure locally: `wsl -e bash -lc "cd /mnt/d/repos/<worktree>/server && go test ./..."` (WSL has go and gcc; its Go build cache is separate, so the first run is slow; add `-race` for the full-tier run).
+CI costs money. The local checks are the regular gate. Nobody triggers, polls or waits for a CI run (no `gh run watch`, no `gh pr checks --watch`): rely on the local checks and report them. CI runs on pull requests only, on the merge result, never on a branch push: a feature branch without a pull request and a direct merge into `develop` cost nothing.
+- **Reduced suite** (`ci-*.yml`): a pull request into `develop`, `release/**` or `hotfix/**`. Build, unit tests and linters, no `-race`. One workflow per area, each run only when its paths change: `server/**` (go), `extension/**` and `tests/**` (typescript), `gui/**` and `server/internal/web/testdata/**` (web: GUI typecheck, tests, bundle build), `scripts/**` and `tests/test_*.py` (python). Never a required check (a skipped path-filtered job would block the merge).
+- **Full suite** (`full.yml`): a pull request into `main`; never path-filtered, so its jobs `full-go`, `full-typescript`, `full-web`, `full-python`, `full-package` are the required checks of `main`. Everything: Go with `-race`, the TypeScript, GUI and Python suites, the real-bundle web build, the packaging build. Details, settings and cost: `docs/design/arch/pipeline.md` §2.
+- Draft pull requests are skipped; a newer commit cancels the superseded run of the same pull request. `workflow_dispatch` is the manual escape hatch (for example the full suite on a release branch before a release candidate tag).
+- Every workflow runs on `ubuntu-latest` only, never on Windows or macOS: we develop on Windows, so Windows and macOS are covered by local runs. To check for a Linux-only failure locally: `wsl -e bash -lc "cd /mnt/d/repos/<worktree>/server && go test ./..."` (WSL has go and gcc; its Go build cache is separate, so the first run is slow; add `-race` for the full-suite run).
 - **Manual only**: none today (no suite needs a display or GPU).
-- `release.yml` (tag `v*`) only publishes; it checks the tag and that the tagged commit passed the full tier.
-- No third-party action beyond `actions/*`, `oven-sh/setup-bun` and `golangci/golangci-lint-action` without approval; `tests/workflows.test.ts` enforces the tier rules.
+- `release.yml` (tag `v*`) only publishes: strict SemVer check of the tag against `package.json`, build, GitHub release (`--prerelease` for a version with `-`). It repeats no suite and consults no earlier run: the full suite passed on the pull request into `main`.
+- No third-party action beyond `actions/*`, `oven-sh/setup-bun` and `golangci/golangci-lint-action` without approval; `tests/workflows.test.ts` enforces the workflow rules.
 - Session close: commit the feature branch including the tracked bead audit log (`.beads/interactions.jsonl` changes when a bead is closed), so the bead state lands with the code; land it on `develop` as above; then `bd dolt push` (the Dolt data under `refs/dolt/data` is separate from the git push and stays the last step of a session).
 
 ## Code conventions
@@ -200,9 +201,9 @@ A slice is done when all hold:
 8. **Docs**: README/DEPLOYMENT/extension README lines updated; the slice's `.omp/AGENTS.md` correction applied.
 9. **Local checks** clean (below).
 10. **Review**: self-review with the review checklist; no unrelated changes (or mentioned in the commit message); reviewer approval.
-11. **Delivery**: branch `feature/<name>`, rebased on `origin/develop`, the local checks (below) clean, landed on `develop` by merge or push. The local checks are the gate: CI does not repeat them and nobody waits for it. `main` is touched only by `release/*` and `hotfix/*`.
+11. **Delivery**: branch `feature/<name>`, rebased on `origin/develop`, the local checks (below) clean, landed on `develop` by a pull request (reduced CI on the merge result) or by a direct merge after the local checks. The local checks are the gate; nobody waits for CI. `main` is reached only by a pull request from `release/*`, `hotfix/*` or `develop`.
 
-Local checks, THE gate before a feature lands on `develop` (CI does not repeat them; its cheap tier re-runs only the areas you touched, on Linux, without `-race`):
+Local checks, THE gate before a feature lands on `develop` (the reduced CI suite of a pull request re-runs only the areas it touches, on Linux, without `-race`):
 
 ```sh
 cd server

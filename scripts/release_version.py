@@ -7,8 +7,8 @@ The plugin version lives in `package.json`; the tag marks the release and is `v`
 a release candidate commit carries `0.5.0-rc.1` in `package.json` and is tagged `v0.5.0-rc.1`. A `v*` tag
 publishes a release, so only `vMAJOR.MINOR.PATCH[-PRERELEASE]` is accepted: no leading zeros, no empty or
 zero-padded numeric pre-release identifier and no build metadata (`+5`, ignored by precedence and awkward in
-asset names). The release workflow runs this check first, before the full-tier gate (`release_ci_gate.py`),
-so a mismatched or malformed tag fails in seconds and publishes nothing (`docs/design/arch/pipeline.md` §4).
+asset names). The release workflow runs this check first, so a mismatched or malformed tag fails in seconds
+and publishes nothing (`docs/design/arch/pipeline.md` §4).
 
 Usage: python scripts/release_version.py --tag vMAJOR.MINOR.PATCH[-PRERELEASE]
 """
