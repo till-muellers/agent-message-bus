@@ -2,7 +2,7 @@
 
 > **Committed in slice 0.** Design paths use `docs/design/specs/…` and `docs/design/arch/…`. Spec paths without a prefix (e.g. `admin/analysis.md`) are relative to `docs/design/specs/`.
 
-Refines `docs/design/specs/REVIEW.md` §11. Ids keep the REVIEW numbers; a split slice gets a letter (4a–4d, 6a/6b, 13a/13b, W1a/W1b); slice `0` commits the design and goes first. Each slice = one branch + one PR, green CI (`go`, `typescript`, `python`), mergeable on its own. Client slices (E*, P*, GUI-*, PL-*) are Arch-client's (`slices-client.md`); they are named here only as consumers. The combined order of all slices is `BACKLOG.md`.
+Refines `docs/design/specs/REVIEW.md` §11. Ids keep the REVIEW numbers; a split slice gets a letter (4a–4d, 6a/6b, 13a/13b, W1a/W1b); slice `0` commits the design and goes first. Each slice = one `feature/<id>-<slug>` branch landing on `develop`, local checks clean (`go`, `typescript`, `python`), mergeable on its own. Client slices (E*, P*, GUI-*, PL-*) are Arch-client's (`slices-client.md`); they are named here only as consumers. The combined order of all slices is `BACKLOG.md`.
 
 Shared rules for every slice (not repeated below):
 - TDD: RED test first (named per slice), then the Gherkin moved into `server/spec/`, then code. Go tests are table-driven, `t.Parallel()` where safe, real SQLite via `internal/platform/db/dbtest.Open`, no sleeps (channels / deadline polling).

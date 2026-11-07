@@ -2,7 +2,7 @@
 
 > **Committed in slice 0.** Design paths use `docs/design/specs/…` and `docs/design/arch/…`. Spec paths without a prefix (e.g. `omp-parity/omp-delivery.feature`) are relative to `docs/design/specs/`.
 
-Each slice is one PR on branch `slice/<id>-<slug>` (`main` is protected), TDD (RED test first, confirmed failing for the right reason), green CI (`go`, `typescript`, `python`, and `web` once it exists). Sizes as in `definition-of-ready.md` R11: **S** ≈ ≤ 300 changed lines incl. tests, **M** ≈ ≤ 800; nothing is L. Readiness criteria: `client.md` §13.
+Each slice is one branch `feature/<id>-<slug>` landing on `develop`, TDD (RED test first, confirmed failing for the right reason), local checks clean (`go`, `typescript`, `python`, and `web` once it exists). Sizes as in `definition-of-ready.md` R11: **S** ≈ ≤ 300 changed lines incl. tests, **M** ≈ ≤ 800; nothing is L. Readiness criteria: `client.md` §13.
 Server slice ids are Arch-server's (`docs/design/arch/slices.md`, REVIEW §11 ids with suffixes: `0` commit the design (precedes every slice), `D1` delivery class, `4a`–`4d`, `6a/6b`, `7`, `8`, `9`, `10` invite id + web cancel endpoint (PO-3, no tool), `11`, `12`, `13a/13b`, `W1a` web transport/session/embed, `W1b` state/reads/inbox, `W2`, `W3`). Client ids follow REVIEW §11 (`E*`, `P*`, `W*` → `GUI-*`) with suffixes for splits. "Depends on" names every hard prerequisite by id (server ids written as "server N"); the combined order is `BACKLOG.md`.
 Design references: `client.md` (§ numbers), `gui.md`, `pipeline.md`. All PO decisions are final (`client.md` §0a).
 

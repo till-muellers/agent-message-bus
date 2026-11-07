@@ -1,5 +1,5 @@
 # Ruff settings for the release tooling (scripts/) and its tests (tests/*.py).
-# Must match the ruff pin of the python job in .github/workflows/ci.yml.
+# Must match the ruff pin of the python jobs in .github/workflows/ci-python.yml and full.yml.
 required-version = "0.17.3"
 line-length = 120
 target-version = "py310"

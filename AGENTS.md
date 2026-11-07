@@ -47,6 +47,14 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Git workflow
+
+This repo uses Git Flow; the rules are in `.omp/AGENTS.md` ("Git Flow and CI") and `.omp/RULES.md`. They take precedence over the generic session-close steps in the Beads blocks below:
+
+- Work on `feature/<name>` branched from `develop`; land it on `develop` after `git fetch && git rebase origin/develop` and the local checks. Never commit or push to `main` (only `release/*` and `hotfix/*` merges change it).
+- Where the Beads block says `git pull --rebase` and `git push`, that means the rebase on `origin/develop` and a push of your feature branch or `develop`. `bd dolt push` stays the last step of a session.
+- Never trigger, poll or wait for CI runs. The local checks are the gate.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
 

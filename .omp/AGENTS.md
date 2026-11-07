@@ -7,7 +7,7 @@ Conventions and working method for contributors and coding agents in this repo.
 - omp plugin: TypeScript on Bun (`extension/`), typechecked with `tsc --noEmit`.
 - Web GUI: strict TypeScript on Bun without a framework (`gui/`, its own `package.json` and `tsconfig.json`), bundled into `server/internal/web/dist/` and embedded by the server.
 - Python: release tooling only (`scripts/build.py`, `scripts/release_version.py`, `scripts/release_ci_gate.py`).
-- CI: GitHub Actions (`.github/workflows/ci.yml`, `release.yml`).
+- CI: GitHub Actions in `.github/workflows/`: the cheap tier `ci-go.yml`, `ci-typescript.yml`, `ci-web.yml`, `ci-python.yml`, the full tier `full.yml`, the publisher `release.yml` (see "Git Flow and CI").
 
 ## Layout
 
@@ -18,13 +18,13 @@ Conventions and working method for contributors and coding agents in this repo.
 |`tests/`|Per-module `*.test.ts` (bun) mirroring the `extension/lib/<feature>/` folders, with the shared `fakes.ts` and the launcher tests in `launch/`, plus `test_*.py` (pytest) for `scripts/`.|
 |`gui/`|Web GUI: `src/` (browser code), `tests/` (bun), `scripts/build.ts` (bundles into `server/internal/web/dist/`), `index.html` (shell template).|
 |`scripts/build.py`|Release build: builds the GUI (`--skip-gui` to skip), cross-compiles the server and writes `SHA256SUMS`.|
-|`scripts/release_*.py`|Release gates run first by `release.yml`: `release_ci_gate.py` (a `ci` run of the tagged commit passed), `release_version.py` (tag matches the `package.json` version).|
-|`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only by PR.|
+|`scripts/release_*.py`|Release gates run first by `release.yml`: `release_version.py` (tag matches the `package.json` version), `release_ci_gate.py` (a successful full-tier run of the tagged commit exists).|
+|`docs/design/`|Committed design: `specs/` is the frozen input (the scenarios move to `server/spec/` when their slice is implemented); `arch/` holds the architecture, of which `contracts.md` and `BACKLOG.md` stay living and change only in the feature that changes a contract or the backlog.|
 |`.omp/`|This guide and the hard rules (`RULES.md`).|
 
 ## Commands
 - Go test: `cd server && go test ./...` (single pkg: `go test ./internal/<feature>/...`, single test: `go test -run TestName ./path`)
-- Go race + cover: `go test -race -cover ./...` (needs CGO; CI runs it)
+- Go race + cover: `go test -race -cover ./...` (needs CGO; part of the local checks, the cheap tier of CI does not run it)
 - Go lint/format: `gofmt -l .`, `go vet ./...`, `golangci-lint run ./...`
 - TS: `bun test tests/`, `bun run typecheck`
 - GUI: `cd gui && bun test && bun run typecheck`; build into the embed dir with `bun run build:gui` (repo root). Go builds and tests work without it (fallback page at `/web/`).
@@ -61,7 +61,7 @@ Conventions and working method for contributors and coding agents in this repo.
 
 ### Turn specs into plan
 - Plan first: restate the task, list the files you'll touch, write a todo list.
-- One feature or behaviour per change: small, reviewable diffs on a branch, merged by pull request (`main` is protected).
+- One feature or behaviour per change: small, reviewable diffs on a `feature/<name>` branch that lands on `develop` (see "Git Flow and CI"; `main` takes only releases).
 - Every functionality gets its own file. Don't grow existing files into catch-alls.
 - Add logical steps. Aim for small commits.
 
@@ -87,6 +87,26 @@ Conventions and working method for contributors and coding agents in this repo.
 - Are errors handled and wrapped with context?
 - Any new dependency? It needs approval first.
 - Tool changed? `server/TOOLS.md` regenerated, extension README and the agent guide `server/internal/guide/guide.md` still accurate.
+
+## Git Flow and CI
+
+### Branches
+- `main`: released states only. It changes only through `release/*` or `hotfix/*` merges; never commit or push to it directly.
+- `develop`: the integration branch. Finished work lands here.
+- `feature/<name>`: one branch per task, branched from `develop`; put the slice or bead id in the name (`feature/E1-delivery-class`). Before landing: `git fetch && git rebase origin/develop`, run the local checks (below), then merge or push to `develop`. Bug fixes and docs changes are features too.
+- `release/<x.y.z>`: branched from `develop` for a version jump; only stabilizing fixes go in. The first commit of the branch sets the `version` in `package.json`; the finish merges into `main` with a merge commit (no squash, no rebase), tags `v<x.y.z>` and merges back into `develop`. Steps: README "Releasing".
+- `hotfix/<name>`: branched from `main` for an urgent fix; bump PATCH in `package.json`, merge into `main`, tag `v<x.y.z>`, merge into `develop`.
+- **Versions** follow Semantic Versioning 2.0.0, `MAJOR.MINOR.PATCH`. The `version` in `package.json` is the single source; the tag is `v` plus that version and the branch is `release/<MAJOR.MINOR.PATCH>`. A release from `develop` bumps MINOR (MAJOR for breaking changes; while MAJOR is 0, anything may change on MINOR; leaving 0.x is a later owner decision), a hotfix bumps PATCH. Only the core form is accepted: no leading zeros, no pre-release (`-rc.1`), no build metadata, because a `v*` tag publishes a release and `scripts/release_version.py` fails any other tag. The wire `Protocol` integer (`server/internal/server/protocol.go`) and the extension's `MIN_SERVER_PROTOCOL` are a separate number; never confuse them with the version.
+
+### CI
+CI costs money. The local checks are the regular gate; CI does not repeat them, and an agent never triggers, polls or waits for a CI run (no `gh run watch`, no `gh pr checks --watch`): it relies on the local checks and reports them.
+- **Cheap tier** (`ci-*.yml`): on every push to `develop`, `feature/**`, `release/**`, `hotfix/**` and on pull requests; build, unit tests and linters on `ubuntu-latest`, no `-race`. One workflow per area, each run only when its paths change: `server/**` (go), `extension/**` and `tests/**` (typescript), `gui/**` and `server/internal/web/**` (web), `scripts/**` and `tests/test_*.py` (python). Superseded runs of the same branch are cancelled.
+- **Full tier** (`full.yml`): only on pushes to `main` (release and hotfix merges) and on `v*` tags, or by hand: everything (Go with `-race`, the TypeScript, GUI and Python suites, the real-bundle web build, a packaging build). Details and cost rationale: `docs/design/arch/pipeline.md` §2.
+- Every workflow runs on `ubuntu-latest` only, never on Windows or macOS: we develop on Windows, so Windows and macOS are covered by local runs. To check for a Linux-only failure locally: `wsl -e bash -lc "cd /mnt/d/repos/<worktree>/server && go test ./..."` (WSL has go and gcc; its Go build cache is separate, so the first run is slow; add `-race` for the full-tier run).
+- **Manual only**: none today (no suite needs a display or GPU).
+- `release.yml` (tag `v*`) only publishes; it checks the tag and that the tagged commit passed the full tier.
+- No third-party action beyond `actions/*`, `oven-sh/setup-bun` and `golangci/golangci-lint-action` without approval; `tests/workflows.test.ts` enforces the tier rules.
+- Session close: commit the feature branch including the tracked bead audit log (`.beads/interactions.jsonl` changes when a bead is closed), so the bead state lands with the code; land it on `develop` as above; then `bd dolt push` (the Dolt data under `refs/dolt/data` is separate from the git push and stays the last step of a session).
 
 ## Code conventions
 
@@ -161,7 +181,7 @@ A slice is ready when (`docs/design/arch/definition-of-ready.md` §1):
 - **Specs approved**: the rules to move are named by file and line, their folder has no open REVIEW finding and no unresolved `@po-decision`; pure refactors state "no behaviour change".
 - **No blocking question** open in `docs/design/arch/QUESTIONS.md`.
 - **Contracts fixed**: every client-visible change is in `docs/design/arch/contracts.md`.
-- **Dependencies merged**: every server slice it depends on is on `main`.
+- **Dependencies merged**: every server slice it depends on is on `develop`.
 - **Shared-code approval** for `internal/platform/**` or `internal/domain/**`; **no new dependency** without approval.
 - **Acceptance tests named** with their RED reason.
 - **Schema decided** in `docs/design/arch/schema.md` (or "—").
@@ -170,7 +190,7 @@ A slice is ready when (`docs/design/arch/definition-of-ready.md` §1):
 
 ## Definition of done
 A slice is done when all hold:
-1. **TDD evidence**: each acceptance test failed first for the stated reason (RED noted in the PR description) and passes now; bug fixes start with a reproducing test.
+1. **TDD evidence**: each acceptance test failed first for the stated reason (RED noted in the commit message or the bead) and passes now; bug fixes start with a reproducing test.
 2. **Spec in sync**: the named rules are in `server/spec/*.feature` (verbatim scenario text), replaced lines are gone, `spec/README.md` features table/glossary updated. Only PO-decided scenarios are moved.
 3. **Generated files**: tool changes → `server/TOOLS.md` regenerated, golden test green; the absolute tool count set at all sites.
 4. **Contracts**: implementation matches `contracts.md`; deviations are updated there first; extension-facing change → `server/internal/server/protocol.go` bumped per policy.
@@ -179,10 +199,10 @@ A slice is done when all hold:
 7. **Shared code** only as approved; no unapproved dependency.
 8. **Docs**: README/DEPLOYMENT/extension README lines updated; the slice's `.omp/AGENTS.md` correction applied.
 9. **Local checks** clean (below).
-10. **Review**: self-review with the review checklist; no unrelated changes (or mentioned in the PR); reviewer approval.
-11. **Delivery**: branch `slice/<id>-<slug>`, PR to protected `main`, CI `go`, `typescript`, `web`, `python` green, merged by PR.
+10. **Review**: self-review with the review checklist; no unrelated changes (or mentioned in the commit message); reviewer approval.
+11. **Delivery**: branch `feature/<name>`, rebased on `origin/develop`, the local checks (below) clean, landed on `develop` by merge or push. The local checks are the gate: CI does not repeat them and nobody waits for it. `main` is touched only by `release/*` and `hotfix/*`.
 
-Locally:
+Local checks, THE gate before a feature lands on `develop` (CI does not repeat them; its cheap tier re-runs only the areas you touched, on Linux, without `-race`):
 
 ```sh
 cd server
@@ -194,6 +214,7 @@ cd ..
 bun test
 bun run typecheck
 (cd gui && bun test && bun run typecheck)
+bun run build:gui && (cd server && go test ./internal/web/...)   # only when gui/ or server/internal/web/ changed: tests against the real bundle
 pytest tests
-ruff format --check . && ruff check .
+uvx ruff@0.17.3 format --check . && uvx ruff@0.17.3 check .
 ```

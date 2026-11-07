@@ -10,6 +10,7 @@
 - Don't change code unrelated to the task. Mention it instead.
 - No debug prints, dead code or leftover TODOs in the diff.
 - Never hand-edit `server/TOOLS.md`; regenerate it with `go run ./cmd/tooldoc`.
-- Never push to `main`: it is protected. Work on a branch and merge through a pull request with green CI.
+- Never commit or push to `main`: it changes only through `release/*` and `hotfix/*` merges. Work on a `feature/<name>` branch from `develop` and land it there after the local checks pass (`.omp/AGENTS.md` "Git Flow and CI").
+- Never trigger, poll or wait for a CI run: the local checks are the gate.
 - Before saying "done": run tests, lint and typecheck for every language you touched, and review your own diff.
 - If requirements are unclear, ask before building.

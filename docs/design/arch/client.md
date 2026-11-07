@@ -738,8 +738,8 @@ Review of `docs/design/arch/definition-of-ready.md` (Arch-server) for the client
 ### 13.3 DoD additions for client slices
 
 - Local checks add `cd gui && bun test && bun run typecheck` once `gui/` exists; CI adds the `web` job (`pipeline.md` §2).
-- The PR description records the smoke run (steps, omp version, result), next to the RED evidence.
-- Branch `slice/<id>-<slug>` as for server slices (e.g. `slice/E1-delivery-class`).
+- The commit message or the bead records the smoke run (steps, omp version, result), next to the RED evidence.
+- Branch `feature/<id>-<slug>` as for server slices (e.g. `feature/E1-delivery-class`), landing on `develop`.
 
 ### 13.4 Readiness of client slices now
 

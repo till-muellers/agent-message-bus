@@ -106,7 +106,7 @@ Open `http://127.0.0.1:8081/web/` and sign in with an admin token (`agent-messag
 |`tests/`|Extension tests (`bun test`) and build script tests (`pytest`).|
 |`gui/`|Web GUI (strict TypeScript, no framework, its own `package.json`); built into `server/internal/web/dist/`, which the server embeds.|
 |`scripts/build.py`|Builds the web GUI, then cross-compiles release binaries and `SHA256SUMS`.|
-|`.github/workflows/release.yml`|Builds and publishes a release for every `v*` tag.|
+|`.github/workflows/`|`ci-*.yml`: cheap tier per area on `develop`, `feature/**`, `release/**`, `hotfix/**` and pull requests. `full.yml`: full tier on `main` and `v*` tags. `release.yml`: builds and publishes a release for every `v*` tag.|
 |`.omp/`|Project guide (`AGENTS.md`) and hard rules (`RULES.md`) for contributors and coding agents.|
 
 ## Development
@@ -135,16 +135,26 @@ From the repo root, `bun run test:gui` runs the GUI tests and `bun run build:gui
 
 `python scripts/build.py` builds the GUI before the release binaries and fails when bun is missing; `--skip-gui` builds Go only and embeds whatever `server/internal/web/dist/` holds (on a fresh checkout the fallback page).
 
-Contributor conventions, working method and the definition of done are in [`.omp/AGENTS.md`](.omp/AGENTS.md); hard rules in [`.omp/RULES.md`](.omp/RULES.md).
+Contributor conventions, working method, the Git Flow branches, the CI tiers and the definition of done are in [`.omp/AGENTS.md`](.omp/AGENTS.md); hard rules in [`.omp/RULES.md`](.omp/RULES.md).
 
 ## Releasing
 
-1. Branch `release/vX.Y.Z`: bump the `version` in `package.json` (semver; the release check rejects a tag that differs from it). The plugin version is distinct from the server's `Protocol` integer in `server/internal/server/protocol.go`: if a server contract the extension needs changed, raise `Protocol` and the extension's `MIN_SERVER_PROTOCOL`; `tests/version/protocol-sync.test.ts` fails when `Protocol` is below `MIN_SERVER_PROTOCOL`. Open a pull request, let CI go green, merge.
-2. Wait until the `ci` run of the merge commit on `main` is green, then tag the merge commit `vX.Y.Z` and push the tag. The release workflow first checks that a `ci` run of the tagged commit passed and that the tag matches the package version (it fails in seconds and publishes nothing when either does not; if `ci` was still running, re-run the release workflow once it passed), runs the server tests, builds the web GUI and then `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads from the latest release.
-3. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
+Releases follow Git Flow (`.omp/AGENTS.md`, "Git Flow and CI"). Versions follow [Semantic Versioning 2.0.0](https://semver.org/) (`X.Y.Z` = MAJOR.MINOR.PATCH). The `version` in `package.json` is the single source; the tag is `v` plus that version (`vX.Y.Z`). A release from `develop` bumps MINOR (MAJOR for breaking changes; while MAJOR is 0, anything may change on MINOR; moving to 1.0.0 is the owner's decision), a hotfix bumps PATCH. Only the core form is accepted: no leading zeros, no pre-release (`-rc.1`), no build metadata. A `v*` tag publishes a release, so the release workflow rejects any other tag and any tag that differs from the `package.json` version, in its first step.
+
+1. Branch `release/X.Y.Z` from `develop` and bump the `version` in `package.json`. The plugin version is distinct from the server's `Protocol` integer (an unrelated wire number that is never derived from the version) in `server/internal/server/protocol.go`: if a server contract the extension needs changed, raise `Protocol` and the extension's `MIN_SERVER_PROTOCOL`; `tests/version/protocol-sync.test.ts` fails when `Protocol` is below `MIN_SERVER_PROTOCOL`. Only stabilizing fixes go in after that; new work stays on feature branches for `develop`. Run the local checks.
+2. Finish the release: merge `release/X.Y.Z` into `main` with a merge commit (no squash) and push `main`. That push starts the full tier (`full.yml`: Go with `-race`, the TypeScript, GUI and Python suites, the real-bundle web build, a packaging build; all on `ubuntu-latest`). When it is green, tag the merge commit `vX.Y.Z`, push the tag and merge `release/X.Y.Z` back into `develop`. The owner watches the full-tier run; agents never wait for CI.
+3. The tag starts `release.yml`. It first checks that the tag is a SemVer core version equal to the package version, then that a successful full-tier run of the tagged commit exists (it fails in seconds and publishes nothing when either does not; if the full tier was still running, re-run the release workflow once it passed). It runs no test suite: the full tier did. It builds the web GUI and then `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release. `/bus server start` downloads from the latest release. The tag push also starts a full-tier run, which skips the suites when the run of `main` already covered the commit.
+4. Urgent fix on a released version: branch `hotfix/<name>` from `main`, fix it and bump PATCH in `package.json`, merge into `main` (full tier), tag `vX.Y.Z` with the new patch version, merge into `develop`.
+5. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
 
 ```sh
+git switch -c release/X.Y.Z develop
+# bump package.json, stabilize, run the local checks
+git switch main && git merge --no-ff release/X.Y.Z && git push origin main
+# wait for the full tier (full.yml) on main, then:
 git tag vX.Y.Z && git push origin vX.Y.Z
+git switch develop && git merge --no-ff release/X.Y.Z && git push origin develop
+git branch -d release/X.Y.Z
 ```
 
 ## License
