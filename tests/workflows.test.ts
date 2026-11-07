@@ -1,16 +1,20 @@
 /**
- * Workflow policy fitness (`docs/design/arch/pipeline.md` §2, `.omp/AGENTS.md` "Git Flow"): CI costs money, so the
- * cheap tier (`ci-*.yml`) is path-filtered and superseded runs are cancelled; every job of every workflow runs on
- * `ubuntu-latest` (Windows and macOS are covered by local runs); the full tier (`full.yml`) runs
- * only for merges to `main` and `v*` tags; `release.yml` only publishes; no third-party action beyond the known ones.
+ * Workflow policy fitness (`docs/design/arch/pipeline.md` §2, `.omp/AGENTS.md` "Git Flow and CI"): CI costs money, so
+ * nothing runs on a branch push. A pull request into `develop`, `release/**` or `hotfix/**` runs the reduced suite
+ * (`ci-*.yml`, path-filtered); a pull request into `main` runs the full suite (`full.yml`, never path-filtered, so its
+ * jobs can be required checks); a `v*` tag only publishes (`release.yml`). Drafts are skipped, superseded runs are
+ * cancelled, every job runs on `ubuntu-latest` (Windows and macOS are covered by local runs) and no third-party action
+ * beyond the known ones is used.
  */
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const WORKFLOWS = resolve(import.meta.dir, "..", ".github", "workflows");
-/** Branches the cheap tier runs on (`.omp/AGENTS.md` "Git Flow"). */
-const CHEAP_BRANCHES = ["develop", "feature/**", "release/**", "hotfix/**"];
+/** The base branches of the reduced suite (`.omp/AGENTS.md` "Git Flow and CI"). */
+const REDUCED_BASES = ["develop", "release/**", "hotfix/**"];
+const DRAFT_GUARD = "github.event.pull_request.draft != true";
+const CONCURRENCY_GROUP = "${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}";
 /** Actions already in use: GitHub's own, bun's setup and the Go linter's. Anything else needs approval first. */
 const ALLOWED_ACTIONS = [/^actions\/[\w-]+@v\d+$/, /^oven-sh\/setup-bun@v\d+$/, /^golangci\/golangci-lint-action@v\d+$/];
 
@@ -41,23 +45,30 @@ function loadWorkflow(file: string): Workflow {
 }
 
 const files = readdirSync(WORKFLOWS).filter(file => /\.ya?ml$/.test(file));
-const cheap = files.filter(file => file.startsWith("ci-")).map(loadWorkflow);
+const reduced = files.filter(file => file.startsWith("ci-")).map(loadWorkflow);
 const all = files.map(loadWorkflow);
 
 function stepsOf(job: Json): Json[] {
 	return Array.isArray(job.steps) ? job.steps.map(asRecord) : [];
 }
 
+function runsOf(workflow: Workflow): string[] {
+	return Object.values(workflow.jobs)
+		.flatMap(stepsOf)
+		.map(step => String(step.run ?? ""))
+		.filter(run => run !== "");
+}
+
 describe("the workflow files", () => {
-	test("are the cheap tier (ci-*.yml), the full tier, the publisher or a manual-*.yml", () => {
+	test("are the reduced suite (ci-*.yml), the full suite, the publisher or a manual-*.yml", () => {
 		const unknown = files.filter(file => !file.startsWith("ci-") && !file.startsWith("manual-") && file !== "full.yml" && file !== "release.yml");
 		expect(unknown).toEqual([]);
 		expect(files).toContain("full.yml");
 		expect(files).toContain("release.yml");
 	});
 
-	test("the cheap tier has one workflow per area", () => {
-		expect(cheap.map(workflow => workflow.file).sort()).toEqual(["ci-go.yml", "ci-python.yml", "ci-typescript.yml", "ci-web.yml"]);
+	test("the reduced suite has one workflow per area", () => {
+		expect(reduced.map(workflow => workflow.file).sort()).toEqual(["ci-go.yml", "ci-python.yml", "ci-typescript.yml", "ci-web.yml"]);
 	});
 
 	test("use only the actions already in use, pinned to a major version", () => {
@@ -70,89 +81,86 @@ describe("the workflow files", () => {
 		expect(offenders).toEqual([]);
 	});
 
-	test("run every job on ubuntu-latest, never on Windows or macOS", () => {
-		const offenders = all.flatMap(workflow =>
-			Object.entries(workflow.jobs)
-				.filter(([, job]) => job["runs-on"] !== "ubuntu-latest")
-				.map(([name]) => `${workflow.file}: ${name}`),
-		);
-		expect(offenders).toEqual([]);
-		expect(all.flatMap(workflow => Object.values(workflow.jobs)).every(job => job.strategy === undefined)).toBe(true);
+	test("run every job on ubuntu-latest, never on Windows or macOS, without a matrix", () => {
+		const jobs = all.flatMap(workflow => Object.entries(workflow.jobs).map(([name, job]) => ({ at: `${workflow.file}: ${name}`, job })));
+		expect(jobs.filter(({ job }) => job["runs-on"] !== "ubuntu-latest").map(({ at }) => at)).toEqual([]);
+		expect(jobs.filter(({ job }) => job.strategy !== undefined).map(({ at }) => at)).toEqual([]);
 	});
 
 	test("do not chain on each other with workflow_run", () => {
 		expect(all.filter(workflow => "workflow_run" in workflow.on).map(workflow => workflow.file)).toEqual([]);
 	});
-});
 
-describe.each(cheap.map(workflow => [workflow.file, workflow] as const))("cheap tier %s", (_file, workflow) => {
-	test("runs on pushes to the Git Flow branches and on pull requests, never on main or tags", () => {
-		const push = asRecord(workflow.on.push);
-		expect(push.branches).toEqual(CHEAP_BRANCHES);
-		expect(push.tags).toBeUndefined();
-		expect(workflow.on).toHaveProperty("pull_request");
-		expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
+	test("run nothing on a branch push: only release.yml has a push trigger, and only for tags", () => {
+		const withPush = all.filter(workflow => "push" in workflow.on).map(workflow => workflow.file);
+		expect(withPush).toEqual(["release.yml"]);
 	});
 
-	test("is path-filtered, the same for push and pull_request, and counts its own workflow file", () => {
-		const push = asRecord(workflow.on.push).paths;
-		const pullRequest = asRecord(workflow.on.pull_request).paths;
-		expect(Array.isArray(push) && push.length > 0).toBe(true);
-		expect(pullRequest).toEqual(push);
+	test("give every job a name that is unique across the workflows, so required checks are unambiguous", () => {
+		const names = all.flatMap(workflow => Object.entries(workflow.jobs).map(([id, job]) => String(job.name ?? id)));
+		expect(new Set(names).size).toBe(names.length);
+	});
+
+	test("do not use the cached result of an earlier run as a release gate", () => {
+		expect(all.filter(workflow => /release_ci_gate|actions\/workflows\/.*\/runs/.test(workflow.text)).map(workflow => workflow.file)).toEqual([]);
+	});
+});
+
+describe.each(reduced.map(workflow => [workflow.file, workflow] as const))("reduced suite %s", (_file, workflow) => {
+	test("runs for pull requests into develop, release/** and hotfix/** (and by hand), never for pushes", () => {
+		const pullRequest = asRecord(workflow.on.pull_request);
+		expect(pullRequest.branches).toEqual(REDUCED_BASES);
+		expect(pullRequest.types).toContain("ready_for_review");
+		expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "workflow_dispatch"]);
+	});
+
+	test("is path-filtered and counts its own workflow file", () => {
+		const paths = asRecord(workflow.on.pull_request).paths;
+		expect(Array.isArray(paths) && paths.length > 0).toBe(true);
 		const own = `.github/workflows/${workflow.file}`;
-		const paths = push as string[];
-		expect(paths.includes(own) || paths.includes(".github/workflows/**")).toBe(true);
+		expect((paths as string[]).includes(own) || (paths as string[]).includes(".github/workflows/**")).toBe(true);
 	});
 
-	test("cancels superseded runs of the same branch", () => {
+	test("skips draft pull requests and cancels superseded runs of the same pull request", () => {
 		expect(workflow.concurrency?.["cancel-in-progress"]).toBe(true);
-		expect(workflow.concurrency?.group).toBe("${{ github.workflow }}-${{ github.head_ref || github.ref_name }}");
+		expect(workflow.concurrency?.group).toBe(CONCURRENCY_GROUP);
+		for (const job of Object.values(workflow.jobs)) expect(job.if).toBe(DRAFT_GUARD);
 	});
 
-	test("runs without a matrix and without the race detector", () => {
-		for (const job of Object.values(workflow.jobs)) {
-			expect(job.strategy).toBeUndefined();
-			expect(stepsOf(job).some(step => String(step.run ?? "").includes("-race"))).toBe(false);
-		}
+	test("does not use the race detector", () => {
+		expect(runsOf(workflow).some(run => run.includes("-race"))).toBe(false);
 	});
 });
 
-describe("full tier full.yml", () => {
+describe("full suite full.yml", () => {
 	const full = loadWorkflow("full.yml");
 
-	test("runs on main, v* tags and by hand, never for pull requests, develop or feature branches", () => {
-		const push = asRecord(full.on.push);
-		expect(push.branches).toEqual(["main"]);
-		expect(push.tags).toEqual(["v*"]);
-		expect(full.on).toHaveProperty("workflow_dispatch");
-		expect(Object.keys(full.on).sort()).toEqual(["push", "workflow_dispatch"]);
+	test("runs for pull requests into main (and by hand), never for any other base or a push", () => {
+		const pullRequest = asRecord(full.on.pull_request);
+		expect(pullRequest.branches).toEqual(["main"]);
+		expect(pullRequest.types).toContain("ready_for_review");
+		expect(Object.keys(full.on).sort()).toEqual(["pull_request", "workflow_dispatch"]);
 		expect(JSON.stringify(full.on)).not.toMatch(/develop|feature|hotfix|release\//);
 	});
 
-	test("cancels superseded runs of the same ref", () => {
+	test("is never path-filtered, so its jobs always report and can be required checks of main", () => {
+		const pullRequest = asRecord(full.on.pull_request);
+		expect(pullRequest.paths).toBeUndefined();
+		expect(pullRequest["paths-ignore"]).toBeUndefined();
+	});
+
+	test("skips draft pull requests and cancels superseded runs of the same pull request", () => {
 		expect(full.concurrency?.["cancel-in-progress"]).toBe(true);
-		expect(full.concurrency?.group).toBe("${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}");
+		expect(full.concurrency?.group).toBe(CONCURRENCY_GROUP);
+		for (const job of Object.values(full.jobs)) expect(job.if).toBe(DRAFT_GUARD);
 	});
 
-	test("runs the Go tests with the race detector", () => {
-		const go = full.jobs.go as Json;
-		expect(stepsOf(go).some(step => String(step.run).includes("go test -race"))).toBe(true);
-	});
-
-	test("covers every area of the cheap tier and the packaging build", () => {
-		expect(Object.keys(full.jobs)).toEqual(expect.arrayContaining(["go", "typescript", "web", "python", "package"]));
-		expect(full.text).toContain("scripts/build.py");
-	});
-
-	test("skips the suites when the run of main already covered the tagged commit", () => {
-		for (const name of ["go", "typescript", "web", "python", "package"]) {
-			expect(full.jobs[name]?.needs).toBe("covered");
-			expect(full.jobs[name]?.if).toBe("needs.covered.outputs.covered != 'true'");
-		}
-		const lookup = stepsOf(full.jobs.covered as Json).map(step => String(step.run ?? "")).join("\n");
-		expect(lookup).toContain('"$GITHUB_REF_TYPE" = tag');
-		expect(lookup).toContain("workflows/full.yml/runs");
-		expect(lookup).toContain("release_ci_gate.py");
+	test("covers every area, the race detector, the real bundle and the packaging build, under full-* job names", () => {
+		expect(Object.keys(full.jobs).sort()).toEqual(["go", "package", "python", "typescript", "web"]);
+		for (const [id, job] of Object.entries(full.jobs)) expect(job.name).toBe(`full-${id}`);
+		expect(runsOf(full).some(run => run.includes("go test -race"))).toBe(true);
+		expect(runsOf(full).some(run => run.includes("go test ./internal/web/"))).toBe(true);
+		expect(runsOf(full).some(run => run.includes("scripts/build.py"))).toBe(true);
 	});
 });
 
@@ -163,13 +171,12 @@ describe("publisher release.yml", () => {
 		expect(release.on).toEqual({ push: { tags: ["v*"] } });
 	});
 
-	test("checks the tag, then the full-tier run of the commit, and runs no test suite", () => {
-		const runs = Object.values(release.jobs).flatMap(stepsOf).map(step => String(step.run ?? ""));
-		const version = runs.findIndex(run => run.includes("release_version.py"));
-		const gate = runs.findIndex(run => run.includes("workflows/full.yml/runs") && run.includes("release_ci_gate.py"));
-		expect(version).toBeGreaterThanOrEqual(0);
-		expect(gate).toBeGreaterThan(version);
-		expect(runs.some(run => /go test|bun test|pytest/.test(run))).toBe(false);
+	test("checks the tag first, then builds and publishes, with no suite and no CI gate", () => {
+		const runs = runsOf(release);
+		expect(runs[0]).toContain("release_version.py");
+		expect(runs.some(run => run.includes("scripts/build.py"))).toBe(true);
+		expect(runs.some(run => run.includes("gh release create"))).toBe(true);
+		expect(runs.some(run => /go test|bun test|pytest|gh api/.test(run))).toBe(false);
 	});
 
 	test("marks a pre-release tag as a GitHub pre-release, so it never becomes the latest release", () => {

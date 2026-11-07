@@ -1,23 +1,10 @@
-# Cheap tier, omp extension: typecheck and bun tests. Also runs the workflow policy test (tests/workflows.test.ts).
+# Reduced suite on the merge result of a pull request into develop, release/** or hotfix/**, omp extension: typecheck and bun tests (also the workflow policy test, tests/workflows.test.ts).
 name: ci-typescript
 
 on:
-  push:
-    branches: [develop, 'feature/**', 'release/**', 'hotfix/**']
-    paths:
-      - 'extension/**'
-      - 'tests/**'
-      - '!tests/test_*.py'
-      - 'package.json'
-      - 'bun.lock'
-      - 'bunfig.toml'
-      - 'tsconfig.json'
-      - 'gui/package.json'
-      # Read by the tests: the tool ledger, the protocol constant and the workflows themselves.
-      - 'server/TOOLS.md'
-      - 'server/internal/server/protocol.go'
-      - '.github/workflows/**'
   pull_request:
+    branches: [develop, 'release/**', 'hotfix/**']
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'extension/**'
       - 'tests/**'
@@ -31,9 +18,10 @@ on:
       - 'server/TOOLS.md'
       - 'server/internal/server/protocol.go'
       - '.github/workflows/**'
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -41,6 +29,8 @@ permissions:
 
 jobs:
   typescript:
+    name: ci-typescript
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

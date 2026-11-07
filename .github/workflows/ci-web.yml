@@ -1,23 +1,19 @@
-# Cheap tier, web GUI: typecheck, tests and the bundle build. The Go build against the real bundle is the full tier's.
+# Reduced suite on the merge result of a pull request into develop, release/** or hotfix/**, web GUI: typecheck, tests and the bundle build. The Go build against the real bundle is the full suite's.
 name: ci-web
 
 on:
-  push:
-    branches: [develop, 'feature/**', 'release/**', 'hotfix/**']
-    paths:
-      - 'gui/**'
-      - 'server/internal/web/testdata/**'
-      - 'package.json'
-      - '.github/workflows/ci-web.yml'
   pull_request:
+    branches: [develop, 'release/**', 'hotfix/**']
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'gui/**'
       - 'server/internal/web/testdata/**'
       - 'package.json'
       - '.github/workflows/ci-web.yml'
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -25,6 +21,8 @@ permissions:
 
 jobs:
   web:
+    name: ci-web
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

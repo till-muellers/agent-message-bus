@@ -1,4 +1,6 @@
-# Publisher only: it builds and publishes the tagged commit. It runs no test suite; the full tier did (full.yml).
+# Publisher only: it builds and publishes the tagged commit. It runs no suite and checks no earlier CI run: the full
+# suite passed on the pull request into main (required check of main); a pre-release tag cut on a release branch rests
+# on the reduced suite of the pull requests into that branch.
 name: release
 
 on:
@@ -7,7 +9,6 @@ on:
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
   release:
@@ -21,13 +22,6 @@ jobs:
 
       - name: Tag is a SemVer version and matches package version
         run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"
-
-      - name: Full tier passed for the tagged commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100" \
-            | python scripts/release_ci_gate.py --sha "$GITHUB_SHA"
 
       - uses: actions/setup-go@v7
         with:

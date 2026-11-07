@@ -1,47 +1,26 @@
-# Full tier: everything, once per released state. Runs on merges to main (release/* and hotfix/* finish) and on v* tags.
-# The cheap tier (ci-*.yml) has already run on the branches; this adds the race detector, the
-# real-bundle web build and the packaging smoke build. Ubuntu only, like every workflow here. No pull_request trigger, no develop/feature trigger.
+# Full suite on the merge result of a pull request into main (release/* or hotfix/* finish, develop -> main).
+# Not path-filtered, so its jobs can be required checks of main: they always report. Beyond the reduced suite it
+# adds the race detector, the Go build against the real GUI bundle and the packaging smoke build.
+# workflow_dispatch is the manual escape hatch, e.g. to run it on a release branch before a release candidate tag.
 name: full
 
 on:
-  push:
+  pull_request:
     branches: [main]
-    tags: ['v*']
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  # A tag normally sits on the merge commit that the run of main already covered: then the tag run skips the suites.
-  covered:
-    runs-on: ubuntu-latest
-    outputs:
-      covered: ${{ steps.lookup.outputs.covered }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Full-tier run of this commit already passed
-        id: lookup
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          covered=false
-          if [ "$GITHUB_REF_TYPE" = tag ] \
-            && gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100" \
-              | python3 scripts/release_ci_gate.py --sha "$GITHUB_SHA"; then
-            covered=true
-          fi
-          echo "covered=${covered}" >> "$GITHUB_OUTPUT"
-
   go:
-    needs: covered
-    if: needs.covered.outputs.covered != 'true'
+    name: full-go
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,7 +39,7 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      # Includes the spec suite (server/spec), the generated-docs golden test and the /web contract fixtures.
+      # Includes the tests that read server/spec/*.feature, the generated-docs golden test and the /web contract fixtures.
       - name: go test -race
         run: go test -race ./...
 
@@ -71,8 +50,8 @@ jobs:
           working-directory: server
 
   typescript:
-    needs: covered
-    if: needs.covered.outputs.covered != 'true'
+    name: full-typescript
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -91,8 +70,8 @@ jobs:
         run: bun test tests/
 
   web:
-    needs: covered
-    if: needs.covered.outputs.covered != 'true'
+    name: full-web
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -126,8 +105,8 @@ jobs:
         working-directory: server
 
   python:
-    needs: covered
-    if: needs.covered.outputs.covered != 'true'
+    name: full-python
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -149,8 +128,8 @@ jobs:
 
   # Packaging smoke: the release build (GUI, then six cross-compiled binaries and SHA256SUMS), not published.
   package:
-    needs: covered
-    if: needs.covered.outputs.covered != 'true'
+    name: full-package
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
