@@ -170,7 +170,7 @@ Feature: Bus tools in the main omp session, presented like omp's own messaging t
       And the model continues with that entry in id order
 
     Scenario: A critical entry ends the wait
-      When member "worker" calls bus_wait with timeoutSeconds 60
+      When member "worker" calls bus_wait with from "lead" and timeoutSeconds 60
       And "admin" sends a critical direct message to "worker"
       Then bus_wait ends within a second with []
       And the entry is steered into the turn

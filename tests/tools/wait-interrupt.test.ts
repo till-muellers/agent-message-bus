@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { RemoteTool } from "../../extension/lib/bus/client.ts";
 import { createWaiters } from "../../extension/lib/delivery/waiters.ts";
 import { waitToolDefinition } from "../../extension/lib/tools/wait-tool.ts";
-import { z } from "../fakes.ts";
+import { entry, z } from "../fakes.ts";
 
 const TOOL_INTERRUPT = Symbol.for("pi-agent-core.tool-interrupt");
 const serverWait: RemoteTool = {
@@ -15,11 +15,10 @@ const serverWait: RemoteTool = {
 /**
  * A wait tool over a real waiter registry. `handOver` plays omp: it queues an entry as an aside and, like omp's agent
  * loop, aborts the signal of the running tool with the interrupt reason only when that tool is `interruptible`.
- * `acks` records what the wait itself acknowledged: it has no way to ack, so it stays empty.
+ * `waiters` is the registry the wait registered in: it must hold no stale waiter once the wait ended.
  */
 function setup() {
 	const waiters = createWaiters();
-	const acks: number[] = [];
 	const tool = waitToolDefinition({ zod: z } as unknown as ExtensionAPI, serverWait, {
 		source: () => ({ takeHeld: () => [], awaitEntry: (filter, ms, signal) => waiters.wait(filter, ms, signal) }),
 		claims: { claimFromServer: entries => [...entries] },
@@ -33,7 +32,7 @@ function setup() {
 		const [first] = (await tool.execute("id", { timeoutSeconds: 60 }, controller.signal, undefined, undefined as never)).content;
 		return first?.type === "text" ? JSON.parse(first.text) : undefined;
 	};
-	return { run, handOver, acks };
+	return { run, handOver, waiters };
 }
 
 /** Lets the promise chains of an abort settle without a timer. */
@@ -42,14 +41,14 @@ const flushMicrotasks = async (): Promise<void> => {
 };
 
 describe("an entry handed to omp while bus_wait runs", () => {
-	test("ends the wait with [] at once and the wait acks nothing", async () => {
-		const { run, handOver, acks } = setup();
+	test("ends the wait with [] at once and leaves the entry to omp", async () => {
+		const { run, handOver, waiters } = setup();
 		let answer: unknown = "still waiting";
 		const pending = run().then(result => (answer = result));
 		handOver();
 		await flushMicrotasks();
 		expect(answer).toEqual([]);
 		await pending;
-		expect(acks).toEqual([]);
+		expect(waiters.take(entry(5))).toBe(false);
 	});
 });
