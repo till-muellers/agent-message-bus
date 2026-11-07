@@ -178,7 +178,7 @@ The server allows one live inbox stream per agent, so each agent identity belong
 
 1. `AGENT_BUS_BIN` (read once at load);
 2. `agent-message-bus` (`.exe` on Windows) on `PATH`;
-3. a download of the latest GitHub release of `till-muellers/agent-message-bus` for this platform, verified against the release's `SHA256SUMS` and cached under `<PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus/bin/<version>/`.
+3. a download of the latest GitHub release of `till-muellers/agent-message-bus` for this platform (Windows and Linux, amd64 and arm64; on macOS it fails, build the server from source with `cd server && go build` and set `AGENT_BUS_BIN`), verified against the release's `SHA256SUMS` and cached under `<PI_CODING_AGENT_DIR or ~/.omp/agent>/agent-message-bus/bin/<version>/`.
 
 Server behaviour (single instance per data dir, admin token file) is described in [`server/README.md`](../server/README.md).
 

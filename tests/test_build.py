@@ -24,14 +24,12 @@ def load_module() -> ModuleType:
 build = load_module()
 
 
-def test_targets_cover_all_six_combinations() -> None:
+def test_targets_cover_windows_and_linux_only() -> None:
     assert build.targets() == [
         ("windows", "amd64"),
         ("windows", "arm64"),
         ("linux", "amd64"),
         ("linux", "arm64"),
-        ("darwin", "amd64"),
-        ("darwin", "arm64"),
     ]
 
 
@@ -46,7 +44,7 @@ def test_app_dir_is_the_go_module() -> None:
         ("1.2.3", "windows", "amd64", "agent-message-bus_1.2.3_windows_amd64.exe"),
         ("1.2.3", "windows", "arm64", "agent-message-bus_1.2.3_windows_arm64.exe"),
         ("dev", "linux", "amd64", "agent-message-bus_dev_linux_amd64"),
-        ("dev", "darwin", "arm64", "agent-message-bus_dev_darwin_arm64"),
+        ("dev", "linux", "arm64", "agent-message-bus_dev_linux_arm64"),
     ],
 )
 def test_artifact_name(version: str, goos: str, goarch: str, expected: str) -> None:

@@ -10,7 +10,7 @@ import type { FetchLike } from "../bus/client.ts";
 
 export const RELEASES_URL = "https://api.github.com/repos/till-muellers/agent-message-bus/releases/latest";
 
-const OS: Record<string, string> = { win32: "windows", linux: "linux", darwin: "darwin" };
+const OS: Record<string, string> = { win32: "windows", linux: "linux" };
 const ARCH: Record<string, string> = { x64: "amd64", arm64: "arm64" };
 
 export interface DownloadOptions {
@@ -35,7 +35,7 @@ export function binaryName(platform: string): string {
 export function assetName(version: string, platform: string, arch: string): string {
 	const os = OS[platform];
 	const goarch = ARCH[arch];
-	if (!os || !goarch) throw new Error(`no agent-message-bus release for ${platform}/${arch}`);
+	if (!os || !goarch) throw new Error(`no agent-message-bus release for ${platform}/${arch}; build from source: cd server && go build`);
 	return `agent-message-bus_${version}_${os}_${goarch}${platform === "win32" ? ".exe" : ""}`;
 }
 
