@@ -1,0 +1,57 @@
+# Cheap tier, web GUI: GUI tests, typecheck, bundle, then the Go build and web tests against the real bundle.
+name: ci-web
+
+on:
+  push:
+    branches: [develop, 'feature/**', 'release/**', 'hotfix/**']
+    paths:
+      - 'gui/**'
+      - 'server/internal/web/**'
+      - 'package.json'
+      - '.github/workflows/ci-web.yml'
+  pull_request:
+    paths:
+      - 'gui/**'
+      - 'server/internal/web/**'
+      - 'package.json'
+      - '.github/workflows/ci-web.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Install GUI
+        run: bun install --frozen-lockfile
+        working-directory: gui
+
+      - name: Typecheck GUI
+        run: bun run typecheck
+        working-directory: gui
+
+      - name: Test GUI
+        run: bun run test:gui
+
+      - name: Build GUI into the embed dir
+        run: bun run build:gui
+
+      - name: Go build and web tests with the real bundle
+        run: go build ./... && go test ./internal/web/...
+        working-directory: server

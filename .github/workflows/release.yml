@@ -1,3 +1,4 @@
+# Publisher only: it builds and publishes the tagged commit. It runs no test suite; the full tier did (full.yml).
 name: release
 
 on:
@@ -18,15 +19,15 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: ci passed for the tagged commit
+      - name: Tag matches package version
+        run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"
+
+      - name: Full tier passed for the tagged commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100" \
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100" \
             | python scripts/release_ci_gate.py --sha "$GITHUB_SHA"
-
-      - name: Tag matches package version
-        run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"
 
       - uses: actions/setup-go@v7
         with:
@@ -36,10 +37,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: gui/package.json
-
-      - name: Test
-        working-directory: server
-        run: go test ./...
 
       - name: Build release binaries (GUI first)
         run: python scripts/build.py --version "${GITHUB_REF_NAME#v}"

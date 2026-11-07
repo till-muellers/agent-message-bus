@@ -3,7 +3,7 @@
 Check that a release tag matches the version of the plugin's package.json.
 
 The plugin version lives in `package.json` and is bumped in every release commit; the tag marks the
-release. The release workflow runs this check right after the ci gate (`release_ci_gate.py`), so a
+release. The release workflow runs this check first, before the full-tier gate (`release_ci_gate.py`), so a
 mismatched tag fails in seconds and publishes nothing (`docs/design/arch/pipeline.md` §4).
 
 Usage: python scripts/release_version.py --tag vX.Y.Z

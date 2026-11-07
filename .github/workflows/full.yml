@@ -1,0 +1,182 @@
+# Full tier: everything, once per released state. Runs on merges to main (release/* and hotfix/* finish) and on v* tags.
+# The cheap tier (ci-*.yml) has already run on the branches; this adds the race detector, all OSes, the
+# real-bundle web build and the packaging smoke build. No pull_request trigger, no develop/feature trigger.
+name: full
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # A tag normally sits on the merge commit that the run of main already covered: then the tag run skips the suites.
+  covered:
+    runs-on: ubuntu-latest
+    outputs:
+      covered: ${{ steps.lookup.outputs.covered }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Full-tier run of this commit already passed
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          covered=false
+          if [ "$GITHUB_REF_TYPE" = tag ] \
+            && gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/full.yml/runs?head_sha=${GITHUB_SHA}&event=push&per_page=100" \
+              | python3 scripts/release_ci_gate.py --sha "$GITHUB_SHA"; then
+            covered=true
+          fi
+          echo "covered=${covered}" >> "$GITHUB_OUTPUT"
+
+  go:
+    needs: covered
+    if: needs.covered.outputs.covered != 'true'
+    # Trim the matrix to cut cost: macOS runners cost ten times a Linux minute, Windows twice.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: gofmt
+        if: runner.os == 'Linux'
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: go vet
+        run: go vet ./...
+
+      # Includes the spec suite (server/spec), the generated-docs golden test and the /web contract fixtures.
+      - name: go test -race
+        run: go test -race ./...
+
+      - name: golangci-lint
+        if: runner.os == 'Linux'
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+          working-directory: server
+
+  typescript:
+    needs: covered
+    if: needs.covered.outputs.covered != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test tests/
+
+  web:
+    needs: covered
+    if: needs.covered.outputs.covered != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Install GUI
+        run: bun install --frozen-lockfile
+        working-directory: gui
+
+      - name: Typecheck GUI
+        run: bun run typecheck
+        working-directory: gui
+
+      # Includes gui/tests/api/contract.test.ts, which decodes the /web wire fixtures with the GUI's decoders.
+      - name: Test GUI
+        run: bun run test:gui
+
+      - name: Build GUI into the embed dir
+        run: bun run build:gui
+
+      - name: Go build and web tests with the real bundle
+        run: go build ./... && go test ./internal/web/...
+        working-directory: server
+
+  python:
+    needs: covered
+    if: needs.covered.outputs.covered != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Install pytest and ruff
+        run: python -m pip install pytest ruff==0.17.3
+
+      - name: Ruff
+        run: |
+          ruff format --check .
+          ruff check .
+
+      - name: Test
+        run: python -m pytest tests
+
+  # Packaging smoke: the release build (GUI, then six cross-compiled binaries and SHA256SUMS), not published.
+  package:
+    needs: covered
+    if: needs.covered.outputs.covered != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
+
+      - name: Build every release target
+        run: python scripts/build.py --version ci
+
+      - name: Six binaries and SHA256SUMS exist
+        run: test "$(ls dist | wc -l)" -eq 7 && (cd dist && sha256sum -c SHA256SUMS)

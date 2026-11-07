@@ -1,0 +1,52 @@
+# Cheap tier, Go server: build, vet, format, lint, unit tests. One OS, no -race (the full tier adds it).
+name: ci-go
+
+on:
+  push:
+    branches: [develop, 'feature/**', 'release/**', 'hotfix/**']
+    paths:
+      - 'server/**'
+      - '.github/workflows/ci-go.yml'
+  pull_request:
+    paths:
+      - 'server/**'
+      - '.github/workflows/ci-go.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+          working-directory: server

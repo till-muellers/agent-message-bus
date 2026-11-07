@@ -1,4 +1,4 @@
-"""Tests for scripts/release_ci_gate.py: the release publishes only for a commit whose ci run passed."""
+"""Tests for scripts/release_ci_gate.py: the release publishes only for a commit whose full-tier run passed."""
 
 from __future__ import annotations
 
@@ -42,24 +42,29 @@ def test_a_successful_run_passes_while_the_tag_run_is_still_running() -> None:
     assert release_ci_gate.check(SHA, runs) is None
 
 
+def test_a_successful_tag_run_passes() -> None:
+    # The tag run of the full tier runs the suites itself when no run of main covered the commit.
+    assert release_ci_gate.check(SHA, [run("completed", "success", "v0.3.0")]) is None
+
+
 def test_a_successful_run_of_another_commit_fails() -> None:
     error = release_ci_gate.check(SHA, [run("completed", "success", head_sha="ffffffff")])
     assert error is not None
-    assert "no ci run" in error
+    assert "no full-tier run" in error
 
 
 def test_a_successful_pull_request_run_fails() -> None:
     # A pull_request run tests the merge with the base branch, not the tagged tree.
     error = release_ci_gate.check(SHA, [run("completed", "success", event="pull_request")])
     assert error is not None
-    assert "no ci run" in error
+    assert "no full-tier run" in error
 
 
 def test_no_run_fails_and_names_the_commit() -> None:
     error = release_ci_gate.check(SHA, [])
     assert error is not None
     assert SHA in error
-    assert "no ci run" in error
+    assert "no full-tier run" in error
 
 
 def test_a_failed_run_fails_and_lists_it() -> None:
@@ -73,6 +78,12 @@ def test_a_run_still_in_progress_fails_and_says_to_rerun() -> None:
     assert error is not None
     assert "main: in_progress" in error
     assert "re-run" in error
+
+
+def test_the_message_points_at_the_full_tier_on_main() -> None:
+    error = release_ci_gate.check(SHA, [])
+    assert error is not None
+    assert "main" in error
 
 
 def test_parse_runs_reads_the_api_response() -> None:
@@ -92,6 +103,6 @@ def test_main_passes_for_a_green_commit(monkeypatch: pytest.MonkeyPatch) -> None
     assert release_ci_gate.main(["--sha", SHA]) == 0
 
 
-def test_main_fails_for_a_commit_without_a_ci_run(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_fails_for_a_commit_without_a_full_tier_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", io.StringIO('{"workflow_runs": []}'))
     assert release_ci_gate.main(["--sha", SHA]) == 1
