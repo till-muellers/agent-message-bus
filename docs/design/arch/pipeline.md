@@ -26,7 +26,7 @@ The Go binary embeds `server/internal/web/dist/` (Arch-server owns `embed.go`, `
 
 ## 2. CI: pull requests only, the local checks are the gate
 
-CI costs money (billed per minute), so the regular gate is the local checks (`.omp/AGENTS.md`, "Git workflow and CI"). CI runs on pull requests only, on the merge result (GitHub's default `pull_request` ref), never on a branch push: a feature branch without a pull request and a direct merge into `develop` cost nothing. Every workflow runs on `ubuntu-latest`: we develop on Windows, so Windows is covered by the local runs, and a Linux-only failure is reproduced locally in WSL (command in `.omp/AGENTS.md`).
+CI costs money (billed per minute), so the regular gate is the local checks (`.omp/AGENTS.md`, "Git workflow and CI"). CI runs on pull requests only, on the merge result (GitHub's default `pull_request` ref), never on a branch push: a feature branch without a pull request costs nothing. Every workflow runs on `ubuntu-latest`: we develop on Windows, so Windows is covered by the local runs, and a Linux-only failure is reproduced locally in WSL (command in `.omp/AGENTS.md`).
 
 The target branch of the pull request picks the suite. The triggers, jobs and steps are in the workflow files; this table lists only what is not obvious from them:
 
@@ -50,19 +50,18 @@ The target branch of the pull request picks the suite. The triggers, jobs and st
 
 - Default branch stays `main`: `omp plugin install`/`upgrade` and the repository page then show released states, not `develop`. Pull requests into `develop` name it as the base explicitly.
 - `main`: require a pull request (no direct push, no force push, no deletion); required status checks `full-go`, `full-typescript`, `full-web`, `full-python`, `full-package`; require branches to be up to date before merging (so the checked merge result is the merged result); allow merge commits only (no squash, no rebase), so release history stays connected to `develop`. The pull request into `main` is the release/hotfix finish: release candidates are tagged on the release branch, the final tag on the merge commit.
-- `develop`: no force push, no deletion. Required checks optional: the reduced jobs are path-filtered and must not be required (a skipped required check blocks the merge); features may also be merged directly after the local checks.
+- `develop`: pull requests only (merge commits), no force push, no deletion. Required checks optional: the reduced jobs are path-filtered and must not be required (a skipped required check blocks the merge).
 - Remove the old required checks `go`, `typescript`, `web`, `python` (those names no longer exist) and drop the planned required `web` check (Q-P2).
 
 ### Cost per typical change (estimate, job runs)
 
 |Step|Before (`ci.yml`)|After|
 |---|---|---|
-|Feature merged straight into `develop` after the local checks|3 pushes x 4 jobs, plus 4 on `main` after the squash merge|0|
 |Feature through a pull request into `develop` (3 pushes)|6 runs x 4 jobs (every push and every PR update, no cancel, no filter, `-race`)|3 runs x 1-2 jobs (only the touched areas, superseded runs cancelled, no `-race`)|
 |Docs-only change|4 jobs per push|0|
 |Release|`main` run (4 jobs), tag run (4 jobs), `go test` again in `release.yml`|one pull request into `main`: 5 full jobs per push to it; the tag only publishes (1 job)|
 
-Per-change cost falls to a third or less for pull requests and to zero for local merges; only the pull request into `main`, once per release, runs everything.
+Per-change cost falls to a third or less for pull requests; only the pull request into `main`, once per release, runs everything.
 
 ---
 
@@ -117,8 +116,8 @@ The version check runs first, so a bad tag fails in seconds and publishes nothin
 
 1. Branch `release/X.Y.Z` from `develop` (Git Flow; SemVer: a release from `develop` bumps MINOR, or MAJOR for breaking changes, and while MAJOR is 0 anything may change on MINOR; the tag must equal `package.json` `version`): bump `package.json` `version` (R1); if a server contract the extension needs changed in this release, check `protocol.go` is at least `MIN_SERVER_PROTOCOL` (the fitness test enforces `MIN_SERVER_PROTOCOL` ≤ `Protocol`). Only stabilizing fixes after that.
 2. Optional release candidate: `package.json` at `X.Y.Z-rc.N` on the release branch, tag `vX.Y.Z-rc.N` on that commit. `release.yml` creates it with `--prerelease`, so it never becomes `releases/latest`, which the extension's `/bus server start` downloads (`extension/lib/local-server/download.ts`, `RELEASES_URL`). The assurance for a candidate is the reduced suite of the pull requests into the release branch plus the local checks. To run everything before the tag, dispatch `full.yml` on the release branch by hand (`workflow_dispatch`, available once `full.yml` is on `main`); nothing requires it.
-3. Pull request `release/X.Y.Z` → `main`: the full suite runs on its merge result and is a required check. The last commit of the release branch sets the final `X.Y.Z` in `package.json`. Merge with a merge commit, tag the merge commit `vX.Y.Z`, push the tag, then merge `release/X.Y.Z` back into `develop` (direct, or by pull request). `release.yml` checks the version, builds GUI + 6 server binaries + `SHA256SUMS` and publishes the GitHub Release.
-4. A `hotfix/<name>` branch (from `main`, PATCH bump in `package.json`) takes the same way: pull request into `main` (full suite), tag `vX.Y.Z` with the new patch version, merge into `develop`.
+3. Pull request `release/X.Y.Z` → `main`: the full suite runs on its merge result and is a required check. The last commit of the release branch sets the final `X.Y.Z` in `package.json`. Merge with a merge commit, tag the merge commit `vX.Y.Z`, push the tag, then merge `main` back into `develop` by pull request. `release.yml` checks the version, builds GUI + 6 server binaries + `SHA256SUMS` and publishes the GitHub Release.
+4. A `hotfix/<name>` branch (from `main`, PATCH bump in `package.json`) takes the same way: pull request into `main` (full suite), tag `vX.Y.Z` with the new patch version, pull request `main` into `develop`.
 5. Users: `omp plugin upgrade @till-muellers/omp-agent-message-bus` (the targeted form; findings R4) and replace the server binary. README states both.
 6. Plugin and server of one tag are compatible: the `protocol-sync` test (`tests/version/protocol-sync.test.ts`) checks that the server's `Protocol` at HEAD is at least the extension's `MIN_SERVER_PROTOCOL` (≥, not equal). Mixed pairs are caught at runtime by the extension's protocol gate (`client.md` §8.1) and the spawn skew check (§8.2).
 

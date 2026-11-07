@@ -93,9 +93,9 @@ Conventions and working method for contributors and coding agents in this repo.
 ### Branches
 - `main`: released states. Only `release/*` and `hotfix/*` merges reach it.
 - `develop`: integration branch; finished work lands here.
-- `feature/<name>`: one per task, branched from `develop`. Before landing: `git fetch && git rebase origin/develop`, run the local checks, then PR into `develop` (or merge directly after the local checks).
-- `release/<version>`: branched from `develop`, stabilizing fixes only. Finish: PR into `main`, tag `v<version>` on the merge commit, merge `main` back into `develop`. Release candidates are tagged on this branch.
-- `hotfix/<name>`: branched from `main`; PR into `main`, tag the new patch version, merge into `develop`.
+- `feature/<name>`: one per task, branched from `develop`. Before landing: `git fetch && git rebase origin/develop`, run the local checks, then PR into `develop`.
+- `release/<version>`: branched from `develop`, stabilizing fixes only. Finish: PR into `main`, tag `v<version>` on the merge commit, PR `main` back into `develop`. Release candidates are tagged on this branch.
+- `hotfix/<name>`: branched from `main`; PR into `main`, tag the new patch version, PR `main` into `develop`.
 
 ### Versions
 SemVer 2.0.0. `package.json` `version` is the single source; the tag is `v` plus that exact string (`v0.5.0`, `v0.5.0-rc.1`). Release from `develop` bumps MINOR (MAJOR for breaking changes; at MAJOR 0 anything may change on MINOR), a hotfix bumps PATCH. The wire `Protocol` integer is a separate number. Validation: [`scripts/release_version.py`](../scripts/release_version.py).
