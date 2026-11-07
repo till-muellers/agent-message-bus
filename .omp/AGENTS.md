@@ -140,6 +140,7 @@ Facts that are not obvious from the code and that cost time to find out:
 
 **Loading the working-tree extension**
 - Use `omp -e <repo>/extension/index.ts`. In omp 18.12, `--plugin-dir <repo>` did not register the extension's flags.
+- Started inside this repo (or one of its worktrees), omp loads the working tree's extension by itself: `.omp/extensions/agent-bus.ts` re-exports `extension/index.ts`. Keep the globally installed plugin removed (`omp plugin uninstall @till-muellers/omp-agent-message-bus`); `omp --no-extensions -e <repo>/extension/index.ts` still isolates one copy.
 - A plugin installed with `omp plugin install` loads as well. Copies with the `agent-bus:instance` handshake (E10c) let only the first one to load run; an older installed copy without it (for example plugin 0.1.0) still registers its `bus_*` tools and `/bus` and opens its own inbox stream next to the working tree. Then smoke-test with `omp --no-extensions -e <repo>/extension/index.ts`, so only the working-tree copy loads.
 
 **Env credentials**
