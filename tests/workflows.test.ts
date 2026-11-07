@@ -166,4 +166,8 @@ describe("publisher release.yml", () => {
 		expect(gate).toBeGreaterThan(version);
 		expect(runs.some(run => /go test|bun test|pytest/.test(run))).toBe(false);
 	});
+
+	test("marks a pre-release tag as a GitHub pre-release, so it never becomes the latest release", () => {
+		expect(release.text).toContain("--prerelease");
+	});
 });

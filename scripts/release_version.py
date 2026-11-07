@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
-Check that a release tag is a Semantic Versioning 2.0.0 core version and matches the version of the
-plugin's package.json.
+Check that a release tag is a Semantic Versioning 2.0.0 version and matches the version of the plugin's
+package.json.
 
-The plugin version lives in `package.json` and is bumped in every release commit; the tag marks the
-release. A `v*` tag publishes a release, so only the core form `vMAJOR.MINOR.PATCH` is accepted: no
-leading zeros, no pre-release (`-rc.1`) and no build metadata (`+5`). The release workflow runs this check
-first, before the full-tier gate (`release_ci_gate.py`), so a mismatched or malformed tag fails in seconds and
-publishes nothing (`docs/design/arch/pipeline.md` §4).
+The plugin version lives in `package.json`; the tag marks the release and is `v` plus that exact version, so
+a release candidate commit carries `0.5.0-rc.1` in `package.json` and is tagged `v0.5.0-rc.1`. A `v*` tag
+publishes a release, so only `vMAJOR.MINOR.PATCH[-PRERELEASE]` is accepted: no leading zeros, no empty or
+zero-padded numeric pre-release identifier and no build metadata (`+5`, ignored by precedence and awkward in
+asset names). The release workflow runs this check first, before the full-tier gate (`release_ci_gate.py`),
+so a mismatched or malformed tag fails in seconds and publishes nothing (`docs/design/arch/pipeline.md` §4).
 
-Usage: python scripts/release_version.py --tag vMAJOR.MINOR.PATCH
+Usage: python scripts/release_version.py --tag vMAJOR.MINOR.PATCH[-PRERELEASE]
 """
 
 from __future__ import annotations
@@ -22,7 +23,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_JSON = REPO_ROOT / "package.json"
-SEMVER_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
+# SemVer 2.0.0 (semver.org) `<version core>[-<pre-release>]`; build metadata (`+...`) is left out on purpose.
+SEMVER_TAG = re.compile(
+    r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
+    r"(?:-(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*)?"
+)
 
 
 def package_version(package_json: Path) -> str:
@@ -41,8 +46,9 @@ def check(tag: str, version: str) -> str | None:
     """Return the error message when the tag is no SemVer core tag or does not match the version, else None."""
     if SEMVER_TAG.fullmatch(tag) is None:
         return (
-            f"tag {tag} is not of the form vMAJOR.MINOR.PATCH (Semantic Versioning 2.0.0 core version: "
-            "no leading zeros, no pre-release, no build metadata)"
+            f"tag {tag} is not of the form vMAJOR.MINOR.PATCH[-PRERELEASE] (Semantic Versioning 2.0.0: "
+            "no leading zeros, no empty or zero-padded numeric pre-release identifier; "
+            "build metadata (+...) is not accepted: precedence ignores it and it is awkward in asset names)"
         )
     if tag.removeprefix("v") == version:
         return None

@@ -46,6 +46,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          gh release create "$GITHUB_REF_NAME" dist/* \
+          # A pre-release (0.5.0-rc.1) must not become GitHub's "latest" release, which /bus server start downloads.
+          prerelease=()
+          case "$version" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* "${prerelease[@]}" \
             --title "agent-message-bus ${version}" \
             --notes "Raw agent-message-bus ${version} binaries for windows/linux/darwin (amd64, arm64) plus SHA256SUMS. Download the binary for your platform, verify it with \`sha256sum -c SHA256SUMS --ignore-missing\`, then follow the deployment guide: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/server/DEPLOYMENT.md. Upgrading from 0.3.0 or older: stop the running server with the OLD binary first (older binaries take no data-dir lock), back up the database, then start this one; migrations 0005 and 0006 apply in place and cannot be undone by an older binary."
