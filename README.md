@@ -143,19 +143,21 @@ Releases follow Git Flow (`.omp/AGENTS.md`, "Git Flow and CI"). Versions follow 
 
 1. Branch `release/X.Y.Z` from `develop` and bump the `version` in `package.json`. If a server contract the extension needs changed, raise `Protocol` in `server/internal/server/protocol.go` and the extension's `MIN_SERVER_PROTOCOL`; `tests/version/protocol-sync.test.ts` fails when `Protocol` is below `MIN_SERVER_PROTOCOL`. Only stabilizing fixes go in after that (a pull request into the release branch runs the reduced CI suite; a direct merge after the local checks runs none); new work stays on feature branches for `develop`. Run the local checks.
 2. Optional release candidate: set `package.json` to `X.Y.Z-rc.1` on the release branch, commit, tag `vX.Y.Z-rc.1` on that commit and push the tag. `release.yml` publishes it as a GitHub pre-release (never "latest", so `/bus server start` keeps downloading the last stable release). It runs no suite: a candidate rests on the local checks and the reduced suite of the pull requests into the release branch. To run the full suite first, start `full.yml` by hand on the release branch (`workflow_dispatch`). The next candidate bumps `package.json` to `-rc.2`; the last commit of the branch sets the final `X.Y.Z`.
-3. Finish the release: open a pull request `release/X.Y.Z` → `main`. The full suite (`full.yml`: Go with `-race`, the TypeScript, GUI and Python suites, the real-bundle web build, a packaging build; all on `ubuntu-latest`) runs on its merge result and is a required check of `main`. Merge with a merge commit (no squash), tag the merge commit `vX.Y.Z`, push the tag and merge `release/X.Y.Z` back into `develop`. Nobody triggers, polls or waits for CI by hand; the repository settings in `docs/design/arch/pipeline.md` §2 ("Repository settings") make the merge button wait.
+3. Finish the release: open a pull request `release/X.Y.Z` → `main`. The full suite (`full.yml`: Go with `-race`, the TypeScript, GUI and Python suites, the real-bundle web build, a packaging build; all on `ubuntu-latest`) runs on its merge result and is a required check of `main`. Merge with a merge commit (no squash), tag the merge commit `vX.Y.Z`, push the tag and merge `release/X.Y.Z` back into `develop`. Agents never trigger, poll or wait for CI; the repository settings in `docs/design/arch/pipeline.md` §2 ("Repository settings") make the merge button wait.
 4. The tag starts `release.yml`. It first checks that the tag is a SemVer version equal to the package version (it fails in seconds and publishes nothing when it is not), then builds the web GUI and `agent-message-bus_<X.Y.Z>_<os>_<arch>[.exe]` for windows, linux and darwin (amd64, arm64) plus `SHA256SUMS`, and publishes them as a GitHub release (`--prerelease` for a version with a `-`). It runs no test suite and consults no earlier CI run: the full suite already passed on the pull request into `main`. `/bus server start` downloads from the latest release (the GitHub `releases/latest` endpoint, which skips pre-releases).
 5. Urgent fix on a released version: branch `hotfix/<name>` from `main`, fix it and bump PATCH in `package.json`, open a pull request into `main` (full suite), tag `vX.Y.Z` with the new patch version on the merge commit, merge into `develop`.
 6. Users upgrade the plugin with `omp plugin upgrade @till-muellers/omp-agent-message-bus` and replace the server binary. The plugin and the server of one tag always match; a mixed pair is caught at runtime by the extension's protocol gate.
 
 ```sh
-git switch -c release/X.Y.Z develop
-# bump package.json, stabilize, run the local checks; a candidate: set X.Y.Z-rc.1, commit, git tag vX.Y.Z-rc.1
+git fetch origin && git switch -c release/X.Y.Z origin/develop
+# bump package.json, stabilize, run the local checks
 git push -u origin release/X.Y.Z
+# a candidate only: set package.json to X.Y.Z-rc.1, commit, push, then
+git tag vX.Y.Z-rc.1 && git push origin vX.Y.Z-rc.1   # release.yml publishes a pre-release
 gh pr create --base main --head release/X.Y.Z   # full suite on the merge result; merge with a merge commit
 git switch main && git pull --ff-only
 git tag vX.Y.Z && git push origin vX.Y.Z        # release.yml publishes
-git switch develop && git merge --no-ff release/X.Y.Z && git push origin develop
+git switch develop && git pull --ff-only && git merge --no-ff release/X.Y.Z && git push origin develop
 git branch -d release/X.Y.Z
 ```
 

@@ -11,6 +11,6 @@
 - No debug prints, dead code or leftover TODOs in the diff.
 - Never hand-edit `server/TOOLS.md`; regenerate it with `go run ./cmd/tooldoc`.
 - Never commit or push to `main`: it is reached only by a pull request from `release/*`, `hotfix/*` or `develop`. Work on a `feature/<name>` branch from `develop` and land it there after the local checks pass (`.omp/AGENTS.md` "Git Flow and CI").
-- Never trigger, poll or wait for a CI run: the local checks are the gate.
+- Agents never trigger, poll or wait for a CI run: the local checks are the gate (only the owner dispatches `full.yml` by hand, for example before a release candidate).
 - Before saying "done": run tests, lint and typecheck for every language you touched, and review your own diff.
 - If requirements are unclear, ask before building.

@@ -26,7 +26,7 @@ The Go binary embeds `server/internal/web/dist/` (Arch-server owns `embed.go`, `
 
 ## 2. CI: pull requests only, the local checks are the gate
 
-CI costs money (billed per minute). The regular gate is the local checks (`.omp/AGENTS.md` "Local checks"); nobody triggers, polls or waits for CI. CI runs on pull requests only, on the merge result (GitHub's default `pull_request` ref: the head merged into the base), never on a branch push: a feature branch without a pull request, a direct merge into `develop` and the merge of a pull request cost nothing. Every workflow runs on `ubuntu-latest` only (a Windows minute costs about twice and a macOS minute about ten times a Linux minute): we develop on Windows, so Windows is covered by the local runs, CI is the Linux check, and a Linux-only failure can be reproduced locally in WSL (below); macOS is covered by whoever has a Mac.
+CI costs money (billed per minute). The regular gate is the local checks (`.omp/AGENTS.md` "Local checks"); agents never trigger, poll or wait for CI. CI runs on pull requests only, on the merge result (GitHub's default `pull_request` ref: the head merged into the base), never on a branch push: a feature branch without a pull request, a direct merge into `develop` and the merge of a pull request cost nothing. Every workflow runs on `ubuntu-latest` only (a Windows minute costs about twice and a macOS minute about ten times a Linux minute): we develop on Windows, so Windows is covered by the local runs, CI is the Linux check, and a Linux-only failure can be reproduced locally in WSL (below); macOS is covered by whoever has a Mac.
 
 | Workflow | Runs for | Paths | Jobs (check names) | Concurrency |
 |---|---|---|---|---|
@@ -38,7 +38,7 @@ CI costs money (billed per minute). The regular gate is the local checks (`.omp/
 | `release.yml` | push of a `v*` tag | none | `release` (publishes) | none |
 
 Rules:
-- No `push` trigger on any branch. The only `push` trigger is the `v*` tag of `release.yml`. `workflow_dispatch` is the manual escape hatch (the file must exist on the default branch to be dispatchable).
+- A pull request whose base is changed to `main` after it was opened gets no full run (the `edited` type is not listened to, so title edits cost nothing): close and reopen it or push a commit. No `push` trigger on any branch. The only `push` trigger is the `v*` tag of `release.yml`. `workflow_dispatch` is the manual escape hatch (the file must exist on the default branch to be dispatchable).
 - Draft pull requests are skipped (`if: github.event.pull_request.draft != true` on every job; the `ready_for_review` type starts the run when a draft is marked ready). A run for the same workflow and pull request is cancelled when a newer commit arrives.
 - Pinned tools as before: bun through `bun-version-file: gui/package.json` (Q-P3), ruff `==0.17.3` (the version `ruff.toml` requires, so a local ruff of another version refuses to run instead of formatting differently), Go through `server/go.mod`.
 - The reduced suite's path filters are native `paths:` filters, one small workflow per area, so no third-party action and no filter job are needed. The filter counts the workflow's own file. A change outside every filter (docs, `.omp/`, `.beads/`) starts no job. The reduced jobs are never required checks: a skipped (path-filtered) required check blocks a merge.

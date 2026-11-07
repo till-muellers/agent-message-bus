@@ -96,6 +96,11 @@ describe("the workflow files", () => {
 		expect(withPush).toEqual(["release.yml"]);
 	});
 
+	test("manual-*.yml workflows run only by hand", () => {
+		const manual = all.filter(workflow => workflow.file.startsWith("manual-"));
+		expect(manual.filter(workflow => Object.keys(workflow.on).join() !== "workflow_dispatch").map(workflow => workflow.file)).toEqual([]);
+	});
+
 	test("give every job a name that is unique across the workflows, so required checks are unambiguous", () => {
 		const names = all.flatMap(workflow => Object.entries(workflow.jobs).map(([id, job]) => String(job.name ?? id)));
 		expect(new Set(names).size).toBe(names.length);
