@@ -52,6 +52,40 @@ def test_a_mismatched_tag_names_both_versions() -> None:
     assert release_version.check("v0.2.0", "0.1.0") == "package version 0.1.0 does not match tag v0.2.0"
 
 
-def test_the_v_prefix_is_optional() -> None:
-    assert release_version.check("0.2.0", "0.2.0") is None
-    assert release_version.check("v0.2.0", "0.2.0") is None
+@pytest.mark.parametrize("tag", ["v0.0.0", "v0.4.0", "v1.2.3", "v10.20.30"])
+def test_a_semver_core_tag_equal_to_the_version_passes(tag: str) -> None:
+    assert release_version.check(tag, tag.removeprefix("v")) is None
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "v1.2",
+        "v1",
+        "v01.2.3",
+        "v1.02.3",
+        "v1.2.03",
+        "v1.2.3-rc.1",
+        "v1.2.3+build.5",
+        "1.2.3",
+        "V1.2.3",
+        "v1.2.3.4",
+        "v1.2.x",
+    ],
+)
+def test_a_tag_that_is_not_a_semver_core_version_fails(tag: str) -> None:
+    error = release_version.check(tag, tag.removeprefix("v"))
+    assert error is not None
+    assert tag in error
+    assert "vMAJOR.MINOR.PATCH" in error
+    assert "pre-release" in error
+
+
+def test_the_v_prefix_is_required() -> None:
+    assert release_version.check("0.2.0", "0.2.0") is not None
+
+
+def test_a_semver_tag_is_checked_before_the_version_comparison() -> None:
+    error = release_version.check("v1.2", "0.1.0")
+    assert error is not None
+    assert "does not match" not in error

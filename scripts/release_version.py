@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 """
-Check that a release tag matches the version of the plugin's package.json.
+Check that a release tag is a Semantic Versioning 2.0.0 core version and matches the version of the
+plugin's package.json.
 
 The plugin version lives in `package.json` and is bumped in every release commit; the tag marks the
-release. The release workflow runs this check first, before the full-tier gate (`release_ci_gate.py`), so a
-mismatched tag fails in seconds and publishes nothing (`docs/design/arch/pipeline.md` §4).
+release. A `v*` tag publishes a release, so only the core form `vMAJOR.MINOR.PATCH` is accepted: no
+leading zeros, no pre-release (`-rc.1`) and no build metadata (`+5`). The release workflow runs this check
+first, before the full-tier gate (`release_ci_gate.py`), so a mismatched or malformed tag fails in seconds and
+publishes nothing (`docs/design/arch/pipeline.md` §4).
 
-Usage: python scripts/release_version.py --tag vX.Y.Z
+Usage: python scripts/release_version.py --tag vMAJOR.MINOR.PATCH
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_JSON = REPO_ROOT / "package.json"
+SEMVER_TAG = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 
 
 def package_version(package_json: Path) -> str:
@@ -33,7 +38,12 @@ def package_version(package_json: Path) -> str:
 
 
 def check(tag: str, version: str) -> str | None:
-    """Return the error message when the tag does not match the version, else None."""
+    """Return the error message when the tag is no SemVer core tag or does not match the version, else None."""
+    if SEMVER_TAG.fullmatch(tag) is None:
+        return (
+            f"tag {tag} is not of the form vMAJOR.MINOR.PATCH (Semantic Versioning 2.0.0 core version: "
+            "no leading zeros, no pre-release, no build metadata)"
+        )
     if tag.removeprefix("v") == version:
         return None
     return f"package version {version} does not match tag {tag}"

@@ -1,6 +1,7 @@
 /**
  * Workflow policy fitness (`docs/design/arch/pipeline.md` §2, `.omp/AGENTS.md` "Git Flow"): CI costs money, so the
- * cheap tier (`ci-*.yml`) is one OS, path-filtered and superseded runs are cancelled; the full tier (`full.yml`) runs
+ * cheap tier (`ci-*.yml`) is path-filtered and superseded runs are cancelled; every job of every workflow runs on
+ * `ubuntu-latest` (Windows and macOS are covered by local runs); the full tier (`full.yml`) runs
  * only for merges to `main` and `v*` tags; `release.yml` only publishes; no third-party action beyond the known ones.
  */
 import { describe, expect, test } from "bun:test";
@@ -69,6 +70,16 @@ describe("the workflow files", () => {
 		expect(offenders).toEqual([]);
 	});
 
+	test("run every job on ubuntu-latest, never on Windows or macOS", () => {
+		const offenders = all.flatMap(workflow =>
+			Object.entries(workflow.jobs)
+				.filter(([, job]) => job["runs-on"] !== "ubuntu-latest")
+				.map(([name]) => `${workflow.file}: ${name}`),
+		);
+		expect(offenders).toEqual([]);
+		expect(all.flatMap(workflow => Object.values(workflow.jobs)).every(job => job.strategy === undefined)).toBe(true);
+	});
+
 	test("do not chain on each other with workflow_run", () => {
 		expect(all.filter(workflow => "workflow_run" in workflow.on).map(workflow => workflow.file)).toEqual([]);
 	});
@@ -98,9 +109,8 @@ describe.each(cheap.map(workflow => [workflow.file, workflow] as const))("cheap 
 		expect(String(workflow.concurrency?.group)).toContain("github.workflow");
 	});
 
-	test("runs on one Linux runner, without a matrix and without the race detector", () => {
+	test("runs without a matrix and without the race detector", () => {
 		for (const job of Object.values(workflow.jobs)) {
-			expect(String(job["runs-on"])).toMatch(/^ubuntu-/);
 			expect(job.strategy).toBeUndefined();
 			expect(stepsOf(job).some(step => String(step.run ?? "").includes("-race"))).toBe(false);
 		}
@@ -124,10 +134,8 @@ describe("full tier full.yml", () => {
 		expect(String(full.concurrency?.group)).toContain("github.ref");
 	});
 
-	test("runs the Go tests with the race detector on a matrix of operating systems", () => {
+	test("runs the Go tests with the race detector", () => {
 		const go = full.jobs.go as Json;
-		const matrix = asRecord(asRecord(go.strategy).matrix);
-		expect(Array.isArray(matrix.os) && matrix.os.length > 0).toBe(true);
 		expect(stepsOf(go).some(step => String(step.run).includes("go test -race"))).toBe(true);
 	});
 

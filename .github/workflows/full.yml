@@ -1,6 +1,6 @@
 # Full tier: everything, once per released state. Runs on merges to main (release/* and hotfix/* finish) and on v* tags.
-# The cheap tier (ci-*.yml) has already run on the branches; this adds the race detector, all OSes, the
-# real-bundle web build and the packaging smoke build. No pull_request trigger, no develop/feature trigger.
+# The cheap tier (ci-*.yml) has already run on the branches; this adds the race detector, the
+# real-bundle web build and the packaging smoke build. Ubuntu only, like every workflow here. No pull_request trigger, no develop/feature trigger.
 name: full
 
 on:
@@ -42,12 +42,7 @@ jobs:
   go:
     needs: covered
     if: needs.covered.outputs.covered != 'true'
-    # Trim the matrix to cut cost: macOS runners cost ten times a Linux minute, Windows twice.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: server
@@ -60,7 +55,6 @@ jobs:
           cache-dependency-path: server/go.sum
 
       - name: gofmt
-        if: runner.os == 'Linux'
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
 
       - name: go vet
@@ -71,7 +65,6 @@ jobs:
         run: go test -race ./...
 
       - name: golangci-lint
-        if: runner.os == 'Linux'
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0

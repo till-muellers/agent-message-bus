@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Tag matches package version
+      - name: Tag is a SemVer version and matches package version
         run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"
 
       - name: Full tier passed for the tagged commit
