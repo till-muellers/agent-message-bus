@@ -123,7 +123,7 @@ stateDiagram-v2
   Started --> [*]: session_shutdown (inbox stop, identity withdrawn)
 ```
 
-`restart()` runs in this order: clear inbox state, clear gate cache, resolve credentials, connect tools (gate probe, register remote tools once), refresh the context block, open the inbox (main session only), activate tools. A refused gate or missing credentials deactivates the tools and opens no inbox. A probe failure counts as `ok`.
+`restart()` runs in this order: clear inbox state, clear gate cache, resolve credentials, connect tools (gate probe, register remote tools once), refresh the context block, activate tools, open the inbox (main session only). The tools are active before the stream opens, so the turn a first entry starts lists the `bus_*` tools. A refused gate or missing credentials deactivates the tools and opens no inbox; a failed activation opens none either. A probe failure counts as `ok`.
 
 Source: [`extension/index.ts:131-153`](../../../extension/index.ts), [`connection/connection.ts:44-66`](../../../extension/lib/connection/connection.ts).
 

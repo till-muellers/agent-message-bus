@@ -136,6 +136,26 @@ Feature: omp delivery of inbox entries, aligned with omp's native peer messages
       Then the request contains the entry
       And the extension acknowledges it
 
+  Rule: The bus tools are active before the first entry reaches the model
+
+    # omp lists the active tools when a turn starts. A tool the extension registers after load
+    # is inactive until the extension activates it, and an entry can start a turn within
+    # milliseconds of the stream opening. A connection start therefore activates the tools
+    # first and opens the inbox stream afterwards (docs/design/arch/lifecycles.md).
+
+    Scenario: The first turn an entry starts lists the bus tools
+      Given member "worker" has a stored login and a direct message from "lead" waiting
+      When the omp session starts
+      Then the bus tools are active before the entry reaches the session
+      And the first model request of the turn the entry starts lists "bus_send_direct" and "bus_send_topic"
+
+    Scenario: A failed tool activation opens no inbox stream
+      Given member "worker" has a stored login
+      And omp refuses to change the active tool set
+      When the omp session starts
+      Then the extension warns about the failure
+      And the session opens no inbox stream
+
   Rule: The ack watermark only moves over entries that reached the model
 
     # Today the loop acks right after pi.sendMessage returns (extension/lib/inbox.ts:69-77),

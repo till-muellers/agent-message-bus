@@ -244,11 +244,15 @@ export interface BootSession {
 	sessionFile?: string;
 	/** Whether the agent is idle; idle by default. */
 	idle?: boolean;
+	/** `setActiveTools` takes a macrotask, as in omp where it refreshes the tool registry; a stream that is already open can deliver first. */
+	slowActivation?: boolean;
 }
 
 export interface Sent {
 	message: { customType: string; content: string; display: boolean; details?: unknown };
 	options: unknown;
+	/** The active tool set at the moment omp received the message: a turn it starts lists exactly these. */
+	activeTools: string[];
 }
 
 interface Ctx {
@@ -356,6 +360,7 @@ export function boot(options: BusExtensionOptions, session: BootSession = {}, ev
 export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<void>, session: BootSession = {}, events: FakeEvents = fakeEvents()): Promise<Booted> {
 	const tools: BootTool[] = [];
 	let active = ["read", "bus_foreign"];
+	let loaded = false;
 	const handlers: Record<string, Handler[]> = {};
 	const commands: Command[] = [];
 	const notes: string[] = [];
@@ -369,20 +374,25 @@ export async function bootExtension(extension: (pi: ExtensionAPI) => Promise<voi
 		registerMessageRenderer: (customType: string, renderer: MessageRenderer) => void renderers.set(customType, renderer),
 		registerTool: (tool: BootTool) => {
 			tools.push(tool);
-			if (!tool.defaultInactive) active.push(tool.name);
+			// omp activates tools registered at load; one registered later in a main session waits for `setActiveTools`.
+			if (!tool.defaultInactive && (!loaded || session.kind === "sub")) active.push(tool.name);
 		},
 		registerFlag: () => {},
 		getFlag: (name: string) => session.flags?.[name],
 		sendUserMessage: (text: string) => void userMessages.push(text),
-		sendMessage: (message: Sent["message"], options: unknown) => void sent.push({ message, options }),
+		sendMessage: (message: Sent["message"], options: unknown) => void sent.push({ message, options, activeTools: [...active] }),
 		getActiveTools: () => [...active],
-		setActiveTools: async (names: string[]) => void (active = names),
+		setActiveTools: async (names: string[]) => {
+			if (session.slowActivation) await Bun.sleep(0);
+			active = names;
+		},
 		registerCommand: (_name: string, command: Command) => void commands.push(command),
 		on: (event: string, handler: Handler) => void (handlers[event] ??= []).push(handler),
 		events,
 		logger,
 	} as unknown as ExtensionAPI;
 	await extension(pi);
+	loaded = true;
 	const statuses = new Map<string, string>();
 	const ctx = sessionContext(session, notes, statuses);
 	const emit = async (event: string, payload: unknown = { type: event }) => {
