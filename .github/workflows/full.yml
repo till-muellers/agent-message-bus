@@ -126,7 +126,7 @@ jobs:
       - name: Test
         run: python -m pytest tests
 
-  # Packaging smoke: the release build (GUI, then six cross-compiled binaries and SHA256SUMS), not published.
+  # Packaging smoke: the release build (GUI, then four cross-compiled binaries and SHA256SUMS), not published.
   package:
     name: full-package
     if: github.event.pull_request.draft != true
@@ -150,5 +150,5 @@ jobs:
       - name: Build every release target
         run: python scripts/build.py --version ci
 
-      - name: Six binaries and SHA256SUMS exist
-        run: test "$(ls dist | wc -l)" -eq 7 && (cd dist && sha256sum -c SHA256SUMS)
+      - name: Four binaries and SHA256SUMS exist
+        run: test "$(ls dist | wc -l)" -eq 5 && (cd dist && sha256sum -c SHA256SUMS)

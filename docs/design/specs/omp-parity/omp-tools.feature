@@ -159,10 +159,21 @@ Feature: Bus tools in the main omp session, presented like omp's own messaging t
 
     Scenario: bus_wait can wait for one sender
       When member "worker" calls bus_wait with from "lead"
-      And "peer" sends a direct message to "worker"
-      And then "lead" sends a direct message to "worker"
+      And "lead" sends a direct message to "worker"
       Then bus_wait returns the entry from "lead"
-      And the entry from "peer" is delivered the normal way, as an aside
+
+    Scenario: A queued aside ends the wait
+      When member "worker" calls bus_wait with from "lead" and timeoutSeconds 60
+      And "peer" sends a direct message to "worker"
+      Then bus_wait ends within a second with []
+      And the entry from "peer" reaches the model as an aside
+      And the model continues with that entry in id order
+
+    Scenario: A critical entry ends the wait
+      When member "worker" calls bus_wait with from "lead" and timeoutSeconds 60
+      And "admin" sends a critical direct message to "worker"
+      Then bus_wait ends within a second with []
+      And the entry is steered into the turn
 
     Scenario: bus_wait can wait for one thread
       When member "worker" calls bus_wait with threadId 7

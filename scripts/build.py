@@ -26,7 +26,7 @@ APP_DIR = REPO_ROOT / "server"
 GUI_DIR = REPO_ROOT / "gui"
 GUI_DIST = APP_DIR / "internal" / "web" / "dist"
 BINARY_NAME = "agent-message-bus"
-OPERATING_SYSTEMS = ("windows", "linux", "darwin")
+OPERATING_SYSTEMS = ("windows", "linux")
 ARCHITECTURES = ("amd64", "arm64")
 WINDOWS_GO = Path("C:/Program Files/Go/bin/go.exe")
 

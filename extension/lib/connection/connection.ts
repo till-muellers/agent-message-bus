@@ -24,7 +24,7 @@ export interface Connection {
 	ledger(): InboxLedger;
 	/** Marks entries consumed in the current start's ledger; the ack follows it. */
 	consume(ids: readonly number[]): void;
-	/** A new connection start: re-resolves the credentials, probes the server again, registers the server tools once, restarts the inbox loop and switches the tools on or off to match. */
+	/** A new connection start: re-resolves the credentials, probes the server again, registers the server tools once, switches the tools on or off to match and, once they are active, restarts the inbox loop. */
 	restart(): Promise<void>;
 	/** Stops the loop, drops the credentials and deactivates every bus tool; registered tools stay and fail until the next login. */
 	logout(): Promise<void>;
@@ -49,11 +49,11 @@ export function createConnection(deps: ConnectionDeps): Connection {
 			deps.gate.startOver();
 			const creds = await identity.resolve();
 			const connected = creds !== undefined && (await tools.connect(creds));
-			// The context block must be ready before a streamed entry can start a turn.
+			// The context block must be ready and the tools active before a streamed entry can start a turn.
 			await deps.connected?.(connected);
 			if (!connected) return tools.deactivate();
-			if (!deps.view.sub) inbox.open();
 			await tools.activate();
+			if (!deps.view.sub) inbox.open();
 		},
 		async logout() {
 			inbox.stop();

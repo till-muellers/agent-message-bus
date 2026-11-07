@@ -26,8 +26,10 @@ chmod +x agent-message-bus_X.Y.Z_linux_amd64
 **Or build locally** (needs Go 1.27) from the repo root:
 
 ```sh
-python scripts/build.py --version X.Y.Z --out dist   # all OS × amd64/arm64 + dist/SHA256SUMS
+python scripts/build.py --version X.Y.Z --out dist   # windows, linux × amd64/arm64 + dist/SHA256SUMS
 ```
+
+Releases ship Windows and Linux (amd64, arm64) binaries. macOS is not supported; build from source with `cd server && go build -o agent-message-bus .` (or `scripts/build.py`).
 
 Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` (the examples below assume that).
 
@@ -101,26 +103,6 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload && sudo systemctl enable --now agent-message-bus
 sudo cat /var/lib/agent-message-bus/admin-token   # the generated admin token
 ```
-
-**launchd** (macOS) — `~/Library/LaunchAgents/dev.agent-message-bus.plist`, then `launchctl load ~/Library/LaunchAgents/dev.agent-message-bus.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>dev.agent-message-bus</string>
-  <key>ProgramArguments</key><array><string>/usr/local/bin/agent-message-bus</string></array>
-  <key>EnvironmentVariables</key><dict>
-    <!-- optional: <key>AMB_ADMIN_TOKEN</key><string>TOKEN</string> -->
-    <key>AMB_ADDR</key><string>127.0.0.1:8080</string>
-  </dict>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardErrorPath</key><string>/tmp/agent-message-bus.log</string>
-</dict></plist>
-```
-
-If you add `AMB_ADMIN_TOKEN`, `chmod 600` the plist.
 
 **Windows Task Scheduler** — a wrapper `C:\amb\run-amb.cmd`:
 

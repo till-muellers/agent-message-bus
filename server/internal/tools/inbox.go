@@ -57,7 +57,8 @@ func inboxTools(ib *inbox.Service) []Tool {
 		define(BusWait, accessInbox,
 			"Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) "+
 				"as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, "+
-				"returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you).",
+				"returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). "+
+				"In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry.",
 			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
 			nil, waitProps(), func(ctx context.Context, p auth.Principal, a waitArgs) (any, error) {
 				timeout, err := inbox.WaitTimeout(a.TimeoutSeconds)

@@ -70,9 +70,11 @@ describe("binary resolution", () => {
 		for (const [platform, arch, name] of [
 			["win32", "x64", "agent-message-bus_1.0.0_windows_amd64.exe"],
 			["linux", "arm64", "agent-message-bus_1.0.0_linux_arm64"],
-			["darwin", "x64", "agent-message-bus_1.0.0_darwin_amd64"],
 		] as const)
 			expect(assetName("1.0.0", platform, arch)).toBe(name);
+		expect(() => assetName("1.0.0", "darwin", "arm64")).toThrow(
+			"no agent-message-bus release for darwin/arm64; build from source (cd server && go build -o agent-message-bus .) and set AGENT_BUS_BIN",
+		);
 		expect(() => assetName("1.0.0", "aix", "ppc64")).toThrow("no agent-message-bus release for aix/ppc64");
 	});
 
