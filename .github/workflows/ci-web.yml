@@ -1,0 +1,46 @@
+# Reduced suite on the merge result of a pull request into develop, release/** or hotfix/**, web GUI: typecheck, tests and the bundle build. The Go build against the real bundle is the full suite's.
+name: ci-web
+
+on:
+  pull_request:
+    branches: [develop, 'release/**', 'hotfix/**']
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'gui/**'
+      - 'server/internal/web/testdata/**'
+      - 'package.json'
+      - '.github/workflows/ci-web.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: ci-web
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: gui/package.json
+
+      - name: Install GUI
+        run: bun install --frozen-lockfile
+        working-directory: gui
+
+      - name: Typecheck GUI
+        run: bun run typecheck
+        working-directory: gui
+
+      - name: Test GUI
+        run: bun run test:gui
+
+      - name: Build GUI into the embed dir
+        run: bun run build:gui

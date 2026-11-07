@@ -1,6 +1,6 @@
 # Design — specs and architecture
 
-This folder holds the design inputs of the bus. It was committed in slice 0 so that every slice, pull request and review can link to tracked files.
+This folder holds the design inputs of the bus. It was committed in slice 0 so that every slice, commit and review can link to tracked files.
 
 ## `specs/` — the frozen input
 
@@ -10,7 +10,7 @@ This folder holds the design inputs of the bus. It was committed in slice 0 so t
 
 `arch/` holds the architecture documents: the [backlog](arch/BACKLOG.md) of all slices with their order and dependencies, the [definition of ready / definition of done](arch/definition-of-ready.md), the [contracts](arch/contracts.md) that fix every client-visible change, the [questions for the product owner](arch/QUESTIONS.md), the [server](arch/server.md), [schema](arch/schema.md), [client](arch/client.md), [GUI](arch/gui.md), [pipeline](arch/pipeline.md) and [slice](arch/slices.md) descriptions (plus the [client slices](arch/slices-client.md) and the [bead map](arch/BEADS-MAP.md)).
 
-`arch/contracts.md` and `arch/BACKLOG.md` stay **living**: they change only by pull request, when a slice changes a contract or the backlog changes. The other files are edited only when the design itself changes.
+`arch/contracts.md` and `arch/BACKLOG.md` stay **living**: they change only in the feature that changes a contract or the backlog, when a slice changes a contract or the backlog changes. The other files are edited only when the design itself changes.
 
 `arch/review-2026-11.md` is a point-in-time architecture review (snapshot `668f73d`); it is not kept current, and accepted findings move to beads.
 

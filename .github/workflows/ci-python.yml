@@ -1,0 +1,43 @@
+# Reduced suite on the merge result of a pull request into develop, release/** or hotfix/**, release tooling: ruff and pytest.
+name: ci-python
+
+on:
+  pull_request:
+    branches: [develop, 'release/**', 'hotfix/**']
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'scripts/**'
+      - 'tests/test_*.py'
+      - 'ruff.toml'
+      - '.github/workflows/ci-python.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: ci-python
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Install pytest and ruff
+        run: python -m pip install pytest ruff==0.17.3
+
+      - name: Ruff
+        run: |
+          ruff format --check .
+          ruff check .
+
+      - name: Test
+        run: python -m pytest tests
