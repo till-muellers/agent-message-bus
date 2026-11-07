@@ -106,7 +106,7 @@ describe.each(cheap.map(workflow => [workflow.file, workflow] as const))("cheap 
 
 	test("cancels superseded runs of the same branch", () => {
 		expect(workflow.concurrency?.["cancel-in-progress"]).toBe(true);
-		expect(String(workflow.concurrency?.group)).toContain("github.workflow");
+		expect(workflow.concurrency?.group).toBe("${{ github.workflow }}-${{ github.head_ref || github.ref_name }}");
 	});
 
 	test("runs without a matrix and without the race detector", () => {
@@ -131,7 +131,7 @@ describe("full tier full.yml", () => {
 
 	test("cancels superseded runs of the same ref", () => {
 		expect(full.concurrency?.["cancel-in-progress"]).toBe(true);
-		expect(String(full.concurrency?.group)).toContain("github.ref");
+		expect(full.concurrency?.group).toBe("${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}");
 	});
 
 	test("runs the Go tests with the race detector", () => {
@@ -146,8 +146,13 @@ describe("full tier full.yml", () => {
 
 	test("skips the suites when the run of main already covered the tagged commit", () => {
 		for (const name of ["go", "typescript", "web", "python", "package"]) {
-			expect(String(full.jobs[name]?.if)).toContain("covered");
+			expect(full.jobs[name]?.needs).toBe("covered");
+			expect(full.jobs[name]?.if).toBe("needs.covered.outputs.covered != 'true'");
 		}
+		const lookup = stepsOf(full.jobs.covered as Json).map(step => String(step.run ?? "")).join("\n");
+		expect(lookup).toContain('"$GITHUB_REF_TYPE" = tag');
+		expect(lookup).toContain("workflows/full.yml/runs");
+		expect(lookup).toContain("release_ci_gate.py");
 	});
 });
 

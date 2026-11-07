@@ -1,4 +1,4 @@
-# Cheap tier, web GUI: GUI tests, typecheck, bundle, then the Go build and web tests against the real bundle.
+# Cheap tier, web GUI: typecheck, tests and the bundle build. The Go build against the real bundle is the full tier's.
 name: ci-web
 
 on:
@@ -6,13 +6,13 @@ on:
     branches: [develop, 'feature/**', 'release/**', 'hotfix/**']
     paths:
       - 'gui/**'
-      - 'server/internal/web/**'
+      - 'server/internal/web/testdata/**'
       - 'package.json'
       - '.github/workflows/ci-web.yml'
   pull_request:
     paths:
       - 'gui/**'
-      - 'server/internal/web/**'
+      - 'server/internal/web/testdata/**'
       - 'package.json'
       - '.github/workflows/ci-web.yml'
 
@@ -33,11 +33,6 @@ jobs:
         with:
           bun-version-file: gui/package.json
 
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
-
       - name: Install GUI
         run: bun install --frozen-lockfile
         working-directory: gui
@@ -51,7 +46,3 @@ jobs:
 
       - name: Build GUI into the embed dir
         run: bun run build:gui
-
-      - name: Go build and web tests with the real bundle
-        run: go build ./... && go test ./internal/web/...
-        working-directory: server

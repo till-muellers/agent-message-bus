@@ -33,12 +33,12 @@ Every question that was open after PO-1…PO-11, in one place: the architects' q
 | Id | Question | Recommendation | Rationale | Kind | Affects |
 |---|---|---|---|---|---|
 | Q-P1 | Self-contained Docker GUI build with an `oven/bun:1` build stage (new base image), or build the GUI before `docker build`? | Avoid the new image: build the GUI on the host first (variant A, below); the Dockerfile stays unchanged and PL-2 becomes docs only. | No image is published by any workflow, and the Dockerfile's `COPY . .` already carries a host-built `dist/` into the image, so the new dependency buys only "docker build without a local bun". | Decided (variant A) | PL-2 |
-| Q-P2 | Make the CI `web` job a required status check on `main`? | Superseded by Git Flow (`pipeline.md` §2, §7): `ci-web` is path-filtered and a skipped required check blocks a merge, so no cheap-tier job is required; `main` is guarded by the full tier on its merges. Repo-settings decision of the owner. | Decided before Git Flow: yes, after GUI-1. | Decided | GUI-1 |
+| Q-P2 | Make the CI `web` job a required status check on `main`? | Superseded by Git Flow (`pipeline.md` §2, §7): `ci-web` is path-filtered and a skipped required check blocks a merge, so no cheap-tier job is required; `main` is verified by the full tier after each merge. Repo-settings decision of the owner. | Decided before Git Flow: yes, after GUI-1. | Decided | GUI-1 |
 | Q-P3 | Pin bun in CI (`bun-version`) to the version used locally? | Yes, to the version that wrote the first `gui/bun.lock`. | Avoids lockfile and bundler drift between local builds, CI and release. | Decided | GUI-1 |
 
 ### 3.1 Q-P1 evaluated: is the `oven/bun` stage avoidable?
 
-Yes. Facts: `server/Dockerfile` builds with context `server/` and `COPY . .` (`:5`); `server/.dockerignore` excludes only `.git`, `*.db`, `data/`, so `server/internal/web/dist/` is copied when it exists; `release.yml` builds binaries with `scripts/build.py` and publishes no image; `ci.yml` has no Docker job and already uses `oven-sh/setup-bun@v2` (`ci.yml:44`), which GUI-1 also adds to `release.yml`.
+Yes. Facts: `server/Dockerfile` builds with context `server/` and `COPY . .` (`:5`); `server/.dockerignore` excludes only `.git`, `*.db`, `data/`, so `server/internal/web/dist/` is copied when it exists; `release.yml` builds binaries with `scripts/build.py` and publishes no image; the CI workflows have no Docker job and already use `oven-sh/setup-bun@v2` (`ci-web.yml`, `full.yml`), which GUI-1 also added to `release.yml`.
 
 | Variant | How | New dependency | Cost |
 |---|---|---|---|

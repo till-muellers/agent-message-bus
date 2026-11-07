@@ -6,7 +6,7 @@ Owner: Arch-client. Inputs: `docs/design/specs/**` (final), `docs/design/specs/R
 omp facts are from `node_modules/@oh-my-pi/*` **18.12.6** (`pi-coding-agent/package.json:3`). Paths below that start with `CA/` are relative to `node_modules/@oh-my-pi/pi-coding-agent/src/`; `core/` = `node_modules/@oh-my-pi/pi-agent-core/src/`; `tui/` = `node_modules/@oh-my-pi/pi-tui/src/`.
 PO decisions (final, see §0a) are marked `(PO-n)`. Claims not observed in code are marked `[INFERENCE]`.
 
-Companion files: `gui.md` (web GUI), `pipeline.md` (CI/release/build), `slices-client.md` (PR slices).
+Companion files: `gui.md` (web GUI), `pipeline.md` (CI/release/build), `slices-client.md` (slices).
 
 ---
 
@@ -573,7 +573,7 @@ Contract (contracts.md, Arch-server): `GET /healthz` → `200 ok` + header `Agen
 // lib/bus/health.ts
 export function probeProtocol(fetchFn: FetchLike, url: string): Promise<number | undefined>;  // undefined = no header
 // lib/version/server-protocol.ts
-export const MIN_SERVER_PROTOCOL = 2;   // raised in the PR that starts depending on a newer server
+export const MIN_SERVER_PROTOCOL = 2;   // raised in the change that starts depending on a newer server
 export function tooOld(found: number | undefined, url: string): string | undefined; // the refusal text of the spec (naming url), or undefined
 // lib/connection/server-gate.ts — one gate per session (`sessionOf` in index.ts); it caches one probe per url until the next connection start: `connection.restart()` calls startOver()
 export type ServerVerdict = "ok" | { refused: string };
@@ -607,9 +607,9 @@ export function skewError(worker: string | undefined, own: string): string | und
 ## 9. Skill retirement (E8c; guidance analysis §6) 
 
 - Delete `skills/agent-message-bus/SKILL.md` and `skills/`. omp finds plugin skills by directory convention only (`CA/discovery/omp-plugins.ts:65-79`); the manifest has no `skills` key (`CA/extensibility/plugins/types.ts:29-52`), so deleting the folder unregisters it.
-- `package.json` `files`: drop `"skills"` (`package.json:28-33`). (REVIEW R3 put this in P2; it moves into E8c so that no PR leaves a `files` entry for a missing folder. The version bump stays in P2b.)
+- `package.json` `files`: drop `"skills"` (`package.json:28-33`). (REVIEW R3 put this in P2; it moves into E8c so that no change leaves a `files` entry for a missing folder. The version bump stays in P2b.)
 - Docs per guidance analysis §6 table: `README.md:11,17,93,101`, `extension/README.md:9,15` (+ a "Context block" section), `server/README.md:11`, `server/DEPLOYMENT.md:9,155,201`, `.omp/AGENTS.md:7,17,84` (X2).
-- Must ship in the same PR as the context block (E8b) or after it, never before: the block is the replacement.
+- Must ship in the same change as the context block (E8b) or after it, never before: the block is the replacement.
 
 ---
 
@@ -730,7 +730,7 @@ Review of `docs/design/arch/definition-of-ready.md` (Arch-server) for the client
 | C2 | **Smoke procedure defined** with `.omp/AGENTS.md` "Running it locally": throwaway server (`AMB_ADDR`, `AMB_DB_PATH`, `AMB_ADMIN_TOKEN`), `omp -e <repo>/extension/index.ts`, credentials via `OMP_AGENT_BUS_DIR`/`credentials.json`, `tui` for wake-up behaviour (print never wakes), expected transcript and log lines | slice "Smoke" (S0-S4 of `slices-client.md`) |
 | C3 | **Fakes ready**: the omp surface needed exists in `tests/fakes.ts` `boot()` or is added in the first RED commit (`on("context")` dispatch, `registerMessageRenderer`, `events`, `ctx.isIdle`, `ctx.agent`, `pi.pi` components) | slice "Tests" |
 | C4 | **Protocol stated**: the slice says whether it raises `MIN_SERVER_PROTOCOL` and to which value; `tests/version/protocol-sync.test.ts` stays green | slice "Depends on" |
-| C5 | **Layout rule**: files only in the `client.md` §1 folders; `tests/layout.test.ts` edges unchanged or the diagram in §1.3 updated in the same PR | slice "Files" |
+| C5 | **Layout rule**: files only in the `client.md` §1 folders; `tests/layout.test.ts` edges unchanged or the diagram in §1.3 updated in the same change | slice "Files" |
 | C6 | **Delivery rule (PO-5)**: no module outside `delivery/delivery-class.ts` chooses `steer`/`aside`/`nextTurn` or branches on `type`/`critical` for delivery | fitness assertion in `delivery-class.test.ts` |
 | C7 | **Two-copy hazard**: the smoke says whether an installed plugin is loaded; registration-changing slices (E3, E6, E7, E8a, E10c) are smoked with it disabled or upgraded | slice "Smoke" |
 | C8 | **GUI safety**: no raw-HTML API in `gui/src` (`no-raw-html.test.ts`), no token in browser storage, mutations send `X-CSRF-Token` | GUI slice "Tests" + smoke |

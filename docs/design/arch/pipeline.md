@@ -31,8 +31,8 @@ CI costs money (billed per minute). Every workflow runs on `ubuntu-latest` only,
 | Workflow | Trigger | Paths (jobs run only when one changed) | Jobs | OS | Concurrency |
 |---|---|---|---|---|---|
 | `ci-go.yml` | push to `develop`, `feature/**`, `release/**`, `hotfix/**`; `pull_request` | `server/**`, itself | gofmt, `go build`, `go vet`, `go test ./...` (no `-race`), golangci-lint v2.15.0 | ubuntu | `cancel-in-progress` per workflow and branch |
-| `ci-typescript.yml` | same | `extension/**`, `tests/**` (not `tests/test_*.py`), `package.json`, `bun.lock`, `bunfig.toml`, `tsconfig.json`, `server/TOOLS.md` and `server/internal/server/protocol.go` (read by the tests), `.github/workflows/**` (read by `tests/workflows.test.ts`) | `bun install --frozen-lockfile`, `bun run typecheck`, `bun test tests/` | ubuntu | same |
-| `ci-web.yml` | same | `gui/**`, `server/internal/web/**`, `package.json`, itself | GUI typecheck and tests, `bun run build:gui`, `go build ./...` and `go test ./internal/web/...` against the real bundle | ubuntu | same |
+| `ci-typescript.yml` | same | `extension/**`, `tests/**` (not `tests/test_*.py`), `package.json`, `bun.lock`, `bunfig.toml`, `tsconfig.json`, `gui/package.json` (the bun pin), `server/TOOLS.md` and `server/internal/server/protocol.go` (read by the tests), `.github/workflows/**` (read by `tests/workflows.test.ts`) | `bun install --frozen-lockfile`, `bun run typecheck`, `bun test tests/` | ubuntu | same |
+| `ci-web.yml` | same | `gui/**`, `server/internal/web/testdata/**` (the contract fixtures `gui/tests/api/contract.test.ts` decodes), `package.json`, itself | GUI typecheck, GUI tests, `bun run build:gui` | ubuntu | same |
 | `ci-python.yml` | same | `scripts/**`, `tests/test_*.py`, `ruff.toml`, itself | `ruff format --check`, `ruff check` (ruff 0.17.3), `pytest tests` | ubuntu | same |
 | `full.yml` | push to `main`, push of `v*` tags, `workflow_dispatch`; no `pull_request` | none | `covered`, `go`, `typescript`, `web`, `python`, `package` | ubuntu | `cancel-in-progress` per workflow and ref |
 | `release.yml` | push of `v*` tags | none | `release` (publishes) | ubuntu | none |
@@ -42,13 +42,14 @@ Rules:
 - Path filters are native `paths:` filters, one small workflow per area, so no third-party action and no filter job are needed. The filter counts the workflow's own file. `tests/workflows.test.ts` (typescript area) fails when a cheap workflow loses its `paths:` or `cancel-in-progress`, runs on another OS or on `main`/tags, when `full.yml` gains a `pull_request`, `develop` or `feature` trigger, or when a workflow uses an action other than `actions/*`, `oven-sh/setup-bun` and `golangci/golangci-lint-action`.
 - The concurrency group is `<workflow>-<branch>` (`github.head_ref || github.ref_name`), so the push run and the pull-request run of one branch share a group and the older is cancelled.
 - A change outside every filter (docs, `.omp/`, `.beads/`) starts no job.
-- The `web` job runs the GUI tests and build through the root scripts `test:gui` and `build:gui` (§5), so the commands contributors run locally are the ones CI runs. `go test` in the `go` jobs runs without a GUI bundle (the fallback page); the real-bundle run is the `web` job.
+- The `web` job runs the GUI tests and build through the root scripts `test:gui` and `build:gui` (§5), so the commands contributors run locally are the ones CI runs. `go test` in the cheap `go` job runs without a GUI bundle (the fallback page); `go build` and `go test ./internal/web/...` against the real bundle run only in the full tier (`web` job of `full.yml`) and in the local checks. `tests/package.test.ts` scans every tracked text file; the cheap tier runs it only when a TypeScript-area path changed, the full tier always.
 
 ### Full tier
 
 `full.yml` runs on the merge of a `release/*` or `hotfix/*` branch into `main` and on `v*` tags, and adds to the cheap tier:
 - the race detector (`go test -race ./...`, needs CGO; the runner has gcc). The Go code has platform files (`detach`, `instance` lock, `server` listen); CI compiles and tests only the Linux ones, so the Windows files are covered by the local runs on the development machine.
 - every area on every full run, not path-filtered: TypeScript, GUI, Python, the generated-docs golden test and the `/web` contract fixtures (both inside the Go and GUI suites), the tests that read `server/spec/*.feature`.
+- the real-bundle Go build (`go build ./...` and `go test ./internal/web/...` after `bun run build:gui`)
 - the packaging smoke build (`package`: `scripts/build.py`, the GUI, six binaries and `SHA256SUMS`, checked and discarded; nothing is published).
 - `golangci-lint` and `gofmt` once more (the same Linux job).
 
@@ -59,6 +60,13 @@ There is no manual-only workflow: no suite in this repo needs a display or a GPU
 ### Linux checks locally
 
 When a Linux-only failure is suspected (or to reproduce a CI failure), run the Go checks in WSL, where `go` and `gcc` are installed: `wsl -e bash -lc "cd /mnt/d/repos/<worktree>/server && go test ./..."` (add `-race` for the full-tier run). WSL keeps its own Go build cache, so the first run compiles everything.
+
+### Repository settings (owner, outside the code)
+
+- Default branch stays `main`: `omp plugin install`/`upgrade` and the repository page then show released states, not `develop`. Pull requests, if used, target `develop` explicitly.
+- `main`: no required status checks. A cheap check is path-filtered (a skipped required check blocks a merge) and the full tier runs only after the merge, so no check can gate it. Restrict who may push to the owner and allow no force push or deletion; allow merge commits only (no squash, no rebase), so release history stays connected to `develop`. The release procedure merges locally and pushes `main`; a pull request from `release/*` or `hotfix/*` needs the same settings.
+- `develop` and `feature/*`: no protection needed. Optionally forbid force push and deletion on `develop`.
+- The old requirement of the `go`, `typescript`, `web`, `python` checks on `main` (and the planned required `web` check, Q-P2) must be removed: those names no longer exist.
 
 ### Cost per typical change (estimate, job runs)
 
@@ -125,7 +133,7 @@ permissions:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: { python-version: '3.x' }
-      - name: Tag matches package version
+      - name: Tag is a SemVer version and matches package version
         run: python scripts/release_version.py --tag "$GITHUB_REF_NAME"
       - name: Full tier passed for the tagged commit
         env: { GH_TOKEN: ${{ github.token }} }
@@ -188,5 +196,5 @@ Consolidated in `QUESTIONS.md` (recommendation, rationale, what each blocks). De
 | # | Question | Default if unanswered |
 |---|---|---|
 | Q-P1 | Self-contained Docker GUI build with an `oven/bun:1` stage, or build the GUI before `docker build`? | Variant A: build the GUI on the host first, Dockerfile unchanged, no new image (PL-2 docs only). |
-| Q-P2 | Make `web` a required status check on `main`? | Superseded by Git Flow: `ci-web` is path-filtered, and a skipped required check blocks a merge, so no cheap-tier job is required. If any check is required on `main`, it is a full-tier job (`full.yml` runs only on `main` and tags, so it cannot gate the merge itself). Owner decision in repo settings. |
+| Q-P2 | Make `web` a required status check on `main`? | Superseded by Git Flow: `ci-web` is path-filtered, and a skipped required check blocks a merge, so no cheap-tier job is required. If any check is required on `main`, it is a full-tier job (`full.yml` runs only on `main` and tags, so it cannot gate the merge itself). Owner decision in repo settings (§2 "Repository settings"). |
 | Q-P3 | Pin bun in CI (`bun-version`) to the version used locally? | Pin to the version in `gui/bun.lock`'s generator once the first lockfile exists (GUI-1). Done in GUI-1: `bun.lock` records no bun version, so the pin is `gui/package.json` `packageManager: "bun@1.4.2"` (the bun that wrote the first lockfile), read by `setup-bun` through `bun-version-file: gui/package.json` in the TypeScript and web jobs of the cheap and the full tier and in `release.yml`. |
