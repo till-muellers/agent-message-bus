@@ -30,14 +30,17 @@ func typed(kind, desc string) map[string]any {
 	return map[string]any{"type": kind, "description": desc}
 }
 
-// nameDesc describes a name argument with the domain name rule.
-func nameDesc(what string) string {
-	return fmt.Sprintf("%s name, matching %s.", what, domain.NamePattern)
+// nameProp describes an argument that refers to an existing name; the name rule is left to the guide.
+func nameProp(what string) map[string]any { return str(what + " name.") }
+
+// newNameProp describes an argument that creates a name, so it states the domain name rule.
+func newNameProp(what string) map[string]any {
+	return str(fmt.Sprintf("%s name, matching %s.", what, domain.NamePattern))
 }
 
-func spaceProp() map[string]any  { return str(nameDesc("Space")) }
-func topicProp() map[string]any  { return str(nameDesc("Topic")) }
-func boardProp() map[string]any  { return str(nameDesc("Blackboard")) }
+func spaceProp() map[string]any  { return nameProp("Space") }
+func topicProp() map[string]any  { return nameProp("Topic") }
+func boardProp() map[string]any  { return nameProp("Blackboard") }
 func threadProp() map[string]any { return integer("Thread id.") }
 
 func bodyProp() map[string]any {

@@ -136,7 +136,7 @@ func TestLedgerDocumentsSpawnWorker(t *testing.T) {
 	for _, want := range []string{
 		"### bus_spawn_worker\n\nStarts a worker agent",
 		"Leaders of the space and admins.",
-		"| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |",
+		"| `space` | string | yes | Space name. |",
 		"| `name` | string | yes |",
 		"| `task` | string | no |",
 		"| `cwd` | string | no |",

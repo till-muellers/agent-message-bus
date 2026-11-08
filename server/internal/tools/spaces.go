@@ -48,25 +48,25 @@ func spaceLifecycleTools(s *spaces.Service) []Tool {
 	return []Tool{
 		spaceOp(BusCreateSpace, accessLeaders,
 			"Creates the space with its all topic and joins the caller as leader (an admin with role admin).",
-			s, (*spaces.Service).Create),
+			newSpaceProps(), s, (*spaces.Service).Create),
 		spaceOp(BusJoinSpace, accessLeaders,
 			"Joins an existing space as a leader (an admin with role admin); a space can have several leaders.",
-			s, (*spaces.Service).Join),
+			spaceOnly(), s, (*spaces.Service).Join),
 		spaceOp(BusLeaveSpace, "Participants.",
 			"Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave "+
 				"while others remain, and the last participant's departure deletes the space. "+
 				"Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted.",
-			s, (*spaces.Service).Leave),
+			spaceOnly(), s, (*spaces.Service).Leave),
 		spaceOp(BusDeleteSpace, "Leaders of the space once no other leader remains, and admins.",
 			"Deletes the space and everything in it, including member tokens. "+
-				"Pitfall: an admin may delete any space, even one with other leaders.", s, (*spaces.Service).Delete),
+				"Pitfall: an admin may delete any space, even one with other leaders.", spaceOnly(), s, (*spaces.Service).Delete),
 	}
 }
 
 // spaceOp binds fn to s only when the tool is called.
-func spaceOp(name, access, desc string, s *spaces.Service,
+func spaceOp(name, access, desc string, props map[string]any, s *spaces.Service,
 	fn func(*spaces.Service, context.Context, auth.Principal, string) error) Tool {
-	return define(name, access, desc, okResult, spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
+	return define(name, access, desc, okResult, spaceReq(), props, func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 		return done(fn(s, ctx, p, a.Space))
 	})
 }
@@ -89,9 +89,10 @@ func memberTools(s *spaces.Service) []Tool {
 	}
 }
 
-func spaceOnly() map[string]any { return map[string]any{"space": spaceProp()} }
+func spaceOnly() map[string]any     { return map[string]any{"space": spaceProp()} }
+func newSpaceProps() map[string]any { return map[string]any{"space": newNameProp("Space")} }
 func memberProps() map[string]any {
-	return map[string]any{"space": spaceProp(), "name": str(nameDesc("Member agent"))}
+	return map[string]any{"space": spaceProp(), "name": nameProp("Member agent")}
 }
 func spaceReq() []string  { return []string{"space"} }
 func memberReq() []string { return []string{"space", "name"} }

@@ -70,6 +70,33 @@ Feature: Tool descriptions guide the agent on their own
         | bus_wait           | Leaders, members and admins.                  |
         | bus_spawn_worker   | Leaders of the space and admins.              |
 
+  Rule: The name rule is stated where a name is created
+
+    Scenario Outline: <tool> states the name rule on <property>
+      Then the "<property>" property of <tool> reads "<description>"
+
+      Examples:
+        | tool                  | property   | description                                                  |
+        | bus_create_space      | space      | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$.             |
+        | bus_create_topic      | topic      | Topic name, matching ^[a-z0-9][a-z0-9_-]{0,62}$.             |
+        | bus_create_blackboard | blackboard | Blackboard name, matching ^[a-z0-9][a-z0-9_-]{0,62}$.        |
+        | bus_invite_member     | name       | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$.      |
+        | bus_mint_leader       | name       | Leader agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$.      |
+        | bus_mint_admin        | name       | Admin agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$.       |
+
+    Scenario Outline: <tool> names an existing <property> without the rule
+      # The guide states the rule once under Rules.
+      Then the "<property>" property of <tool> reads "<description>"
+
+      Examples:
+        | tool                | property   | description                 |
+        | bus_join_space      | space      | Space name.                 |
+        | bus_send_topic      | topic      | Topic name.                 |
+        | bus_create_thread   | blackboard | Blackboard name.            |
+        | bus_send_direct     | to         | Recipient participant name. |
+        | bus_revoke_member   | name       | Member agent name.          |
+        | bus_revoke_admin    | name       | Admin agent name.           |
+
   Rule: The extension's own tool is documented like the server's
 
     Scenario: bus_spawn_worker has an entry in the generated reference
@@ -77,7 +104,8 @@ Feature: Tool descriptions guide the agent on their own
       Then the section "omp extension" lists bus_spawn_worker with its arguments space, name, task and cwd and its result {name, space, launcher}
 
     Scenario: bus_spawn_worker arguments carry the same rules as the server's
-      Then the "space" property of bus_spawn_worker reads "Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."
+      Then the "space" property of bus_spawn_worker reads "Space name."
+      And the "name" property of bus_spawn_worker reads "Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."
       And the "task" property reads "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report."
 
   Rule: An admin may spawn workers

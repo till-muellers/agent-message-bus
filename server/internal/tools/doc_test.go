@@ -47,7 +47,7 @@ func TestArgumentTable(t *testing.T) {
 	}{
 		{"bus_add_post", "| Argument | Type | Required | Description |\n| :--- | :--- | :--- | :--- |\n" +
 			"| `body` | string | yes | Message body, 1..65536 bytes. |\n" +
-			"| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |\n" +
+			"| `space` | string | yes | Space name. |\n" +
 			"| `threadId` | integer | yes | Thread id. |\n"},
 		{"bus_inbox_read", "| Argument | Type | Required | Description |\n| :--- | :--- | :--- | :--- |\n" +
 			"| `after` | integer | no | Return entries with id greater than this; default 0. |\n" +
