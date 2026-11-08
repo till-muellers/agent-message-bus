@@ -36,7 +36,7 @@ func inviteTools(inv *invites.Service) []Tool {
 }
 
 func inviteProps() map[string]any {
-	props := memberProps()
+	props := map[string]any{"space": spaceProp(), "name": newNameProp("Member agent")}
 	props["task"] = str(fmt.Sprintf("First prompt for the member, delivered as a direct message from you when the code is accepted; 1..%d bytes.",
 		domain.MaxBodyBytes))
 	return props

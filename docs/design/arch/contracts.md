@@ -130,7 +130,7 @@ Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-6
 | `bus_inbox_read` ✔, `bus_inbox_ack`, `bus_wait` ✔ | Leaders and members. | Leaders, members and admins. |
 | `bus_spawn_worker` ✔ (TOOLS.md only) | Leaders of the space. | Leaders of the space and admins. |
 
-`bus_spawn_worker` TOOLS.md entry (slice 3, `tool-descriptions.feature:22-23,73-79`): description starts "Starts a worker agent"; args `space` ("Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."), `name`, `task` ("Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report.", from slice 7), `cwd`; result `{name, space, launcher}`.
+`bus_spawn_worker` TOOLS.md entry (slice 3, `tool-descriptions.feature:22-23,73-79`): description starts "Starts a worker agent"; args `space` ("Space name."), `name` ("Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."), `task` ("Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report.", from slice 7), `cwd`; result `{name, space, launcher}`.
 
 ### 3.2 Identity and listing [4a, 4d]
 

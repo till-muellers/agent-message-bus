@@ -91,6 +91,8 @@ Severity: **H** = an agent will act wrongly, **M** = it's confused or wastes cal
 | D23 | L | **Several docs describe the first prompt as a user message** and must change with item 4. | `extension/README.md:27,48`; `server/TOOLS.md:521-522`; `README.md:64,82`; `SKILL.md:40-41`; `server/spec/invites.feature:8,61-64`; `server/spec/README.md:51` |
 | D24 | L | **Who you are and the rules live only in pull docs.** No push channel exists for omp (no context or system-prompt hook) or for MCP (no instructions). | `extension/index.ts:162-190`; `mcpserver/server.go:21` |
 
+> **D18 reversed (owner decision, KISS slice 5):** the name pattern appears only on parameters that create a name (`bus_create_space`, `bus_create_topic`, `bus_create_blackboard`, `bus_invite_member`, `bus_mint_leader`, `bus_mint_admin` and `bus_spawn_worker`'s `name`). Parameters that refer to an existing space, topic, board or agent read "Space name." and so on; the guide states the rule once under Rules.
+
 ## 5. Seam comparison per item
 
 Ratings are 1–5 (5 is best). **Clean** means it fits the architecture and its seams, with one source of truth. **Simple** means little code and few moving parts. **Powerful** means it reaches every relevant agent and client at the right time and stays correct.

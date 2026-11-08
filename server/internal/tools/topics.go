@@ -36,7 +36,7 @@ func messageTools(m *messaging.Service) []Tool {
 			"Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, "+
 				"and an agent cannot send a direct message to itself.",
 			receiptsResult, []string{"space", "to", "body"},
-			map[string]any{"space": spaceProp(), "to": str(nameDesc("Recipient participant")), "body": bodyProp(), "critical": criticalProp()},
+			map[string]any{"space": spaceProp(), "to": nameProp("Recipient participant"), "body": bodyProp(), "critical": criticalProp()},
 			func(ctx context.Context, p auth.Principal, a directArgs) (any, error) {
 				return sent(m.SendDirect(ctx, p, a.Space, a.To, a.Body, a.Critical))
 			}),
@@ -60,30 +60,33 @@ func topicOps(m *messaging.Service) []Tool {
 		topicOp(BusCreateTopic, accessParticipants,
 			"Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. "+
 				"Pitfall: nobody else is notified, so subscribers must be told the topic name.",
-			m, (*messaging.Service).CreateTopic),
+			newTopicProps(), m, (*messaging.Service).CreateTopic),
 		topicOp(BusSubscribeTopic, accessSubscribers,
 			"Subscribes the caller to the topic; idempotent. "+
 				"Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it.",
-			m, (*messaging.Service).Subscribe),
+			topicProps(), m, (*messaging.Service).Subscribe),
 		topicOp(BusUnsubscribeTopic, accessSubscribers,
 			"Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed.",
-			m, (*messaging.Service).Unsubscribe),
+			topicProps(), m, (*messaging.Service).Unsubscribe),
 		topicOp(BusCloseTopic, "The topic's creator, leaders of the space and admins.",
 			"Closes the topic, notifies subscribers and drops all subscriptions. "+
 				"Pitfall: the all topic cannot be closed, and a closed topic's name can be reused.",
-			m, (*messaging.Service).CloseTopic),
+			topicProps(), m, (*messaging.Service).CloseTopic),
 	}
 }
 
 // topicOp binds fn to m only when the tool is called.
-func topicOp(name, access, desc string, m *messaging.Service,
+func topicOp(name, access, desc string, props map[string]any, m *messaging.Service,
 	fn func(*messaging.Service, context.Context, auth.Principal, string, string) error) Tool {
-	return define(name, access, desc, okResult, topicReq(), topicProps(), func(ctx context.Context, p auth.Principal, a topicArgs) (any, error) {
+	return define(name, access, desc, okResult, topicReq(), props, func(ctx context.Context, p auth.Principal, a topicArgs) (any, error) {
 		return done(fn(m, ctx, p, a.Space, a.Topic))
 	})
 }
 
 func topicProps() map[string]any {
 	return map[string]any{"space": spaceProp(), "topic": topicProp()}
+}
+func newTopicProps() map[string]any {
+	return map[string]any{"space": spaceProp(), "topic": newNameProp("Topic")}
 }
 func topicReq() []string { return []string{"space", "topic"} }

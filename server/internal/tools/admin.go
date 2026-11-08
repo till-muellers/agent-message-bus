@@ -31,7 +31,7 @@ func adminTools(a *auth.Service, s *spaces.Service) []Tool {
 				"(rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name "+
 				"again gives the same agent a new token.",
 			"{deleted}",
-			[]string{"name"}, map[string]any{"name": str(nameDesc("Admin agent"))},
+			[]string{"name"}, map[string]any{"name": nameProp("Admin agent")},
 			func(ctx context.Context, p auth.Principal, x nameArgs) (any, error) {
 				deleted, err := s.RevokeAdmin(ctx, p, x.Name)
 				if err != nil {
@@ -45,7 +45,7 @@ func adminTools(a *auth.Service, s *spaces.Service) []Tool {
 // mintTool defines an admin tool that mints a token for agent name with mint.
 func mintTool(name, desc, agent string, mint func(context.Context, auth.Principal, string) (string, error)) Tool {
 	return define(name, accessAdmins, desc, "{name, token}",
-		[]string{"name"}, map[string]any{"name": str(nameDesc(agent))},
+		[]string{"name"}, map[string]any{"name": newNameProp(agent)},
 		func(ctx context.Context, p auth.Principal, x nameArgs) (any, error) {
 			token, err := mint(ctx, p, x.Name)
 			if err != nil {
