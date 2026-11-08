@@ -30,6 +30,8 @@ Feature: Tool descriptions guide the agent on their own
       Examples:
         | tool                  | pitfall                                                                                  |
         | bus_inbox_read        | omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge |
+        | bus_inbox_read | The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
+        | bus_wait | The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
         | bus_inbox_ack         | it deletes every entry with id up to upTo, so never acknowledge past what was handled; acknowledging everything lets the next mail notify again |
         | bus_wait              | it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you) |
         | bus_create_topic      | nobody else is notified, so subscribers must be told the topic name                       |

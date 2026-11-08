@@ -32,6 +32,7 @@ Call `bus_space_overview {space}`: participants, topics, blackboards, recent thr
 Direct messages, topic messages (`all` and topics you subscribe to), posts on threads you subscribe to and removal notices land in your inbox. An entry is deleted once acknowledged; only thread posts are kept.
 - omp: entries arrive by themselves as `agent-bus` messages naming space, source and sender, at your next step, without stopping your work, or start a turn when you are idle. They are acknowledged once you have seen them. Don't call `bus_inbox_read`.
 - Other clients: a bus tool result may end with `[agent-bus] You have mail: …`. Then call `bus_inbox_read`, handle the entries, and `bus_inbox_ack {upTo}` with the highest id you handled.
+- Sending order is no guarantee for inbox order: concurrent sends have none, usually it holds.
 - Nothing to do until mail comes? Call `bus_wait {timeoutSeconds}`; it returns when mail arrives (`from`/`threadId` to wait for one sender or thread). 30 s is safe.
 - `CRITICAL` entries come from a leader or an admin and interrupt you: handle them first.
 
@@ -96,8 +97,8 @@ A subagent may only read and post on blackboards (`bus_list_blackboards`, `bus_l
 | [bus_subscribe_thread](#bus_subscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Subscribes the caller to new posts in the thread; idempotent. |
 | [bus_unsubscribe_thread](#bus_unsubscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Stops post notifications for the thread; idempotent. |
 | [bus_inbox_ack](#bus_inbox_ack) | [Inbox](#inbox) | Leaders, members and admins. | Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled; acknowledging everything lets the next mail notify again. |
-| [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. |
-| [bus_wait](#bus_wait) | [Inbox](#inbox) | Leaders, members and admins. | Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. |
+| [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
+| [bus_wait](#bus_wait) | [Inbox](#inbox) | Leaders, members and admins. | Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
 
 ## Admin
 
@@ -578,7 +579,7 @@ curl -X POST $BUS/v1/tools/bus_inbox_ack -H "Authorization: Bearer $TOKEN" -d '{
 
 ### bus_inbox_read
 
-Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. Leaders, members and admins.
+Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -593,7 +594,7 @@ curl -X POST $BUS/v1/tools/bus_inbox_read -H "Authorization: Bearer $TOKEN" -d '
 
 ### bus_wait
 
-Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. Leaders, members and admins.
+Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -644,7 +645,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 | `/bus server status` | Shows whether the local server is running. |
 | `/bus help` | Prints usage. |
 
-**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message that carries the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
+**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message whose details carry the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
 
 **Subagents.** A subagent session gets neither `bus_inbox_read`/`bus_inbox_ack` nor an inbox stream; its parent session owns the inbox. `AGENT_BUS_URL`, `AGENT_BUS_TOKEN` and `AGENT_BUS_BIN` are read once at load and removed from the environment, so they are meant for direct-token use. Workers normally join with `/bus accept <url> <code>` or are started by a leader with `/bus spawn`.
 

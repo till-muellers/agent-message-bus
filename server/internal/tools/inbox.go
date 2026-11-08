@@ -27,7 +27,7 @@ func inboxTools(ib *inbox.Service) []Tool {
 	return []Tool{
 		define(BusInboxRead, accessInbox,
 			"Returns inbox entries after the given id without removing them; members see only their space. "+
-				"Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge.",
+				"Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds).",
 			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
 			nil, map[string]any{"after": integer("Return entries with id greater than this; default 0."), "limit": integer("Maximum entries, 1..500; default 100.")},
 			func(ctx context.Context, p auth.Principal, a readArgs) (any, error) {
@@ -58,7 +58,7 @@ func inboxTools(ib *inbox.Service) []Tool {
 			"Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) "+
 				"as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, "+
 				"returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). "+
-				"In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry.",
+				"In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds).",
 			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
 			nil, waitProps(), func(ctx context.Context, p auth.Principal, a waitArgs) (any, error) {
 				timeout, err := inbox.WaitTimeout(a.TimeoutSeconds)

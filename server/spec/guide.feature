@@ -67,6 +67,7 @@ Feature: One agent guide, served by the bus to every client
         | critical              | only a CRITICAL entry interrupts the running turn; it comes from a leader or an admin and is handled first  |
         | mail elsewhere        | other clients act on the "You have mail" hint, read with bus_inbox_read and acknowledge with bus_inbox_ack only what they handled |
         | waiting for mail      | an agent with nothing to do until mail comes calls bus_wait instead of polling                              |
+        | inbox order           | the order of sending is no guarantee for the order in the inbox: concurrent sends have none, usually it holds |
         | member limits         | members cannot send to all and cannot send critical messages                                               |
         | report fallback       | a member reports to the sender of its task and, if that fails with not_found, to a leader of the space     |
         | when to report        | a member reports to the sender of its task when done, blocked or needing a decision, not on progress       |
