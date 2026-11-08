@@ -253,6 +253,52 @@ Feature: Local instance management
       Then it fails with "agent-message-bus is running (state pending) but did not answer within 10s; retry, or end the process that holds <datadir>/agent-message-bus.lock"
       And <datadir>/admin-token is unchanged
 
+  Rule: AMB_REQUIRE_EXPLICIT stops any command from falling back to the default data dir
+
+    # An opt-in guard for shells that must never touch the real data dir (coding agents running
+    # throwaway servers): set it in their environment, not in the owner's. When it is true (1,
+    # t, true, any ParseBool truth) every command (serve, start, stop, status, admin-token,
+    # rotate-token) needs AMB_ADDR, AMB_WEB_ADDR, AMB_DB_PATH and AMB_ADMIN_TOKEN. A variable
+    # counts as given when set; an empty value counts as missing except for AMB_WEB_ADDR (empty
+    # disables the GUI). Unset, empty or false leaves the defaults in force.
+
+    Scenario: The guard refuses a command that would use the defaults
+      Given AMB_REQUIRE_EXPLICIT is "1"
+      And AMB_ADDR, AMB_WEB_ADDR, AMB_DB_PATH and AMB_ADMIN_TOKEN are not set
+      When I run "agent-message-bus start"
+      Then it fails with "load config: AMB_REQUIRE_EXPLICIT is set: AMB_ADDR, AMB_WEB_ADDR, AMB_DB_PATH, AMB_ADMIN_TOKEN missing; set all four so the default data dir stays untouched"
+      And no data dir, lock, state, log, database or token file is created
+
+    Scenario Outline: The guard names exactly the missing variables
+      Given AMB_REQUIRE_EXPLICIT is "1"
+      And all four variables are set except <variable>, which is <state>
+      When I run "agent-message-bus start"
+      Then it fails with "load config: AMB_REQUIRE_EXPLICIT is set: <variable> missing; set all four so the default data dir stays untouched"
+
+      Examples:
+        | variable        | state |
+        | AMB_ADDR        | unset |
+        | AMB_WEB_ADDR    | unset |
+        | AMB_DB_PATH     | empty |
+        | AMB_ADMIN_TOKEN | empty |
+
+    Scenario: An empty AMB_WEB_ADDR satisfies the guard
+      Given AMB_REQUIRE_EXPLICIT is "1"
+      And AMB_ADDR, AMB_DB_PATH and AMB_ADMIN_TOKEN are set and AMB_WEB_ADDR is empty
+      When I run "agent-message-bus start"
+      Then the server starts without a web GUI listener
+
+    Scenario: A guard value that is not a boolean fails closed
+      Given AMB_REQUIRE_EXPLICIT is "maybe"
+      When I run "agent-message-bus start"
+      Then it fails with "load config: AMB_REQUIRE_EXPLICIT: \"maybe\" is not a boolean (use 1 or 0)"
+
+    Scenario: Without the guard the defaults stay in force
+      Given AMB_REQUIRE_EXPLICIT is unset or "0"
+      And AMB_ADDR, AMB_WEB_ADDR, AMB_DB_PATH and AMB_ADMIN_TOKEN are not set
+      When I run "agent-message-bus start"
+      Then the server starts on the default data dir and ports
+
   Rule: a brief external write lock on the database delays calls, it does not fail them
 
     # Every transaction begins IMMEDIATE, so the 5 s busy timeout covers another

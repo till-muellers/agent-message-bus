@@ -50,6 +50,10 @@ Environment:
                    others:  $XDG_DATA_HOME/agent-message-bus or ~/.local/share/agent-message-bus)
                    The lock file agent-message-bus.lock and the state file
                    agent-message-bus.state.json live next to it.
+  AMB_REQUIRE_EXPLICIT
+                   opt-in guard (1): every command fails unless AMB_ADDR, AMB_WEB_ADDR,
+                   AMB_DB_PATH and AMB_ADMIN_TOKEN are all set, so the default data dir stays
+                   untouched; set it in shells that must never use it (default off)
 `
 
 const waitTimeout = 10 * time.Second
