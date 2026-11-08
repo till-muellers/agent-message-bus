@@ -28,6 +28,7 @@ func TestGuideCoversRoles(t *testing.T) {
 		{"mail elsewhere", "may end with `[agent-bus] You have mail: …`"},
 		{"ack what you handled", "`bus_inbox_ack {upTo}` with the highest id you handled"},
 		{"waiting for mail", "Call `bus_wait {timeoutSeconds}`"},
+		{"inbox order", "Sending order is no guarantee for inbox order: concurrent sends have none, usually it holds."},
 		{"member limits", "You cannot send to `all` or send critical messages."},
 		{"when to report", "Report to the sender of your task with `bus_send_direct` when you are done, blocked, or need a decision. No progress chatter."},
 		{"report fallback", "report to a leader of the space"},
