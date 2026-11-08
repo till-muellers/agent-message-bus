@@ -131,7 +131,7 @@ Feature: Bus tools in the main omp session, presented like omp's own messaging t
     # and the tool takes no after: the model never sees an entry id.
     # The server tool does not ack. In omp the extension excludes the server tool from
     # registerRemoteTools (like bus_spawn_worker) and registers a local tool with the
-    # same name, schema and result. The local tool takes entries from the extension's
+    # same name and description, the schema without after and envelope results. The local tool takes entries from the extension's
     # stream dispatcher, so they are not injected a second time, and acks them.
     # Mirrors omp's IrcBus waiter (irc/bus.ts:187-195).
     # "Queued" below means held in the extension's dispatcher, before pi.sendMessage.
