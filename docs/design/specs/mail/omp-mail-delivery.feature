@@ -26,7 +26,7 @@ Feature: The mail notice and acknowledgement in omp sessions (extension)
     Scenario: An entry into an empty mailbox is injected in full, not as a notice
       Given the "alpha" mailbox of member "worker" is empty
       When leader "lead" sends a direct message "start task 1" to "worker"
-      Then the session receives one "<agent-bus-entry>" message containing "start task 1"
+      Then the session receives one agent-bus entry message containing "start task 1"
       And the session receives no "you have mail" notice
 
     Scenario: The extension does not ask the server for notices
