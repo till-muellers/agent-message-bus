@@ -33,15 +33,15 @@ func topicTools(m *messaging.Service) []Tool {
 func messageTools(m *messaging.Service) []Tool {
 	return []Tool{
 		define(BusSendDirect, "Participants and admins; critical requires a leader or an admin.",
-			"Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, "+
-				"and an agent cannot send a direct message to itself.",
+			"Sends a message to one participant of the space; use bus_send_topic for several. "+
+				"You cannot message yourself, and an admin that has not joined the space is not a participant. Receipts show `live` or `queued` (not connected).",
 			receiptsResult, []string{"space", "to", "body"},
 			map[string]any{"space": spaceProp(), "to": nameProp("Recipient participant"), "body": bodyProp(), "critical": criticalProp()},
 			func(ctx context.Context, p auth.Principal, a directArgs) (any, error) {
 				return sent(m.SendDirect(ctx, p, a.Space, a.To, a.Body, a.Critical))
 			}),
 		define(BusSendTopic, "Participants and admins; only leaders and admins may send to all or send critical.",
-			"Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic.",
+			"Sends a message to every subscriber of the topic except you; every participant gets `all`. Receipts show each subscriber as `live` or `queued` (not connected).",
 			receiptsResult, []string{"space", "topic", "body"},
 			map[string]any{"space": spaceProp(), "topic": topicProp(), "body": bodyProp(), "critical": criticalProp()},
 			func(ctx context.Context, p auth.Principal, a sendTopicArgs) (any, error) {
@@ -58,19 +58,17 @@ func messageTools(m *messaging.Service) []Tool {
 func topicOps(m *messaging.Service) []Tool {
 	return []Tool{
 		topicOp(BusCreateTopic, accessParticipants,
-			"Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. "+
-				"Pitfall: nobody else is notified, so subscribers must be told the topic name.",
+			"Opens a topic and subscribes you (not an admin that has not joined the space). "+
+				"Nobody else is notified: tell them the topic name.",
 			newTopicProps(), m, (*messaging.Service).CreateTopic),
 		topicOp(BusSubscribeTopic, accessSubscribers,
-			"Subscribes the caller to the topic; idempotent. "+
-				"Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it.",
+			"Subscribes you to the topic; idempotent. `all` needs no subscription and cannot be subscribed or unsubscribed.",
 			topicProps(), m, (*messaging.Service).Subscribe),
 		topicOp(BusUnsubscribeTopic, accessSubscribers,
-			"Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed.",
+			"Stops topic deliveries to you; idempotent. `all` cannot be unsubscribed.",
 			topicProps(), m, (*messaging.Service).Unsubscribe),
 		topicOp(BusCloseTopic, "The topic's creator, leaders of the space and admins.",
-			"Closes the topic, notifies subscribers and drops all subscriptions. "+
-				"Pitfall: the all topic cannot be closed, and a closed topic's name can be reused.",
+			"Closes the topic, notifies subscribers and drops all subscriptions; the name can be reused. `all` cannot be closed.",
 			topicProps(), m, (*messaging.Service).CloseTopic),
 	}
 }

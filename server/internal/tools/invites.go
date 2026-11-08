@@ -17,10 +17,10 @@ type inviteArgs struct {
 }
 
 func inviteTools(inv *invites.Service) []Tool {
-	desc := fmt.Sprintf("Returns an invite code that lets member agent <name> join the space, with an optional task "+
-		"delivered as a direct message from you when the code is accepted. Pitfalls: the code is single-use and expires after %d minutes; the user redeems it with "+
-		"/bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; "+
-		"inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes.",
+	desc := fmt.Sprintf("Returns an invite code for member agent `name`, with an optional task delivered to it as a direct message from you "+
+		"when the code is accepted. The code is single-use and expires after %d minutes; the user redeems it with "+
+		"`/bus accept <url> <code>` or `omp --bus-url <url> --bus-accept <code>`, other clients with POST /v1/invites/accept. "+
+		"Inviting a name again gives a new code and another token; bus_revoke_member cancels pending codes.",
 		int(invites.TTL/time.Minute))
 	return []Tool{
 		define(BusInviteMember, accessSpaceLeaders, desc, "{name, space, code, expires_at}",
@@ -37,7 +37,7 @@ func inviteTools(inv *invites.Service) []Tool {
 
 func inviteProps() map[string]any {
 	props := map[string]any{"space": spaceProp(), "name": newNameProp("Member agent")}
-	props["task"] = str(fmt.Sprintf("First prompt for the member, delivered as a direct message from you when the code is accepted; 1..%d bytes.",
+	props["task"] = str(fmt.Sprintf("The member's first task: goal, done criteria and where to report; 1..%d bytes. Arrives as a direct message from you.",
 		domain.MaxBodyBytes))
 	return props
 }

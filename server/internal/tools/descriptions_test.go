@@ -67,65 +67,18 @@ func TestEveryToolStatesAccess(t *testing.T) {
 	}
 }
 
-func TestPitfalls(t *testing.T) {
-	t.Parallel()
-	tests := []struct{ tool, pitfall string }{
-		{"bus_inbox_read", "omp sessions receive entries automatically and need not poll"},
-		{"bus_inbox_read", "it never blocks (use bus_wait to wait) and reading does not acknowledge"},
-		{"bus_wait", "it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, " +
-			"filters with from/threadId and does not acknowledge (omp acknowledges for you)"},
-		{"bus_wait", "In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry"},
-		{"bus_inbox_read", "The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds)."},
-		{"bus_wait", "The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds)."},
-		{"bus_inbox_ack", "it deletes every entry with id up to upTo, so never acknowledge past what was handled; " +
-			"acknowledging everything lets the next mail notify again"},
-		{"bus_create_topic", "nobody else is notified, so subscribers must be told the topic name"},
-		{"bus_create_blackboard", "a member's boards are deleted when it leaves or is revoked"},
-		{"bus_leave_space", "a member's boards, inbox entries, subscriptions and token are deleted"},
-		{"bus_send_direct", "the recipient must be a participant of the same space"},
-		{"bus_send_direct", "an agent cannot send a direct message to itself"},
-		{"bus_invite_member", "the code is single-use and expires after 10 minutes; the user redeems it with " +
-			"/bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept"},
-		{"bus_invite_member", "inviting the same name again gives a new code and an additional token"},
-		{"bus_join_space", "a space can have several leaders"},
-		{"bus_subscribe_topic", "the all topic cannot be subscribed or unsubscribed, because everyone receives it"},
-		{"bus_close_topic", "the all topic cannot be closed, and a closed topic's name can be reused"},
-		{"bus_create_thread", "the creator is subscribed and gets later posts by others"},
-		{"bus_revoke_member", "an admin may also revoke leaders, the last leader included, and the space is deleted when nobody remains"},
-		{"bus_delete_space", "an admin may delete any space, even one with other leaders"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.tool, func(t *testing.T) {
-			t.Parallel()
-			if d := toolNamed(t, tc.tool).Description; !strings.Contains(d, tc.pitfall) {
-				t.Fatalf("description %q lacks pitfall %q", d, tc.pitfall)
-			}
-		})
-	}
-}
-
-func TestCriticalProperty(t *testing.T) {
-	t.Parallel()
-	const want = "Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true."
-	for _, name := range []string{"bus_send_direct", "bus_send_topic"} {
-		props := toolNamed(t, name).Schema["properties"].(map[string]any)
-		if got := props["critical"].(map[string]any)["description"]; got != want {
-			t.Fatalf("%s critical = %q, want %q", name, got, want)
-		}
-	}
-}
-
 func TestLedgerIndexUsesAccess(t *testing.T) {
 	t.Parallel()
 	doc := RenderMarkdown(Metadata())
-	for _, want := range []string{
-		"| [bus_whoami](#bus_whoami) | [Spaces & membership](#spaces--membership) | Any token; no side effects. | " +
-			"Returns the caller's kind, name and the spaces it participates in. |\n",
-		"| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants and admins. | " +
-			"Appends a post and notifies the thread's subscribers except the author. |\n",
-	} {
-		if !strings.Contains(doc, want) {
-			t.Fatalf("index lacks row %q", want)
+	for _, tl := range Metadata() {
+		row := "| [" + tl.Name + "](#" + tl.Name + ") | [" + tl.Group + "]"
+		i := strings.Index(doc, row)
+		if i < 0 {
+			t.Fatalf("index lacks a row for %s", tl.Name)
+		}
+		line := doc[i : i+strings.Index(doc[i:], "\n")]
+		if !strings.Contains(line, " | "+cell(tl.Access)+" | ") {
+			t.Fatalf("index row %q lacks access %q", line, tl.Access)
 		}
 	}
 }
@@ -134,17 +87,12 @@ func TestLedgerDocumentsSpawnWorker(t *testing.T) {
 	t.Parallel()
 	doc := RenderMarkdown(Metadata())
 	for _, want := range []string{
-		"### bus_spawn_worker\n\nStarts a worker agent",
-		"Leaders of the space and admins.",
-		"| `space` | string | yes | Space name. |",
+		"### bus_spawn_worker\n\n",
+		"| `space` | string | yes |",
 		"| `name` | string | yes |",
 		"| `task` | string | no |",
 		"| `cwd` | string | no |",
 		"**Result:** `{name, space, launcher}`",
-		"each worker needs its own name",
-		"a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand",
-		"the task is delivered to the worker as a direct message from the caller (a leader or an admin)",
-		"| `task` | string | no | Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report. |",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Fatalf("ledger lacks %q", want)

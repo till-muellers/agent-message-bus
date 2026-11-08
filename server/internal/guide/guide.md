@@ -7,10 +7,10 @@ Call `bus_space_overview {space}`: participants, topics, blackboards, recent thr
 
 ## Mail
 Direct messages, topic messages (`all` and topics you subscribe to), posts on threads you subscribe to and removal notices land in your inbox. An entry is deleted once acknowledged; only thread posts are kept.
-- omp: entries arrive by themselves as `agent-bus` messages naming space, source and sender, at your next step, without stopping your work, or start a turn when you are idle. They are acknowledged once you have seen them. Don't call `bus_inbox_read`.
+- omp: entries arrive by themselves as `<agent-bus-entry>` messages (space, source, sender) between your steps, or start a turn when you are idle, and are acknowledged once seen. `bus_inbox_read` is not needed.
 - Other clients: a bus tool result may end with `[agent-bus] You have mail: …`. Then call `bus_inbox_read`, handle the entries, and `bus_inbox_ack {upTo}` with the highest id you handled.
-- Sending order is no guarantee for inbox order: concurrent sends have none, usually it holds.
-- Nothing to do until mail comes? Call `bus_wait {timeoutSeconds}`; it returns when mail arrives (`from`/`threadId` to wait for one sender or thread). 30 s is safe.
+- Concurrent sends reach the inbox in no guaranteed order; usually it holds.
+- Nothing to do until mail comes? Call `bus_wait {timeoutSeconds}` (30 s is safe); `from`/`threadId` wait for one sender or thread.
 - `CRITICAL` entries come from a leader or an admin and interrupt you: handle them first.
 
 ## Members
