@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { createClient, type FetchLike, type RemoteTool } from "../../extension/lib/bus/client.ts";
 import type { JsonSchema } from "../../extension/lib/bus/schema.ts";
+import { envelope } from "../../extension/lib/render/envelope.ts";
 import { registerRemoteTools, type RemoteToolsOptions } from "../../extension/lib/tools/remote-tools.ts";
 import { entry, errorResponse, fakeComponents, type FakeComponent, URL_, z } from "../fakes.ts";
 
@@ -133,7 +134,7 @@ describe("registerRemoteTools", () => {
 		expect(await register({ wait })).toBe(3);
 		expect(options.state.names).toEqual(["bus_inbox_read", "bus_send", "bus_wait"]);
 		const out = await tools[2].execute("id", {});
-		expect(JSON.parse(out.content[0].text)).toEqual([entry(1)]);
+		expect(out.content[0].text).toBe(envelope(entry(1)));
 		expect(urls).toEqual([`${URL_}/v1/tools`]);
 	});
 

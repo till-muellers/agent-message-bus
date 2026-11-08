@@ -1,5 +1,6 @@
 /**
- * `bus_wait` in omp: a local tool with the server tool's name, description and schema (`docs/design/arch/client.md` §3.4).
+ * `bus_wait` in omp: a local tool with the server tool's name and description and its schema without `after`; it returns the
+ * entries as the same envelopes push delivery shows, `[]` on timeout (`docs/design/arch/client.md` §3.4).
  * With the session's own inbox stream it returns the entries the inbox ledger still holds at once, else it waits in the
  * ledger, so the entries it returns never reach omp a second time; the ledger counts them as consumed. Without one it
  * forwards the call to the server's `bus_wait`, which acks nothing. What a forwarded call returns is claimed from the
@@ -11,8 +12,9 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { BusError, type RemoteTool } from "../bus/client.ts";
 import type { Entry } from "../bus/entry.ts";
-import { toZod } from "../bus/schema.ts";
+import { type JsonSchema, toZod } from "../bus/schema.ts";
 import type { WaitFilter } from "../delivery/waiters.ts";
+import { envelope } from "../render/envelope.ts";
 import { presentationOf } from "./tool-policy.ts";
 import { type ToolResult, toolResult } from "./tool-result.ts";
 
@@ -94,16 +96,28 @@ async function wait(args: WaitArgs, deps: WaitToolDeps, signal?: AbortSignal): P
  */
 export type WaitToolDefinition = Parameters<ExtensionAPI["registerTool"]>[0] & { interruptible: true };
 
+/** The schema the model sees: the server's without the `after` cursor, since the model never sees an entry id. */
+function modelSchema(schema: JsonSchema): JsonSchema {
+	const { after: _after, ...properties } = schema.properties ?? {};
+	return { ...schema, properties };
+}
+
+/** The entries `bus_wait` found as the envelopes push delivery shows; no entries (a timeout) and other answers stay JSON. */
+function envelopes(value: unknown): string | undefined {
+	if (!Array.isArray(value) || value.length === 0 || !value.every(isEntry)) return undefined;
+	return value.map(envelope).join("\n");
+}
+
 /** The local `bus_wait` of a main session, built on the server tool `tool` from `GET /v1/tools`, whose name it keeps. */
 export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool, deps: WaitToolDeps): WaitToolDefinition {
 	return {
 		name: tool.name,
 		label: tool.name,
 		description: tool.description,
-		parameters: toZod(tool.inputSchema, pi.zod),
+		parameters: toZod(modelSchema(tool.inputSchema), pi.zod),
 		...presentationOf(tool.name),
 		interruptible: true,
 		execute: (_toolCallId: string, params: WaitArgs, signal: AbortSignal | undefined): Promise<ToolResult> =>
-			toolResult(() => wait(params, deps, signal)),
+			toolResult(() => wait(params, deps, signal), envelopes),
 	};
 }
