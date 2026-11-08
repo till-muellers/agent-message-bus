@@ -92,7 +92,7 @@ describe("registerRemoteTools", () => {
 		await expect(tools[0].execute("id", {})).rejects.toThrow("Not logged in to the agent bus. Run /bus login <url> <token>.");
 		token = "two";
 		const out = await tools[0].execute("id", {});
-		expect(out.content[0].text).toBe(JSON.stringify([{ name: "demo" }], null, 2));
+		expect(out.content[0].text).toBe(JSON.stringify([{ name: "demo" }]));
 		expect(seen).toEqual(["Bearer two"]);
 	});
 
@@ -170,7 +170,7 @@ describe("registerRemoteTools", () => {
 			url.endsWith("/v1/tools") ? Response.json([listTool("bus_whoami")]) : Response.json({ result: { name: "w" }, mail: { waiting: 2, critical: 0, spaces: ["demo"] } });
 		const { tools, register } = setup(fetchFn);
 		await register();
-		expect((await tools[0].execute("id", {})).content[0].text).toBe(JSON.stringify({ name: "w" }, null, 2));
+		expect((await tools[0].execute("id", {})).content[0].text).toBe(JSON.stringify({ name: "w" }));
 	});
 
 	test("a send result reads as its delivery receipt; a result without receipts, or of another tool, stays JSON", async () => {
@@ -187,8 +187,8 @@ describe("registerRemoteTools", () => {
 		await register();
 		const [direct, topic, post] = tools;
 		expect((await direct.execute("id", { space: "alpha", to: "peer", body: "hi" })).content[0].text).toBe("Queued for peer; it is not connected right now.");
-		expect((await topic.execute("id", { space: "alpha", topic: "dev", body: "hi" })).content[0].text).toBe(JSON.stringify({ ok: true }, null, 2));
-		expect((await post.execute("id", { space: "alpha", threadId: 1, body: "hi" })).content[0].text).toBe(JSON.stringify(results.bus_add_post, null, 2));
+		expect((await topic.execute("id", { space: "alpha", topic: "dev", body: "hi" })).content[0].text).toBe(JSON.stringify({ ok: true }));
+		expect((await post.execute("id", { space: "alpha", threadId: 1, body: "hi" })).content[0].text).toBe(JSON.stringify(results.bus_add_post));
 	});
 
 	test("the send tools render their call as an outgoing card from the session's agent; other tools keep omp's", async () => {

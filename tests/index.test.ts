@@ -585,7 +585,7 @@ describe("accepted identity", () => {
 		expect(JSON.parse(await readFile(join(dir, "sessions", "s1.json"), "utf8"))).toEqual({ url: URL_, token: "acc-tok" });
 		expect(toolListAuth(bus)).toEqual(["Bearer acc-tok"]);
 		expect(app.active()).toEqual(["read", "bus_foreign", "bus_list_spaces", "bus_spawn_worker"]);
-		expect(out.content[0].text).toBe(JSON.stringify("Bearer acc-tok", null, 2));
+		expect(out.content[0].text).toBe(JSON.stringify("Bearer acc-tok"));
 	});
 
 	test("/bus accept without a session file joins for this session only and says so", async () => {
@@ -857,7 +857,7 @@ describe("tool activation and credentials", () => {
 		expect(app.active()).toEqual(["read", "bus_list_spaces", "bus_spawn_worker"]);
 		const out = await app.tool("bus_list_spaces").execute("id", {});
 		await app.emit("session_shutdown");
-		expect(out.content[0].text).toBe(JSON.stringify("Bearer mem2", null, 2));
+		expect(out.content[0].text).toBe(JSON.stringify("Bearer mem2"));
 		expect(app.tools.map(t => t.name)).toEqual(["bus_spawn_worker", "bus_list_spaces"]);
 		expect(app.notes).toEqual(["Logged out; bus tools deactivated.", "Logged in as member w"]);
 	});
@@ -1186,7 +1186,7 @@ describe("local server", () => {
 		]);
 		expect(await store.load()).toEqual({ url: "http://127.0.0.1:8080", adminToken: "amb_admin_secret" });
 		expect(app.active()).toEqual(["read", "bus_list_spaces", "bus_spawn_worker"]);
-		expect((await app.tool("bus_list_spaces").execute("id", {})).content[0].text).toBe(JSON.stringify("Bearer amb_admin_secret", null, 2));
+		expect((await app.tool("bus_list_spaces").execute("id", {})).content[0].text).toBe(JSON.stringify("Bearer amb_admin_secret"));
 		expect(app.notes[1]).toBe("Agent message bus running at http://127.0.0.1:8080; admin token stored. Run /bus promote <leader-name> to act as a leader.");
 	});
 
