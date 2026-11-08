@@ -9,7 +9,7 @@ describe("envelope", () => {
 		expect(envelope(entry(42, { space: "alpha", from: "peer", body: "can you review?" }))).toBe(
 			[
 				'<agent-bus-entry at="2026-11-08T10:00:00.500Z">',
-				"[agent-bus] alpha · direct · from peer",
+				"alpha · direct · from peer",
 				"can you review?",
 				'Reply: bus_send_direct {space: "alpha", to: "peer"}.',
 				"</agent-bus-entry>",
@@ -19,7 +19,7 @@ describe("envelope", () => {
 
 	test("a critical entry says so in the header line only", () => {
 		const text = envelope(entry(1, { critical: true }));
-		expect(text).toStartWith('<agent-bus-entry at="2026-11-08T10:00:00.500Z">\n[agent-bus] demo · direct · from lead · CRITICAL\n');
+		expect(text).toStartWith('<agent-bus-entry at="2026-11-08T10:00:00.500Z">\ndemo · direct · from lead · CRITICAL\n');
 		expect(text).not.toContain('critical="true"');
 	});
 
@@ -33,12 +33,12 @@ describe("envelope", () => {
 	});
 
 	test.each(["", "t", "yesterday", "2026-11-08 10:00:57Z", "2026-11-08T10:00:57+01:00"])("the time %p leaves the at attribute out", createdAt => {
-		expect(envelope(entry(1, { createdAt }))).toStartWith("<agent-bus-entry>\n[agent-bus] ");
+		expect(envelope(entry(1, { createdAt }))).toStartWith("<agent-bus-entry>\n");
 	});
 
 	test("a topic message points at the topic and at the sender", () => {
 		const text = envelope(entry(2, { type: "topic_message", topic: "dev", from: "peer", space: "alpha" }));
-		expect(text).toContain("\n[agent-bus] alpha · topic #dev · from peer\n");
+		expect(text).toContain("\nalpha · topic #dev · from peer\n");
 		expect(text).toContain('\nReply: bus_send_topic {space: "alpha", topic: "dev"}, or bus_send_direct {space: "alpha", to: "peer"}.\n');
 	});
 
@@ -50,8 +50,8 @@ describe("envelope", () => {
 
 	test("a thread post points at the full thread and at bus_add_post", () => {
 		const text = envelope(entry(3, { type: "thread_post", threadId: 7, threadTitle: "design", blackboard: "plan", space: "alpha" }));
-		expect(text).toContain('\n[agent-bus] alpha · thread 7 "design" on plan · from lead\n');
-		expect(text).toContain('\nFull thread: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.\n');
+		expect(text).toContain('\nalpha · thread 7 "design" on plan · from lead\n');
+		expect(text).toContain('\nEarlier posts: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.\n');
 	});
 
 	test("lifecycle notices have no reply hint, and an entry without a body has no body line", () => {
@@ -61,15 +61,15 @@ describe("envelope", () => {
 			entry(6, { type: "blackboard_removed", blackboard: "bb", body: undefined }),
 		].map(envelope);
 		expect(notices.map(text => text.split("\n").slice(1, -1))).toEqual([
-			["[agent-bus] demo · topic #x closed · from lead"],
-			['[agent-bus] demo · thread 7 "T" removed · from lead'],
-			["[agent-bus] demo · blackboard bb removed · from lead"],
+			["demo · topic #x closed · from lead"],
+			['demo · thread 7 "T" removed · from lead'],
+			["demo · blackboard bb removed · from lead"],
 		]);
 	});
 
 	test("an entry of a type the extension does not know names its type and has no reply hint", () => {
 		const text = envelope(entry(7, { type: "space_renamed" as string as EntryType, body: "demo is now prod" }));
-		expect(text.split("\n").slice(1, -1)).toEqual(["[agent-bus] demo · space_renamed · from lead", "demo is now prod"]);
+		expect(text.split("\n").slice(1, -1)).toEqual(["demo · space_renamed · from lead", "demo is now prod"]);
 	});
 });
 
@@ -85,9 +85,9 @@ describe("post notice", () => {
 		expect(postNotice([post(5, lines(3))])).toBe(
 			[
 				'<agent-bus-entry at="2026-11-08T10:00:00.500Z">',
-				'[agent-bus] alpha · thread 7 "design" on plan · from peer',
+				'alpha · thread 7 "design" on plan · from peer',
 				"line 1\nline 2\nline 3",
-				'Full thread: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.',
+				'Earlier posts: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.',
 				"</agent-bus-entry>",
 			].join("\n"),
 		);
@@ -123,8 +123,8 @@ describe("post notice", () => {
 	test("several posts of a thread are listed in one notice, each with its author, the hint once at the end", () => {
 		const text = postNotice([post(5, "first"), post(6, "second", "lead"), post(7, "third")]);
 		expect(text.match(/<agent-bus-entry /g)?.length).toBe(3);
-		expect(text).toContain('">\n[agent-bus] alpha · thread 7 "design" on plan · from peer\nfirst\n</agent-bus-entry>\n');
-		expect(text).toContain('">\n[agent-bus] alpha · thread 7 "design" on plan · from lead\nsecond\n</agent-bus-entry>\n');
-		expect(text).toEndWith('from peer\nthird\nFull thread: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.\n</agent-bus-entry>');
+		expect(text).toContain('">\nalpha · thread 7 "design" on plan · from peer\nfirst\n</agent-bus-entry>\n');
+		expect(text).toContain('">\nalpha · thread 7 "design" on plan · from lead\nsecond\n</agent-bus-entry>\n');
+		expect(text).toEndWith('from peer\nthird\nEarlier posts: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.\n</agent-bus-entry>');
 	});
 });

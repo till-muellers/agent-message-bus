@@ -1,7 +1,7 @@
 /**
  * The model-facing text of an inbox entry (`docs/design/arch/client.md` §4.2,
  * `omp-rendering.feature` rule 3): one fenced `<agent-bus-entry …>` envelope with the
- * `[agent-bus]` header line, the escaped body and a hint how to answer. Sender, space and
+ * header line, the escaped body and a hint how to answer. Sender, space and
  * criticality come from the entry's fields, never from its body.
  */
 import type { Entry } from "../bus/entry.ts";
@@ -39,7 +39,7 @@ function replyHint(e: Entry): string | undefined {
 			if (e.topic === "all") return `Reply: ${direct}.`;
 			return `Reply: bus_send_topic {space: "${e.space}", topic: "${e.topic}"}, or ${direct}.`;
 		case "thread":
-			return `Full thread: bus_read_thread {space: "${e.space}", threadId: ${e.threadId}}. Answer: bus_add_post {space: "${e.space}", threadId: ${e.threadId}}.`;
+			return `Earlier posts: bus_read_thread {space: "${e.space}", threadId: ${e.threadId}}. Answer: bus_add_post {space: "${e.space}", threadId: ${e.threadId}}.`;
 		case "blackboard":
 		case "other":
 			return undefined;
@@ -53,7 +53,7 @@ function openingTag(e: Entry): string {
 
 /** One fenced entry with the given (already escaped) body and hint. */
 function fence(e: Entry, body: string | undefined, hint: string | undefined): string {
-	const header = `[agent-bus] ${e.space} · ${where(e)} · from ${e.from}${e.critical ? " · CRITICAL" : ""}`;
+	const header = `${e.space} · ${where(e)} · from ${e.from}${e.critical ? " · CRITICAL" : ""}`;
 	const lines = [openingTag(e), header, body, hint, "</agent-bus-entry>"];
 	return lines.filter((line): line is string => line !== undefined).join("\n");
 }

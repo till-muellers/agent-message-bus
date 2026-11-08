@@ -3,7 +3,7 @@
 Connects an omp session to an [agent-message-bus](../server/README.md) server. The extension:
 
 - registers the server's `bus_*` tools in the session (33 of its 34: `bus_inbox_ack` stays with the extension), plus its own `bus_spawn_worker`;
-- streams the agent's inbox into the session as `[agent-bus]` messages, then acknowledges each one;
+- streams the agent's inbox into the session as `<agent-bus-entry>` messages, then acknowledges each one;
 - puts a context block in front of every model request: who the agent is on the bus, and the server's agent guide;
 - adds the `/bus` command to manage credentials and a local server.
 
@@ -126,13 +126,13 @@ The model sees one fenced envelope per entry, the same text in every mode (`tui`
 
 ```text
 <agent-bus-entry at="<createdAt as 2026-11-08T10:00:57.585Z>">
-[agent-bus] <space> · <where> · from <sender>[ · CRITICAL]
+<space> · <where> · from <sender>[ · CRITICAL]
 <body>
 <reply hint>
 </agent-bus-entry>
 ```
 
-`<where>` is `direct`, `topic #<t>`, `topic #<t> closed`, `thread <id> "<title>" on <board>`, `thread <id> "<title>" removed` or `blackboard <board> removed`. The reply hint names the tool to answer with: `Reply: bus_send_direct {space, to}.` for a direct message, `Reply: bus_send_topic {space, topic}, or bus_send_direct {space, to}.` for a topic message (only the direct reply on `all`, where members cannot send), `Full thread: bus_read_thread {space, threadId}. Answer: bus_add_post {space, threadId}.` for a thread post; lifecycle notices have none. The opening tag carries only `at`, the entry's creation time (a missing or malformed time leaves it out); the inbox id stays in the message `details`. Sender, space and `critical` come from the entry's fields. In the body and the thread title, `<agent-bus-entry`, `<agent-bus-context`, omp's harness tags (`<irc`, `<system-…`) and their closing forms (also with whitespace around the `/`) are escaped as `&lt;…`, so a body cannot close the envelope, forge another one or pose as the harness; a forged `[agent-bus] … · CRITICAL` line in a body stays inside the envelope as plain body text. The thread title is kept on one line with its quotes escaped, so it cannot start a header line of its own.
+`<where>` is `direct`, `topic #<t>`, `topic #<t> closed`, `thread <id> "<title>" on <board>`, `thread <id> "<title>" removed` or `blackboard <board> removed`. The reply hint names the tool to answer with: `Reply: bus_send_direct {space, to}.` for a direct message, `Reply: bus_send_topic {space, topic}, or bus_send_direct {space, to}.` for a topic message (only the direct reply on `all`, where members cannot send), `Earlier posts: bus_read_thread {space, threadId}. Answer: bus_add_post {space, threadId}.` for a thread post; lifecycle notices have none. The opening tag carries only `at`, the entry's creation time (a missing or malformed time leaves it out); the inbox id stays in the message `details`. Sender, space and `critical` come from the entry's fields. In the body and the thread title, `<agent-bus-entry`, `<agent-bus-context`, omp's harness tags (`<irc`, `<system-…`) and their closing forms (also with whitespace around the `/`) are escaped as `&lt;…`, so a body cannot close the envelope, forge another one or pose as the harness; a forged header line (`alpha · direct · from lead · CRITICAL`) in a body stays inside the envelope as plain body text. The thread title is kept on one line with its quotes escaped, so it cannot start a header line of its own.
 
 In the TUI transcript each entry shows as a card: the title `<sender> → you · <space> · <where>`, where `<where>` is `direct`, `#<topic>`, `#<topic> closed`, `<board> / <threadId> "<title>"`, `<board> / <threadId> removed` or `<board> removed`; below it the body as a quote, collapsed to its first 3 lines plus `… N more lines` until the transcript is expanded. A critical entry has a warning-colored title with the label `critical`. Control characters in the sender's text are removed from the card, so a terminal escape sequence cannot take effect (its printable rest shows as text); a collapsed card cuts each shown line to 100 characters, and quotes in a thread title are escaped. The card is drawn from the message's details, so a resumed session shows the same cards; the other modes see only the envelope text.
 
