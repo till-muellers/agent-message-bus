@@ -14,7 +14,7 @@ describe("busMessage", () => {
 			display: true,
 			details: {
 				entryIds: [1],
-				entries: [{ id: 1, space: "demo", type: "direct_message", from: "peer", critical: false, class: "queue", createdAt: "t", body: "hi" }],
+				entries: [{ id: 1, space: "demo", type: "direct_message", from: "peer", critical: false, class: "queue", createdAt: "2026-11-08T10:00:00.5Z", body: "hi" }],
 			},
 		});
 	});
