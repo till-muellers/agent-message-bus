@@ -6,13 +6,13 @@ export interface ToolResult {
 }
 
 /**
- * Runs a tool body: its value becomes the text `text` makes of it, else pretty JSON; an error is rethrown as
+ * Runs a tool body: its value becomes the text `text` makes of it, else compact JSON (as the MCP transport sends it); an error is rethrown as
  * `errorMessage` words it.
  */
 export async function toolResult(body: () => Promise<unknown>, text: (value: unknown) => string | undefined = () => undefined): Promise<ToolResult> {
 	try {
 		const value = await body();
-		return { content: [{ type: "text", text: text(value) ?? JSON.stringify(value, null, 2) }] };
+		return { content: [{ type: "text", text: text(value) ?? JSON.stringify(value) }] };
 	} catch (error) {
 		throw new Error(errorMessage(error), { cause: error });
 	}
