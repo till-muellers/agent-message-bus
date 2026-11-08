@@ -16,7 +16,7 @@ func TestPropertyDescriptionsMatchDomainLimits(t *testing.T) {
 	}{
 		{"body", bodyProp(), fmt.Sprintf("1..%d bytes", domain.MaxBodyBytes)},
 		{"title", titleProp(), fmt.Sprintf("1..%d characters", domain.MaxTitleChars)},
-		{"space name", spaceProp(), domain.NamePattern},
+		{"created name", newNameProp("Space"), domain.NamePattern},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

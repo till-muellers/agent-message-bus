@@ -258,7 +258,7 @@ describe("the inbox ledger: blackboard notices", () => {
 		const { it, messages, notices } = ledger("interactive-idle");
 		it.deliver(post(1, 7, { body: Array.from({ length: 50 }, () => "x").join("\n") }));
 		expect(notices()).toEqual([[[1], "aside"]]);
-		expect(messages[0].message.content).toContain("30 lines left out; read the full thread");
+		expect(messages[0].message.content).toContain("30 more lines left out.");
 	});
 
 	test("a critical post is never held and steers in full", () => {

@@ -34,7 +34,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 | `/bus server status` | Shows whether the local server is running. |
 | `/bus help` | Prints usage. |
 
-**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message that carries the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
+**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message whose details carry the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
 
 **Subagents.** A subagent session gets neither `bus_inbox_read`/`bus_inbox_ack` nor an inbox stream; its parent session owns the inbox. `AGENT_BUS_URL`, `AGENT_BUS_TOKEN` and `AGENT_BUS_BIN` are read once at load and removed from the environment, so they are meant for direct-token use. Workers normally join with `/bus accept <url> <code>` or are started by a leader with `/bus spawn`.
 
@@ -48,7 +48,7 @@ Registered by the omp extension only; the server does not serve it.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `name` | string | yes | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `task` | string | no | Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report. |
 | `cwd` | string | no | Working directory, relative to this session's; defaults to this session's. |

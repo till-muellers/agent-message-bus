@@ -17,7 +17,7 @@ function thread(posts: number) {
 	};
 }
 
-const result = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] });
+const result = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }] });
 const view = (value: unknown, expanded = false) => threadView(fakeComponents, result(value), expanded, theme) as unknown as FakeComponent;
 /** Every text of the tree, depth first. */
 const texts = (c: FakeComponent): string[] => (c.kind === "text" ? [c.text ?? ""] : c.children.flatMap(texts));
@@ -52,7 +52,7 @@ describe("the thread view", () => {
 	});
 
 	test("a result that is not a thread is shown as its text", () => {
-		expect(texts(view({ unexpected: true }))).toEqual([JSON.stringify({ unexpected: true }, null, 2)]);
+		expect(texts(view({ unexpected: true }))).toEqual([JSON.stringify({ unexpected: true })]);
 		const error = { content: [{ type: "text" as const, text: "not_found: no thread 9" }] };
 		expect(texts(threadView(fakeComponents, error, false, theme) as unknown as FakeComponent)).toEqual(["not_found: no thread 9"]);
 	});

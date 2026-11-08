@@ -43,9 +43,9 @@ func boardTools(b *blackboards.Service) []Tool {
 			}),
 		boardOp(BusCreateBlackboard, accessParticipants,
 			"Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked.",
-			b, (*blackboards.Service).Create),
+			newBoardProps(), b, (*blackboards.Service).Create),
 		boardOp(BusDeleteBlackboard, "The board's owner, leaders of the space and admins.",
-			"Deletes the blackboard with its threads and notifies thread subscribers.", b, (*blackboards.Service).Delete),
+			"Deletes the blackboard with its threads and notifies thread subscribers.", boardProps(), b, (*blackboards.Service).Delete),
 		define(BusListThreads, accessParticipantsRead, "Lists the blackboard's threads, most recently active first.",
 			"[{id, title, createdBy, posts, lastPostAt}]",
 			boardReq(), boardProps(), func(ctx context.Context, p auth.Principal, a boardArgs) (any, error) {
@@ -67,9 +67,9 @@ func boardTools(b *blackboards.Service) []Tool {
 }
 
 // boardOp binds fn to b only when the tool is called.
-func boardOp(name, access, desc string, b *blackboards.Service,
+func boardOp(name, access, desc string, props map[string]any, b *blackboards.Service,
 	fn func(*blackboards.Service, context.Context, auth.Principal, string, string) error) Tool {
-	return define(name, access, desc, okResult, boardReq(), boardProps(), func(ctx context.Context, p auth.Principal, a boardArgs) (any, error) {
+	return define(name, access, desc, okResult, boardReq(), props, func(ctx context.Context, p auth.Principal, a boardArgs) (any, error) {
 		return done(fn(b, ctx, p, a.Space, a.Blackboard))
 	})
 }
@@ -111,6 +111,9 @@ func threadOp(name, access, desc string, b *blackboards.Service,
 
 func boardProps() map[string]any {
 	return map[string]any{"space": spaceProp(), "blackboard": boardProp()}
+}
+func newBoardProps() map[string]any {
+	return map[string]any{"space": spaceProp(), "blackboard": newNameProp("Blackboard")}
 }
 func boardReq() []string { return []string{"space", "blackboard"} }
 func threadProps() map[string]any {

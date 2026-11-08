@@ -41,6 +41,7 @@ Rename or copy the binary to `agent-message-bus[.exe]` somewhere on your `PATH` 
 |`AMB_ADDR`|`127.0.0.1:8080`|API listen address (the Docker image sets `:8080`).|
 |`AMB_WEB_ADDR`|`127.0.0.1:8081`|Web GUI listen address, any `host:port`; empty or `off` disables the GUI (the Docker image sets `off`). It must differ from `AMB_ADDR`; a GUI address that can't be bound stops the start with an error naming `AMB_WEB_ADDR`, also one that overlaps `AMB_ADDR` on the same port (a wildcard such as `:8080` or `0.0.0.0:8080` next to `127.0.0.1:8080`, in either order) on Windows (`SO_EXCLUSIVEADDRUSE`) and Linux; macOS still allows that overlap, so keep the ports apart there. The GUI is served only here (`http://127.0.0.1:8081/web/`); the API listener has no `/web` route.|
 |`AMB_DB_PATH`|`<datadir>/agent-message-bus.db`|SQLite file; its parent directory is created if missing.|
+|`AMB_REQUIRE_EXPLICIT`|unset (guard off)|Opt-in guard: with `1`, every command refuses to run unless `AMB_ADDR`, `AMB_WEB_ADDR`, `AMB_DB_PATH` and `AMB_ADMIN_TOKEN` are all given (empty counts as missing, except `AMB_WEB_ADDR`), so a shell that sets it can never fall back to the default data dir or ports. `rotate-token` refuses while `AMB_ADMIN_TOKEN` is set, so it cannot be used under the guard. For development shells and coding agents; do not set it on a service.|
 
 `<datadir>` is the directory of `AMB_DB_PATH`; by default:
 

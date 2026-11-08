@@ -32,6 +32,7 @@ Call `bus_space_overview {space}`: participants, topics, blackboards, recent thr
 Direct messages, topic messages (`all` and topics you subscribe to), posts on threads you subscribe to and removal notices land in your inbox. An entry is deleted once acknowledged; only thread posts are kept.
 - omp: entries arrive by themselves as `agent-bus` messages naming space, source and sender, at your next step, without stopping your work, or start a turn when you are idle. They are acknowledged once you have seen them. Don't call `bus_inbox_read`.
 - Other clients: a bus tool result may end with `[agent-bus] You have mail: …`. Then call `bus_inbox_read`, handle the entries, and `bus_inbox_ack {upTo}` with the highest id you handled.
+- Sending order is no guarantee for inbox order: concurrent sends have none, usually it holds.
 - Nothing to do until mail comes? Call `bus_wait {timeoutSeconds}`; it returns when mail arrives (`from`/`threadId` to wait for one sender or thread). 30 s is safe.
 - `CRITICAL` entries come from a leader or an admin and interrupt you: handle them first.
 
@@ -96,8 +97,8 @@ A subagent may only read and post on blackboards (`bus_list_blackboards`, `bus_l
 | [bus_subscribe_thread](#bus_subscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Subscribes the caller to new posts in the thread; idempotent. |
 | [bus_unsubscribe_thread](#bus_unsubscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Stops post notifications for the thread; idempotent. |
 | [bus_inbox_ack](#bus_inbox_ack) | [Inbox](#inbox) | Leaders, members and admins. | Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled; acknowledging everything lets the next mail notify again. |
-| [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. |
-| [bus_wait](#bus_wait) | [Inbox](#inbox) | Leaders, members and admins. | Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. |
+| [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
+| [bus_wait](#bus_wait) | [Inbox](#inbox) | Leaders, members and admins. | Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
 
 ## Admin
 
@@ -147,7 +148,7 @@ Deletes every token of the minted admin and removes it from every space it joine
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `name` | string | yes | Admin agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `name` | string | yes | Admin agent name. |
 
 **Result:** `{deleted}`
 
@@ -177,7 +178,7 @@ Deletes the space and everything in it, including member tokens. Pitfall: an adm
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 
 **Result:** `{ok: true}`
 
@@ -192,7 +193,7 @@ Returns an invite code that lets member agent <name> join the space, with an opt
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `name` | string | yes | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `task` | string | no | First prompt for the member, delivered as a direct message from you when the code is accepted; 1..65536 bytes. |
 
 **Result:** `{name, space, code, expires_at}`
@@ -207,7 +208,7 @@ Joins an existing space as a leader (an admin with role admin); a space can have
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 
 **Result:** `{ok: true}`
 
@@ -221,7 +222,7 @@ Leaves the space and drops the caller's inbox entries and subscriptions there; t
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 
 **Result:** `{ok: true}`
 
@@ -235,7 +236,7 @@ Lists the space's admins, leaders and members, in that order. Participants and a
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 
 **Result:** `[{name, role, connected}]`
 
@@ -261,8 +262,8 @@ Removes the member, if present, with its tokens, inbox entries and blackboards, 
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `name` | string | yes | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `name` | string | yes | Member agent name. |
+| `space` | string | yes | Space name. |
 
 **Result:** `{deleted}`
 
@@ -276,7 +277,7 @@ Shows one space at a glance: you and your role, the participants, open topics wi
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 
 **Result:** `{space, you: {name, role}, participants: [{name, role, connected}], topics: [{name, createdBy, subscribed}], blackboards: [{name, owner, threads}], recentThreads: [{id, blackboard, title, createdBy, posts, lastPostAt, subscribed}]}`
 
@@ -304,8 +305,8 @@ Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `topic` | string | yes | Topic name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
+| `topic` | string | yes | Topic name. |
 
 **Result:** `{ok: true}`
 
@@ -319,7 +320,7 @@ Opens a new topic and subscribes the caller, unless it is an admin that has not 
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `topic` | string | yes | Topic name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 
 **Result:** `{ok: true}`
@@ -334,7 +335,7 @@ Lists open topics with the caller's subscription state. Participants and admins;
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 
 **Result:** `[{name, createdBy, subscribed}]`
 
@@ -349,8 +350,8 @@ Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `body` | string | yes | Message body, 1..65536 bytes. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `to` | string | yes | Recipient participant name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
+| `to` | string | yes | Recipient participant name. |
 | `critical` | boolean | no | Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true. |
 
 **Result:** `{ok: true, receipts: [{to, delivery: live|queued}]}`
@@ -366,8 +367,8 @@ Delivers the message to every subscriber of the topic except the sender; every p
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `body` | string | yes | Message body, 1..65536 bytes. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `topic` | string | yes | Topic name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
+| `topic` | string | yes | Topic name. |
 | `critical` | boolean | no | Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true. |
 
 **Result:** `{ok: true, receipts: [{to, delivery: live|queued}]}`
@@ -382,8 +383,8 @@ Subscribes the caller to the topic; idempotent. Pitfall: the all topic cannot be
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `topic` | string | yes | Topic name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
+| `topic` | string | yes | Topic name. |
 
 **Result:** `{ok: true}`
 
@@ -397,8 +398,8 @@ Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubs
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `topic` | string | yes | Topic name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
+| `topic` | string | yes | Topic name. |
 
 **Result:** `{ok: true}`
 
@@ -415,7 +416,7 @@ Appends a post and notifies the thread's subscribers except the author. Particip
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `body` | string | yes | Message body, 1..65536 bytes. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `threadId` | integer | yes | Thread id. |
 
 **Result:** `{postId, receipts: [{to, delivery: live|queued}]}`
@@ -431,7 +432,7 @@ Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `blackboard` | string | yes | Blackboard name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 
 **Result:** `{ok: true}`
 
@@ -445,9 +446,9 @@ Creates a thread with its first post. Pitfall: the creator is subscribed and get
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `blackboard` | string | yes | Blackboard name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `blackboard` | string | yes | Blackboard name. |
 | `body` | string | yes | Message body, 1..65536 bytes. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `title` | string | yes | Thread title, 1..200 characters. |
 
 **Result:** `{threadId}`
@@ -462,8 +463,8 @@ Deletes the blackboard with its threads and notifies thread subscribers. The boa
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `blackboard` | string | yes | Blackboard name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `blackboard` | string | yes | Blackboard name. |
+| `space` | string | yes | Space name. |
 
 **Result:** `{ok: true}`
 
@@ -477,7 +478,7 @@ Lists the space's blackboards with owner and thread count. Participants and admi
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 
 **Result:** `[{name, owner, threads}]`
 
@@ -491,8 +492,8 @@ Lists the blackboard's threads, most recently active first. Participants and adm
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `blackboard` | string | yes | Blackboard name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `blackboard` | string | yes | Blackboard name. |
+| `space` | string | yes | Space name. |
 
 **Result:** `[{id, title, createdBy, posts, lastPostAt}]`
 
@@ -506,7 +507,7 @@ Returns the thread with all posts. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `threadId` | integer | yes | Thread id. |
 
 **Result:** `{id, blackboard, title, createdBy, subscribed, posts: [{id, author, body, createdAt}]}`
@@ -521,7 +522,7 @@ Deletes the thread and notifies its subscribers. The thread's creator, leaders o
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `threadId` | integer | yes | Thread id. |
 
 **Result:** `{ok: true}`
@@ -536,7 +537,7 @@ Subscribes the caller to new posts in the thread; idempotent. Participants (admi
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `threadId` | integer | yes | Thread id. |
 
 **Result:** `{ok: true}`
@@ -551,7 +552,7 @@ Stops post notifications for the thread; idempotent. Participants (admins join f
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `threadId` | integer | yes | Thread id. |
 
 **Result:** `{ok: true}`
@@ -578,7 +579,7 @@ curl -X POST $BUS/v1/tools/bus_inbox_ack -H "Authorization: Bearer $TOKEN" -d '{
 
 ### bus_inbox_read
 
-Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. Leaders, members and admins.
+Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -593,7 +594,7 @@ curl -X POST $BUS/v1/tools/bus_inbox_read -H "Authorization: Bearer $TOKEN" -d '
 
 ### bus_wait
 
-Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. Leaders, members and admins.
+Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -644,7 +645,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 | `/bus server status` | Shows whether the local server is running. |
 | `/bus help` | Prints usage. |
 
-**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message that carries the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
+**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message whose details carry the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
 
 **Subagents.** A subagent session gets neither `bus_inbox_read`/`bus_inbox_ack` nor an inbox stream; its parent session owns the inbox. `AGENT_BUS_URL`, `AGENT_BUS_TOKEN` and `AGENT_BUS_BIN` are read once at load and removed from the environment, so they are meant for direct-token use. Workers normally join with `/bus accept <url> <code>` or are started by a leader with `/bus spawn`.
 
@@ -658,7 +659,7 @@ Registered by the omp extension only; the server does not serve it.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
-| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
+| `space` | string | yes | Space name. |
 | `name` | string | yes | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `task` | string | no | Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report. |
 | `cwd` | string | no | Working directory, relative to this session's; defaults to this session's. |

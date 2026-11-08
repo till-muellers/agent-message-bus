@@ -454,7 +454,7 @@ describe("bus_wait in omp", () => {
 		description: "Wait",
 		inputSchema: { type: "object", properties: { timeoutSeconds: { type: "integer" }, from: { type: "string" } } },
 	};
-	const resultOf = (out: { content: { text: string }[] }): unknown => JSON.parse(out.content[0].text);
+	const resultOf = (out: { content: { text: string }[] }): string => out.content[0].text;
 
 	async function bootWorker(options: FakeBusOptions, sleep?: BusExtensionOptions["sleep"]) {
 		const bus = fakeBus({ list: [serverWait], ...options });
@@ -471,7 +471,7 @@ describe("bus_wait in omp", () => {
 		const result = app.tool("bus_wait").execute("id", { from: "lead", timeoutSeconds: 5 });
 		stream.push(entry(1, { from: "peer" }));
 		stream.push(entry(2, { from: "lead" }));
-		expect(resultOf(await result)).toEqual([entry(2, { from: "lead" })]);
+		expect(resultOf(await result)).toBe(envelope(entry(2, { from: "lead" })));
 		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(1, { from: "peer" }))]);
 		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
 		await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message })));
@@ -492,7 +492,7 @@ describe("bus_wait in omp", () => {
 			},
 		});
 		await app.warning("invalid token");
-		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toBe(envelope(entry(5)));
 		expect(callsTo(bus, "/v1/tools/bus_wait").map(call => call.body)).toEqual([{ timeoutSeconds: 10 }]);
 		await app.context([{ role: "toolResult", content: "[]" }]);
 		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
@@ -512,7 +512,7 @@ describe("bus_wait in omp", () => {
 		const { options, sleep, retry } = takeover(stream, () => Response.json({ result: [entry(5)] }));
 		const { bus, app } = await bootWorker(options, sleep);
 		await app.warning("another session is already connected as w; inbox not delivered here");
-		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toBe(envelope(entry(5)));
 		retry();
 		await stream.opened;
 		stream.push(entry(5));
@@ -530,7 +530,7 @@ describe("bus_wait in omp", () => {
 		const { options, sleep, retry } = takeover(stream, () => Response.json({ result: [entry(5)] }));
 		const { bus, app } = await bootWorker(options, sleep);
 		await app.warning("another session is already connected as w; inbox not delivered here");
-		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toBe(envelope(entry(5)));
 		retry();
 		await stream.opened;
 		stream.push(entry(5));
@@ -555,7 +555,7 @@ describe("bus_wait in omp", () => {
 		stream.close();
 		await app.warning("invalid token");
 		answer.resolve(Response.json({ result: [entry(5)] }));
-		expect(resultOf(await waiting)).toEqual([entry(6)]);
+		expect(resultOf(await waiting)).toBe(envelope(entry(6)));
 		expect(callsTo(bus, "/v1/tools/bus_wait").map(call => call.body)).toEqual([{ timeoutSeconds: 10 }, { after: 5, timeoutSeconds: 10 }]);
 		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(5))]);
 		await app.emit("session_shutdown");
@@ -585,7 +585,7 @@ describe("accepted identity", () => {
 		expect(JSON.parse(await readFile(join(dir, "sessions", "s1.json"), "utf8"))).toEqual({ url: URL_, token: "acc-tok" });
 		expect(toolListAuth(bus)).toEqual(["Bearer acc-tok"]);
 		expect(app.active()).toEqual(["read", "bus_foreign", "bus_list_spaces", "bus_spawn_worker"]);
-		expect(out.content[0].text).toBe(JSON.stringify("Bearer acc-tok", null, 2));
+		expect(out.content[0].text).toBe(JSON.stringify("Bearer acc-tok"));
 	});
 
 	test("/bus accept without a session file joins for this session only and says so", async () => {
@@ -857,7 +857,7 @@ describe("tool activation and credentials", () => {
 		expect(app.active()).toEqual(["read", "bus_list_spaces", "bus_spawn_worker"]);
 		const out = await app.tool("bus_list_spaces").execute("id", {});
 		await app.emit("session_shutdown");
-		expect(out.content[0].text).toBe(JSON.stringify("Bearer mem2", null, 2));
+		expect(out.content[0].text).toBe(JSON.stringify("Bearer mem2"));
 		expect(app.tools.map(t => t.name)).toEqual(["bus_spawn_worker", "bus_list_spaces"]);
 		expect(app.notes).toEqual(["Logged out; bus tools deactivated.", "Logged in as member w"]);
 	});
@@ -1186,7 +1186,7 @@ describe("local server", () => {
 		]);
 		expect(await store.load()).toEqual({ url: "http://127.0.0.1:8080", adminToken: "amb_admin_secret" });
 		expect(app.active()).toEqual(["read", "bus_list_spaces", "bus_spawn_worker"]);
-		expect((await app.tool("bus_list_spaces").execute("id", {})).content[0].text).toBe(JSON.stringify("Bearer amb_admin_secret", null, 2));
+		expect((await app.tool("bus_list_spaces").execute("id", {})).content[0].text).toBe(JSON.stringify("Bearer amb_admin_secret"));
 		expect(app.notes[1]).toBe("Agent message bus running at http://127.0.0.1:8080; admin token stored. Run /bus promote <leader-name> to act as a leader.");
 	});
 

@@ -75,6 +75,8 @@ func TestPitfalls(t *testing.T) {
 		{"bus_wait", "it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, " +
 			"filters with from/threadId and does not acknowledge (omp acknowledges for you)"},
 		{"bus_wait", "In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry"},
+		{"bus_inbox_read", "The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds)."},
+		{"bus_wait", "The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds)."},
 		{"bus_inbox_ack", "it deletes every entry with id up to upTo, so never acknowledge past what was handled; " +
 			"acknowledging everything lets the next mail notify again"},
 		{"bus_create_topic", "nobody else is notified, so subscribers must be told the topic name"},
@@ -134,7 +136,7 @@ func TestLedgerDocumentsSpawnWorker(t *testing.T) {
 	for _, want := range []string{
 		"### bus_spawn_worker\n\nStarts a worker agent",
 		"Leaders of the space and admins.",
-		"| `space` | string | yes | Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |",
+		"| `space` | string | yes | Space name. |",
 		"| `name` | string | yes |",
 		"| `task` | string | no |",
 		"| `cwd` | string | no |",

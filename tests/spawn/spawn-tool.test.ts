@@ -11,7 +11,7 @@ describe("bus_spawn_worker", () => {
 		expect(tool.description.startsWith("Starts a worker agent")).toBe(true);
 		expect(tool.description.endsWith("Leaders of the space and admins.")).toBe(true);
 		const properties = toJson(tool.parameters as unknown as FakeNode).properties ?? {};
-		expect(properties.space?.description).toBe("Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$.");
+		expect(properties.space?.description).toBe("Space name.");
 		expect(properties.task?.description).toBe("Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report.");
 	});
 
