@@ -29,7 +29,7 @@ const DESCRIPTION =
 const PARAMETERS: JsonSchema = {
 	type: "object",
 	properties: {
-		space: { type: "string", description: "Space name, matching ^[a-z0-9][a-z0-9_-]{0,62}$." },
+		space: { type: "string", description: "Space name." },
 		name: { type: "string", description: "Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$." },
 		task: { type: "string", description: "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report." },
 		cwd: { type: "string", description: "Working directory, relative to this session's; defaults to this session's." },

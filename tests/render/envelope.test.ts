@@ -8,7 +8,7 @@ describe("envelope", () => {
 	test("a direct message names the sender and says how to answer it", () => {
 		expect(envelope(entry(42, { space: "alpha", from: "peer", body: "can you review?" }))).toBe(
 			[
-				'<agent-bus-entry space="alpha" type="direct_message" from="peer" id="42">',
+				'<agent-bus-entry at="2026-11-08T10:00:00.500Z">',
 				"[agent-bus] alpha · direct · from peer",
 				"can you review?",
 				'Reply: bus_send_direct {space: "alpha", to: "peer"}.',
@@ -17,9 +17,23 @@ describe("envelope", () => {
 		);
 	});
 
-	test("a critical entry says so on the tag and in the header line", () => {
+	test("a critical entry says so in the header line only", () => {
 		const text = envelope(entry(1, { critical: true }));
-		expect(text).toStartWith('<agent-bus-entry space="demo" type="direct_message" from="lead" id="1" critical="true">\n[agent-bus] demo · direct · from lead · CRITICAL\n');
+		expect(text).toStartWith('<agent-bus-entry at="2026-11-08T10:00:00.500Z">\n[agent-bus] demo · direct · from lead · CRITICAL\n');
+		expect(text).not.toContain('critical="true"');
+	});
+
+	test.each([
+		["2026-11-08T10:00:57.585123456Z", "2026-11-08T10:00:57.585Z"],
+		["2026-11-08T10:00:57.5Z", "2026-11-08T10:00:57.500Z"],
+		["2026-11-08T10:00:57Z", "2026-11-08T10:00:57.000Z"],
+		["2026-11-08T10:00:57.585Z", "2026-11-08T10:00:57.585Z"],
+	])("the time %s is shown as %s", (createdAt, at) => {
+		expect(envelope(entry(1, { createdAt }))).toStartWith(`<agent-bus-entry at="${at}">\n`);
+	});
+
+	test.each(["", "t", "yesterday", "2026-11-08 10:00:57Z", "2026-11-08T10:00:57+01:00"])("the time %p leaves the at attribute out", createdAt => {
+		expect(envelope(entry(1, { createdAt }))).toStartWith("<agent-bus-entry>\n[agent-bus] ");
 	});
 
 	test("a topic message points at the topic and at the sender", () => {
@@ -70,7 +84,7 @@ describe("post notice", () => {
 	test("a short post is shown whole, naming board, thread and author", () => {
 		expect(postNotice([post(5, lines(3))])).toBe(
 			[
-				'<agent-bus-entry space="alpha" type="thread_post" from="peer" id="5">',
+				'<agent-bus-entry at="2026-11-08T10:00:00.500Z">',
 				'[agent-bus] alpha · thread 7 "design" on plan · from peer',
 				"line 1\nline 2\nline 3",
 				'Full thread: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.',
@@ -84,21 +98,22 @@ describe("post notice", () => {
 		expect(text).toContain("\nline 1\n");
 		expect(text).toContain("\nline 20\n");
 		expect(text).not.toContain("line 21");
-		expect(text).toContain('\n180 lines left out; read the full thread with bus_read_thread {space: "alpha", threadId: 7}.\n');
+		expect(text).toContain("\n180 more lines left out.\n");
+		expect(text).not.toContain("read the full thread");
 	});
 
 	test("a post over 2 KiB is cut even when it has few lines", () => {
 		const long = `${"a".repeat(1500)}\n${"b".repeat(1500)}\nc`;
 		const text = postNotice([post(5, long)]);
-		expect(text).toContain(`\n${"a".repeat(1500)}\n2 lines left out;`);
+		expect(text).toContain(`\n${"a".repeat(1500)}\n2 more lines left out.`);
 		const oneLine = postNotice([post(6, "x".repeat(5000))]);
-		expect(oneLine).toContain(`\n${"x".repeat(2048)}\n1 line left out;`);
+		expect(oneLine).toContain(`\n${"x".repeat(2048)}\n1 more line left out.`);
 		expect(oneLine).not.toContain("x".repeat(2049));
 	});
 
 	test("a cut never splits a character outside the BMP", () => {
 		const text = postNotice([post(5, `${"x".repeat(2047)}😀${"y".repeat(100)}`)]);
-		expect(text).toContain(`\n${"x".repeat(2047)}\n1 line left out;`);
+		expect(text).toContain(`\n${"x".repeat(2047)}\n1 more line left out.`);
 	});
 
 	test("a cut post is still escaped", () => {
@@ -108,8 +123,8 @@ describe("post notice", () => {
 	test("several posts of a thread are listed in one notice, each with its author, the hint once at the end", () => {
 		const text = postNotice([post(5, "first"), post(6, "second", "lead"), post(7, "third")]);
 		expect(text.match(/<agent-bus-entry /g)?.length).toBe(3);
-		expect(text).toContain('id="5">\n[agent-bus] alpha · thread 7 "design" on plan · from peer\nfirst\n</agent-bus-entry>\n');
-		expect(text).toContain('id="6">\n[agent-bus] alpha · thread 7 "design" on plan · from lead\nsecond\n</agent-bus-entry>\n');
+		expect(text).toContain('">\n[agent-bus] alpha · thread 7 "design" on plan · from peer\nfirst\n</agent-bus-entry>\n');
+		expect(text).toContain('">\n[agent-bus] alpha · thread 7 "design" on plan · from lead\nsecond\n</agent-bus-entry>\n');
 		expect(text).toEndWith('from peer\nthird\nFull thread: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.\n</agent-bus-entry>');
 	});
 });

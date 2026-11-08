@@ -68,6 +68,11 @@ Feature: How bus entries look in the omp transcript and in the model's context
       Then the model context contains an envelope from "peer" in space "alpha"
       And the envelope says to reply with bus_send_direct to "peer" in space "alpha"
 
+    Scenario: The envelope carries the time of the entry and nothing the header already says
+      When "peer" sends a direct message "can you review?" to "worker"
+      Then the envelope opening carries only the creation time as an ISO-8601 UTC time with three fraction digits
+      And the envelope does not repeat space, type, sender, entry id or criticality outside the header line
+
     Scenario: The envelope for a topic message points at the topic
       Given member "worker" is subscribed to topic "dev"
       When "peer" sends "build is red" to topic "dev"

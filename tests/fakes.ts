@@ -116,7 +116,7 @@ export function liveStream() {
 }
 
 export function entry(id: number, extra: Partial<Entry> = {}): Entry {
-	return { id, space: "demo", type: "direct_message", from: "lead", critical: false, class: "queue", body: `body ${id}`, createdAt: "t", ...extra };
+	return { id, space: "demo", type: "direct_message", from: "lead", critical: false, class: "queue", body: `body ${id}`, createdAt: "2026-11-08T10:00:00.5Z", ...extra };
 }
 
 export function frame(e: Entry): string {

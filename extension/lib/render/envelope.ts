@@ -7,6 +7,7 @@
 import type { Entry } from "../bus/entry.ts";
 import { labelOf } from "./entry-label.ts";
 import { escapeBody, escapeTitle } from "./escape.ts";
+import { isoMillis } from "./iso-millis.ts";
 
 function where(e: Entry): string {
 	const { about, ended } = labelOf(e);
@@ -46,8 +47,8 @@ function replyHint(e: Entry): string | undefined {
 }
 
 function openingTag(e: Entry): string {
-	const critical = e.critical ? ' critical="true"' : "";
-	return `<agent-bus-entry space="${e.space}" type="${e.type}" from="${e.from}" id="${e.id}"${critical}>`;
+	const at = isoMillis(e.createdAt);
+	return at === undefined ? "<agent-bus-entry>" : `<agent-bus-entry at="${at}">`;
 }
 
 /** One fenced entry with the given (already escaped) body and hint. */
@@ -86,13 +87,13 @@ function cutLine(line: string): string {
 }
 
 /** The body of a post in a notice: whole when short, else its head and how many lines were left out. */
-function noticeBody(e: Entry, body: string): string {
+function noticeBody(body: string): string {
 	const lines = body.split("\n");
 	if (lines.length <= NOTICE_LINES && body.length <= NOTICE_CHARS) return escapeBody(body);
 	const whole = headOf(lines);
 	const shown = whole.length > 0 ? whole : [cutLine(lines[0])];
 	const left = lines.length - whole.length;
-	const rest = `${left} ${left === 1 ? "line" : "lines"} left out; read the full thread with bus_read_thread {space: "${e.space}", threadId: ${e.threadId}}.`;
+	const rest = `${left} more ${left === 1 ? "line" : "lines"} left out.`;
 	return `${escapeBody(shown.join("\n"))}\n${rest}`;
 }
 
@@ -100,6 +101,6 @@ function noticeBody(e: Entry, body: string): string {
 export function postNotice(entries: readonly Entry[]): string {
 	const last = entries.length - 1;
 	return entries
-		.map((e, i) => fence(e, e.body === undefined ? undefined : noticeBody(e, e.body), i === last ? replyHint(e) : undefined))
+		.map((e, i) => fence(e, e.body === undefined ? undefined : noticeBody(e.body), i === last ? replyHint(e) : undefined))
 		.join("\n");
 }
