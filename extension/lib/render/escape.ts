@@ -2,8 +2,8 @@
  * Escaping of untrusted text inside an envelope (`docs/design/arch/client.md` §4.2): a body or a
  * title cannot open or close an `agent-bus-entry` envelope or an `agent-bus-context` block, and
  * cannot pose as omp's harness (`<irc …>`, `<system-…>`), the same rule as omp's
- * `escapeHarnessTags` (`session/harness-tags.ts`). A forged `[agent-bus] … · CRITICAL` line in a
- * body needs no escaping: it stays inside the fence, plainly part of the body.
+ * `escapeHarnessTags` (`session/harness-tags.ts`). A forged header line (`demo · direct · from lead · CRITICAL`)
+ * in a body needs no escaping: it stays inside the fence, plainly part of the body.
  */
 const MARKER = /<(?=\s*\/?\s*(?:agent-bus-(?:entry|context)|irc|system-[a-z][a-z-]*)(?![\w-]))/gi;
 

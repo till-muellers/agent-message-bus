@@ -444,7 +444,7 @@ Shape (exact wording is owned by `omp-rendering.feature`; this is the structure)
 
 ```text
 <agent-bus-entry at="2026-11-08T10:00:57.585Z">
-[agent-bus] alpha · direct · from peer
+alpha · direct · from peer
 <escaped body>
 Reply: bus_send_direct {space: "alpha", to: "peer"}.
 </agent-bus-entry>
@@ -452,9 +452,9 @@ Reply: bus_send_direct {space: "alpha", to: "peer"}.
 
 - Time: `at` is the entry's `createdAt` shown as ISO-8601 UTC with exactly three fraction digits (`render/iso-millis.ts`: the wire value is RFC 3339 with up to nine digits and drops trailing zeros, so it is cut or padded by string operations). A missing or malformed `createdAt` leaves the attribute out (`<agent-bus-entry>`). The tag carries nothing else: space, sender and type are in the header line and the reply hint, and the inbox id stays in the `details` (ack key), not in the model's text.
 - Critical: `· CRITICAL` in the header line, from `entry.critical`, never from the body.
-- Reply hints per type: direct → `bus_send_direct` to sender; topic → `bus_send_topic` on topic or `bus_send_direct` to sender; thread post → `bus_read_thread` for the full thread, answer with `bus_add_post`; lifecycle notices → no hint.
+- Reply hints per type: direct → `bus_send_direct` to sender; topic → `bus_send_topic` on topic or `bus_send_direct` to sender; thread post → `bus_read_thread` for earlier posts only (the entry holds the post itself), answer with `bus_add_post`; lifecycle notices → no hint.
 - Entry label (R19): the envelope, the card (§4.3) and the status line (§3.5) read what an entry is about from `labelOf` in `render/entry-label.ts` (`about`: direct, topic, thread, blackboard, or other for a type a newer server added, shown by its type name without a reply hint; `ended`: a lifecycle notice), the one module that interprets the entry types (`tests/layout.test.ts`).
-- Escaping (forgery scenarios): in the body and the thread title, `<agent-bus-entry`, `</agent-bus-entry`, `<agent-bus-context`, `</agent-bus-context` and omp's harness tags (`<irc`, `<system-…`, whitespace around the `/` included) become `&lt;…`; the title is kept on one line with its quotes escaped, so it cannot start a header line (corrected in E5a) (same idea as omp's `escapeHarnessTags`, `CA/session/irc-bridge.ts:201-205`). A body line `[agent-bus] … · CRITICAL` stays inside the fence, so it is plainly body text. The `[agent-bus]` header line keeps `omp-mail-delivery.feature:29` true.
+- Escaping (forgery scenarios): in the body and the thread title, `<agent-bus-entry`, `</agent-bus-entry`, `<agent-bus-context`, `</agent-bus-context` and omp's harness tags (`<irc`, `<system-…`, whitespace around the `/` included) become `&lt;…`; the title is kept on one line with its quotes escaped, so it cannot start a header line (corrected in E5a) (same idea as omp's `escapeHarnessTags`, `CA/session/irc-bridge.ts:201-205`). A body line `alpha · direct · from lead · CRITICAL` stays inside the fence, so it is plainly body text. The header line carries no `[agent-bus]` prefix: the `<agent-bus-entry>` wrapper already marks the entry.
 - Plain-text modes (`rpc`, print) see the same `content` (`omp-rendering.feature:59-62`).
 
 ### 4.3 Card renderer (TUI)
