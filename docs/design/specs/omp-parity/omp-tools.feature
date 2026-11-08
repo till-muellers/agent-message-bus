@@ -127,6 +127,8 @@ Feature: Bus tools in the main omp session, presented like omp's own messaging t
 
     # One contract for every client, owned by the mail BA (docs/design/specs/mail/analysis.md §5):
     #   bus_wait {timeoutSeconds 1..300 (default 30), from?, threadId?, after?} -> [entries], [] on timeout.
+    # In omp the model gets the entries as the envelopes push delivery shows (omp-rendering.feature)
+    # and the tool takes no after: the model never sees an entry id.
     # The server tool does not ack. In omp the extension excludes the server tool from
     # registerRemoteTools (like bus_spawn_worker) and registers a local tool with the
     # same name, schema and result. The local tool takes entries from the extension's
@@ -141,14 +143,14 @@ Feature: Bus tools in the main omp session, presented like omp's own messaging t
       Given member "worker" has no undelivered entries
       When member "worker" calls bus_wait
       And "lead" then sends a direct message "go" to "worker"
-      Then bus_wait returns an array with that entry
+      Then bus_wait returns the envelope of that entry
       And the entry is not injected into the session a second time
       And the entry counts as consumed for the ack watermark
 
     Scenario: bus_wait returns at once with the entries still held by the dispatcher
       Given entries "e1" and "e2" for "worker" are held by the dispatcher and not yet handed to omp
       When member "worker" calls bus_wait
-      Then bus_wait returns "e1, e2" immediately
+      Then bus_wait returns the envelopes of "e1" and "e2" immediately
       And neither is handed to omp afterwards
 
     Scenario: bus_wait does not return entries already handed to omp
@@ -157,10 +159,14 @@ Feature: Bus tools in the main omp session, presented like omp's own messaging t
       Then bus_wait does not return "e1"
       And "e1" reaches the model as an aside
 
+    Scenario: bus_wait offers no after cursor
+      When the model reads the parameters of bus_wait
+      Then they are timeoutSeconds, from and threadId
+
     Scenario: bus_wait can wait for one sender
       When member "worker" calls bus_wait with from "lead"
       And "lead" sends a direct message to "worker"
-      Then bus_wait returns the entry from "lead"
+      Then bus_wait returns the envelope of the entry from "lead"
 
     Scenario: A queued aside ends the wait
       When member "worker" calls bus_wait with from "lead" and timeoutSeconds 60
@@ -178,7 +184,7 @@ Feature: Bus tools in the main omp session, presented like omp's own messaging t
     Scenario: bus_wait can wait for one thread
       When member "worker" calls bus_wait with threadId 7
       And "peer" adds a post to thread 7
-      Then bus_wait returns that thread_post entry
+      Then bus_wait returns the envelope of that thread_post entry
 
     Scenario: bus_wait times out with an empty array
       When member "worker" calls bus_wait with timeoutSeconds 30

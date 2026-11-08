@@ -454,7 +454,7 @@ describe("bus_wait in omp", () => {
 		description: "Wait",
 		inputSchema: { type: "object", properties: { timeoutSeconds: { type: "integer" }, from: { type: "string" } } },
 	};
-	const resultOf = (out: { content: { text: string }[] }): unknown => JSON.parse(out.content[0].text);
+	const resultOf = (out: { content: { text: string }[] }): string => out.content[0].text;
 
 	async function bootWorker(options: FakeBusOptions, sleep?: BusExtensionOptions["sleep"]) {
 		const bus = fakeBus({ list: [serverWait], ...options });
@@ -471,7 +471,7 @@ describe("bus_wait in omp", () => {
 		const result = app.tool("bus_wait").execute("id", { from: "lead", timeoutSeconds: 5 });
 		stream.push(entry(1, { from: "peer" }));
 		stream.push(entry(2, { from: "lead" }));
-		expect(resultOf(await result)).toEqual([entry(2, { from: "lead" })]);
+		expect(resultOf(await result)).toBe(envelope(entry(2, { from: "lead" })));
 		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(1, { from: "peer" }))]);
 		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
 		await app.context(app.sent.map(sent => ({ role: "custom", ...sent.message })));
@@ -492,7 +492,7 @@ describe("bus_wait in omp", () => {
 			},
 		});
 		await app.warning("invalid token");
-		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toBe(envelope(entry(5)));
 		expect(callsTo(bus, "/v1/tools/bus_wait").map(call => call.body)).toEqual([{ timeoutSeconds: 10 }]);
 		await app.context([{ role: "toolResult", content: "[]" }]);
 		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
@@ -512,7 +512,7 @@ describe("bus_wait in omp", () => {
 		const { options, sleep, retry } = takeover(stream, () => Response.json({ result: [entry(5)] }));
 		const { bus, app } = await bootWorker(options, sleep);
 		await app.warning("another session is already connected as w; inbox not delivered here");
-		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toBe(envelope(entry(5)));
 		retry();
 		await stream.opened;
 		stream.push(entry(5));
@@ -530,7 +530,7 @@ describe("bus_wait in omp", () => {
 		const { options, sleep, retry } = takeover(stream, () => Response.json({ result: [entry(5)] }));
 		const { bus, app } = await bootWorker(options, sleep);
 		await app.warning("another session is already connected as w; inbox not delivered here");
-		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toEqual([entry(5)]);
+		expect(resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }))).toBe(envelope(entry(5)));
 		retry();
 		await stream.opened;
 		stream.push(entry(5));
@@ -555,7 +555,7 @@ describe("bus_wait in omp", () => {
 		stream.close();
 		await app.warning("invalid token");
 		answer.resolve(Response.json({ result: [entry(5)] }));
-		expect(resultOf(await waiting)).toEqual([entry(6)]);
+		expect(resultOf(await waiting)).toBe(envelope(entry(6)));
 		expect(callsTo(bus, "/v1/tools/bus_wait").map(call => call.body)).toEqual([{ timeoutSeconds: 10 }, { after: 5, timeoutSeconds: 10 }]);
 		expect(app.sent.map(s => s.message.content)).toEqual([envelope(entry(5))]);
 		await app.emit("session_shutdown");

@@ -30,7 +30,7 @@ function setup() {
 	};
 	const run = async (): Promise<unknown> => {
 		const [first] = (await tool.execute("id", { timeoutSeconds: 60 }, controller.signal, undefined, undefined as never)).content;
-		return first?.type === "text" ? JSON.parse(first.text) : undefined;
+		return first?.type === "text" ? first.text : undefined;
 	};
 	return { run, handOver, waiters };
 }
@@ -47,7 +47,7 @@ describe("an entry handed to omp while bus_wait runs", () => {
 		const pending = run().then(result => (answer = result));
 		handOver();
 		await flushMicrotasks();
-		expect(answer).toEqual([]);
+		expect(answer).toBe("[]");
 		await pending;
 		expect(waiters.take(entry(5))).toBe(false);
 	});
