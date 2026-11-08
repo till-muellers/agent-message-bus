@@ -18,6 +18,15 @@ func TestRequireExplicit(t *testing.T) {
 	}{
 		{name: "guard unset allows the defaults", guard: "", drop: []string{"AMB_ADDR", "AMB_WEB_ADDR", "AMB_DB_PATH", "AMB_ADMIN_TOKEN"}},
 		{name: "guard 0 allows the defaults", guard: "0", drop: []string{"AMB_ADDR", "AMB_WEB_ADDR", "AMB_DB_PATH", "AMB_ADMIN_TOKEN"}},
+		{name: "empty guard allows the defaults", set: map[string]string{"AMB_REQUIRE_EXPLICIT": ""}, drop: []string{"AMB_ADDR", "AMB_WEB_ADDR", "AMB_DB_PATH", "AMB_ADMIN_TOKEN"}},
+		{
+			name: "guard on names an unset AMB_ADDR", guard: "1", drop: []string{"AMB_ADDR"},
+			wantErr: "AMB_REQUIRE_EXPLICIT is set: AMB_ADDR missing; set all four so the default data dir stays untouched",
+		},
+		{
+			name: "guard on names an unset AMB_WEB_ADDR", guard: "1", drop: []string{"AMB_WEB_ADDR"},
+			wantErr: "AMB_REQUIRE_EXPLICIT is set: AMB_WEB_ADDR missing; set all four so the default data dir stays untouched",
+		},
 		{name: "guard on with all four set", guard: "1"},
 		{name: "guard on accepts an empty AMB_WEB_ADDR", guard: "1", set: map[string]string{"AMB_WEB_ADDR": ""}},
 		{

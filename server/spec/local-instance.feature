@@ -257,8 +257,9 @@ Feature: Local instance management
 
     # An opt-in guard for shells that must never touch the real data dir (coding agents running
     # throwaway servers): set it in their environment, not in the owner's. When it is true (1,
-    # t, true, any ParseBool truth) every command (serve, start, stop, status, admin-token,
-    # rotate-token) needs AMB_ADDR, AMB_WEB_ADDR, AMB_DB_PATH and AMB_ADMIN_TOKEN. A variable
+    # t, true, any ParseBool truth) every command (serve, start, stop, status, admin-token)
+    # needs AMB_ADDR, AMB_WEB_ADDR, AMB_DB_PATH and AMB_ADMIN_TOKEN (rotate-token needs them
+    # too but refuses anyway while AMB_ADMIN_TOKEN is set). A variable
     # counts as given when set; an empty value counts as missing except for AMB_WEB_ADDR (empty
     # disables the GUI). Unset, empty or false leaves the defaults in force.
 
