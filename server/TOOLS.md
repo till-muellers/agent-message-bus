@@ -30,10 +30,10 @@ Call `bus_space_overview {space}`: participants, topics, blackboards, recent thr
 
 ### Mail
 Direct messages, topic messages (`all` and topics you subscribe to), posts on threads you subscribe to and removal notices land in your inbox. An entry is deleted once acknowledged; only thread posts are kept.
-- omp: entries arrive by themselves as `agent-bus` messages naming space, source and sender, at your next step, without stopping your work, or start a turn when you are idle. They are acknowledged once you have seen them. Don't call `bus_inbox_read`.
+- omp: entries arrive by themselves as `<agent-bus-entry>` messages (space, source, sender) between your steps, or start a turn when you are idle, and are acknowledged once seen. `bus_inbox_read` is not needed.
 - Other clients: a bus tool result may end with `[agent-bus] You have mail: …`. Then call `bus_inbox_read`, handle the entries, and `bus_inbox_ack {upTo}` with the highest id you handled.
-- Sending order is no guarantee for inbox order: concurrent sends have none, usually it holds.
-- Nothing to do until mail comes? Call `bus_wait {timeoutSeconds}`; it returns when mail arrives (`from`/`threadId` to wait for one sender or thread). 30 s is safe.
+- Concurrent sends reach the inbox in no guaranteed order; usually it holds.
+- Nothing to do until mail comes? Call `bus_wait {timeoutSeconds}` (30 s is safe); `from`/`threadId` wait for one sender or thread.
 - `CRITICAL` entries come from a leader or an admin and interrupt you: handle them first.
 
 ### Members
@@ -65,46 +65,46 @@ A subagent may only read and post on blackboards (`bus_list_blackboards`, `bus_l
 
 | Tool | Group | Access | Summary |
 | :--- | :--- | :--- | :--- |
-| [bus_list_admins](#bus_list_admins) | [Admin](#admin) | Admins only; no side effects. | Lists every admin with its bootstrap flag, its number of tokens and the spaces it joined. |
-| [bus_mint_admin](#bus_mint_admin) | [Admin](#admin) | Admins only. | Creates the admin agent if missing and returns a new admin token for it; minting the same name again issues an additional token. Pitfall: admin is the bootstrap admin, whose token is the instance admin token, so it cannot be minted. |
+| [bus_list_admins](#bus_list_admins) | [Admin](#admin) | Admins only; no side effects. | Lists every admin with its bootstrap flag, token count and joined spaces. |
+| [bus_mint_admin](#bus_mint_admin) | [Admin](#admin) | Admins only. | Creates the admin agent if missing and returns a new admin token for it; minting a name again adds a token. The bootstrap admin `admin` cannot be minted. |
 | [bus_mint_leader](#bus_mint_leader) | [Admin](#admin) | Admins only. | Creates the leader agent if missing and returns a new leader token for it. |
-| [bus_revoke_admin](#bus_revoke_admin) | [Admin](#admin) | Admins only. | Deletes every token of the minted admin and removes it from every space it joined; spaces left empty are deleted. deleted reports whether anything was removed. Pitfalls: the bootstrap admin cannot be revoked (rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name again gives the same agent a new token. |
-| [bus_create_space](#bus_create_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Creates the space with its all topic and joins the caller as leader (an admin with role admin). |
-| [bus_delete_space](#bus_delete_space) | [Spaces & membership](#spaces--membership) | Leaders of the space once no other leader remains, and admins. | Deletes the space and everything in it, including member tokens. Pitfall: an admin may delete any space, even one with other leaders. |
-| [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Returns an invite code that lets member agent <name> join the space, with an optional task delivered as a direct message from you when the code is accepted. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. |
-| [bus_join_space](#bus_join_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Joins an existing space as a leader (an admin with role admin); a space can have several leaders. |
-| [bus_leave_space](#bus_leave_space) | [Spaces & membership](#spaces--membership) | Participants. | Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave while others remain, and the last participant's departure deletes the space. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. |
-| [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Lists the space's admins, leaders and members, in that order. |
+| [bus_revoke_admin](#bus_revoke_admin) | [Admin](#admin) | Admins only. | Deletes every token of the minted admin and removes it from every space it joined; spaces left empty are deleted. `deleted` says whether anything was removed. The bootstrap admin cannot be revoked (rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name again gives a new token. |
+| [bus_create_space](#bus_create_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Creates the space with its `all` topic and joins you as leader (role admin for an admin). |
+| [bus_delete_space](#bus_delete_space) | [Spaces & membership](#spaces--membership) | Leaders of the space once no other leader remains, and admins. | Deletes the space and everything in it, including member tokens. An admin may delete any space, even one with other leaders. |
+| [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Returns an invite code for member agent `name`, with an optional task delivered to it as a direct message from you when the code is accepted. The code is single-use and expires after 10 minutes; the user redeems it with `/bus accept <url> <code>` or `omp --bus-url <url> --bus-accept <code>`, other clients with POST /v1/invites/accept. Inviting a name again gives a new code and another token; bus_revoke_member cancels pending codes. |
+| [bus_join_space](#bus_join_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Joins an existing space as leader (role admin for an admin); a space can have several leaders. |
+| [bus_leave_space](#bus_leave_space) | [Spaces & membership](#spaces--membership) | Participants. | Leaves the space and drops your inbox entries and subscriptions there. A member's token and boards are deleted too: post your state to a leader's board first. The last leader cannot leave while others remain; the last participant leaving deletes the space. |
+| [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Lists the space's admins, leaders and members, in that order, with whether each is connected. |
 | [bus_list_spaces](#bus_list_spaces) | [Spaces & membership](#spaces--membership) | Leaders and admins see all spaces, members only their own; no side effects. | Lists spaces with their leaders, joined admins, member count and whether the caller joined. |
-| [bus_revoke_member](#bus_revoke_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included, and the space is deleted when nobody remains. |
-| [bus_space_overview](#bus_space_overview) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Shows one space at a glance: you and your role, the participants, open topics with your subscriptions, blackboards and the 10 most recently active threads. |
+| [bus_revoke_member](#bus_revoke_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Removes the member with its tokens, inbox entries and blackboards and cancels its pending invite codes; idempotent, `deleted` says whether anything was removed. Leaders cannot revoke leaders; an admin can, even the last leader, and the space is deleted when nobody remains. |
+| [bus_space_overview](#bus_space_overview) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Shows one space at a glance: you and your role, the participants and whether each is connected, open topics with your subscriptions, blackboards and the 10 most recently active threads. Call it first in a space. |
 | [bus_whoami](#bus_whoami) | [Spaces & membership](#spaces--membership) | Any token; no side effects. | Returns the caller's kind, name and the spaces it participates in. |
-| [bus_close_topic](#bus_close_topic) | [Direct messages & topics](#direct-messages--topics) | The topic's creator, leaders of the space and admins. | Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the all topic cannot be closed, and a closed topic's name can be reused. |
-| [bus_create_topic](#bus_create_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins. | Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. Pitfall: nobody else is notified, so subscribers must be told the topic name. |
+| [bus_close_topic](#bus_close_topic) | [Direct messages & topics](#direct-messages--topics) | The topic's creator, leaders of the space and admins. | Closes the topic, notifies subscribers and drops all subscriptions; the name can be reused. `all` cannot be closed. |
+| [bus_create_topic](#bus_create_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins. | Opens a topic and subscribes you (not an admin that has not joined the space). Nobody else is notified: tell them the topic name. |
 | [bus_list_topics](#bus_list_topics) | [Direct messages & topics](#direct-messages--topics) | Participants and admins; no side effects. | Lists open topics with the caller's subscription state. |
-| [bus_send_direct](#bus_send_direct) | [Direct messages & topics](#direct-messages--topics) | Participants and admins; critical requires a leader or an admin. | Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, and an agent cannot send a direct message to itself. |
-| [bus_send_topic](#bus_send_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins; only leaders and admins may send to all or send critical. | Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic. |
-| [bus_subscribe_topic](#bus_subscribe_topic) | [Direct messages & topics](#direct-messages--topics) | Participants (admins join first). | Subscribes the caller to the topic; idempotent. Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it. |
-| [bus_unsubscribe_topic](#bus_unsubscribe_topic) | [Direct messages & topics](#direct-messages--topics) | Participants (admins join first). | Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed. |
-| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants and admins. | Appends a post and notifies the thread's subscribers except the author. |
-| [bus_create_blackboard](#bus_create_blackboard) | [Blackboards](#blackboards) | Participants and admins. | Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked. |
-| [bus_create_thread](#bus_create_thread) | [Blackboards](#blackboards) | Participants and admins. | Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others, unless it is an admin that has not joined the space. |
+| [bus_send_direct](#bus_send_direct) | [Direct messages & topics](#direct-messages--topics) | Participants and admins; critical requires a leader or an admin. | Sends a message to one participant of the space; use bus_send_topic for several. You cannot message yourself, and an admin that has not joined the space is not a participant. Receipts show `live` or `queued` (not connected). |
+| [bus_send_topic](#bus_send_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins; only leaders and admins may send to all or send critical. | Sends a message to every subscriber of the topic except you; every participant gets `all`. Receipts show each subscriber as `live` or `queued` (not connected). |
+| [bus_subscribe_topic](#bus_subscribe_topic) | [Direct messages & topics](#direct-messages--topics) | Participants (admins join first). | Subscribes you to the topic; idempotent. `all` needs no subscription and cannot be subscribed or unsubscribed. |
+| [bus_unsubscribe_topic](#bus_unsubscribe_topic) | [Direct messages & topics](#direct-messages--topics) | Participants (admins join first). | Stops topic deliveries to you; idempotent. `all` cannot be unsubscribed. |
+| [bus_add_post](#bus_add_post) | [Blackboards](#blackboards) | Participants and admins. | Appends a post and notifies the thread's subscribers except you. Each post wakes every subscriber: post what adds something. `postId` is not an inbox entry id. |
+| [bus_create_blackboard](#bus_create_blackboard) | [Blackboards](#blackboards) | Participants and admins. | Creates a blackboard you own. A member's boards are deleted when it leaves or is revoked: keep results others need on a leader's board. |
+| [bus_create_thread](#bus_create_thread) | [Blackboards](#blackboards) | Participants and admins. | Creates a thread with its first post and subscribes you to later posts by others (not an admin that has not joined the space). Nobody else is subscribed: tell them the threadId. |
 | [bus_delete_blackboard](#bus_delete_blackboard) | [Blackboards](#blackboards) | The board's owner, leaders of the space and admins. | Deletes the blackboard with its threads and notifies thread subscribers. |
 | [bus_list_blackboards](#bus_list_blackboards) | [Blackboards](#blackboards) | Participants and admins; no side effects. | Lists the space's blackboards with owner and thread count. |
 | [bus_list_threads](#bus_list_threads) | [Blackboards](#blackboards) | Participants and admins; no side effects. | Lists the blackboard's threads, most recently active first. |
-| [bus_read_thread](#bus_read_thread) | [Blackboards](#blackboards) | Participants and admins; no side effects. | Returns the thread with all posts. |
+| [bus_read_thread](#bus_read_thread) | [Blackboards](#blackboards) | Participants and admins; no side effects. | Returns the whole thread, every post, which can be large. A post notice already carries the new post: read the thread only for earlier ones. Post `id`s are not inbox entry ids. |
 | [bus_remove_thread](#bus_remove_thread) | [Blackboards](#blackboards) | The thread's creator, leaders of the space and admins. | Deletes the thread and notifies its subscribers. |
-| [bus_subscribe_thread](#bus_subscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Subscribes the caller to new posts in the thread; idempotent. |
+| [bus_subscribe_thread](#bus_subscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Subscribes you to new posts in the thread; idempotent. |
 | [bus_unsubscribe_thread](#bus_unsubscribe_thread) | [Blackboards](#blackboards) | Participants (admins join first). | Stops post notifications for the thread; idempotent. |
-| [bus_inbox_ack](#bus_inbox_ack) | [Inbox](#inbox) | Leaders, members and admins. | Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled; acknowledging everything lets the next mail notify again. |
-| [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
-| [bus_wait](#bus_wait) | [Inbox](#inbox) | Leaders, members and admins. | Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
+| [bus_inbox_ack](#bus_inbox_ack) | [Inbox](#inbox) | Leaders, members and admins. | Deletes your inbox entries with id up to upTo and returns how many. Acknowledge only what you handled; acknowledging everything lets the next mail notify again. |
+| [bus_inbox_read](#bus_inbox_read) | [Inbox](#inbox) | Leaders, members and admins. | Returns your inbox entries after id `after` without removing them; members see only their space. Never blocks (use bus_wait) and does not acknowledge. omp sessions receive entries by themselves and need not call it. |
+| [bus_wait](#bus_wait) | [Inbox](#inbox) | Leaders, members and admins. | Blocks until unacknowledged entries match (at most 100, id order) or timeoutSeconds (1..300, default 30) pass, then returns them, or [] on timeout; `from` and `threadId` narrow it. Does not acknowledge (omp does). In omp a queued aside, steer or critical entry ends the wait early: continue with that entry. |
 
 ## Admin
 
 ### bus_list_admins
 
-Lists every admin with its bootstrap flag, its number of tokens and the spaces it joined. Admins only; no side effects.
+Lists every admin with its bootstrap flag, token count and joined spaces. Admins only; no side effects.
 
 No arguments.
 
@@ -116,7 +116,7 @@ curl -X POST $BUS/v1/tools/bus_list_admins -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_mint_admin
 
-Creates the admin agent if missing and returns a new admin token for it; minting the same name again issues an additional token. Pitfall: admin is the bootstrap admin, whose token is the instance admin token, so it cannot be minted. Admins only.
+Creates the admin agent if missing and returns a new admin token for it; minting a name again adds a token. The bootstrap admin `admin` cannot be minted. Admins only.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -144,7 +144,7 @@ curl -X POST $BUS/v1/tools/bus_mint_leader -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_revoke_admin
 
-Deletes every token of the minted admin and removes it from every space it joined; spaces left empty are deleted. deleted reports whether anything was removed. Pitfalls: the bootstrap admin cannot be revoked (rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name again gives the same agent a new token. Admins only.
+Deletes every token of the minted admin and removes it from every space it joined; spaces left empty are deleted. `deleted` says whether anything was removed. The bootstrap admin cannot be revoked (rotate its token with agent-message-bus rotate-token); an admin may revoke itself; minting the name again gives a new token. Admins only.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -160,7 +160,7 @@ curl -X POST $BUS/v1/tools/bus_revoke_admin -H "Authorization: Bearer $TOKEN" -d
 
 ### bus_create_space
 
-Creates the space with its all topic and joins the caller as leader (an admin with role admin). Leaders and admins.
+Creates the space with its `all` topic and joins you as leader (role admin for an admin). Leaders and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -174,7 +174,7 @@ curl -X POST $BUS/v1/tools/bus_create_space -H "Authorization: Bearer $TOKEN" -d
 
 ### bus_delete_space
 
-Deletes the space and everything in it, including member tokens. Pitfall: an admin may delete any space, even one with other leaders. Leaders of the space once no other leader remains, and admins.
+Deletes the space and everything in it, including member tokens. An admin may delete any space, even one with other leaders. Leaders of the space once no other leader remains, and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -188,13 +188,13 @@ curl -X POST $BUS/v1/tools/bus_delete_space -H "Authorization: Bearer $TOKEN" -d
 
 ### bus_invite_member
 
-Returns an invite code that lets member agent <name> join the space, with an optional task delivered as a direct message from you when the code is accepted. Pitfalls: the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept; inviting the same name again gives a new code and an additional token; bus_revoke_member cancels pending codes. Leaders of the space and admins.
+Returns an invite code for member agent `name`, with an optional task delivered to it as a direct message from you when the code is accepted. The code is single-use and expires after 10 minutes; the user redeems it with `/bus accept <url> <code>` or `omp --bus-url <url> --bus-accept <code>`, other clients with POST /v1/invites/accept. Inviting a name again gives a new code and another token; bus_revoke_member cancels pending codes. Leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `name` | string | yes | Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$. |
 | `space` | string | yes | Space name. |
-| `task` | string | no | First prompt for the member, delivered as a direct message from you when the code is accepted; 1..65536 bytes. |
+| `task` | string | no | The member's first task: goal, done criteria and where to report; 1..65536 bytes. Arrives as a direct message from you. |
 
 **Result:** `{name, space, code, expires_at}`
 
@@ -204,7 +204,7 @@ curl -X POST $BUS/v1/tools/bus_invite_member -H "Authorization: Bearer $TOKEN" -
 
 ### bus_join_space
 
-Joins an existing space as a leader (an admin with role admin); a space can have several leaders. Leaders and admins.
+Joins an existing space as leader (role admin for an admin); a space can have several leaders. Leaders and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -218,7 +218,7 @@ curl -X POST $BUS/v1/tools/bus_join_space -H "Authorization: Bearer $TOKEN" -d '
 
 ### bus_leave_space
 
-Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave while others remain, and the last participant's departure deletes the space. Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted. Participants.
+Leaves the space and drops your inbox entries and subscriptions there. A member's token and boards are deleted too: post your state to a leader's board first. The last leader cannot leave while others remain; the last participant leaving deletes the space. Participants.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -232,7 +232,7 @@ curl -X POST $BUS/v1/tools/bus_leave_space -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_list_participants
 
-Lists the space's admins, leaders and members, in that order. Participants and admins; no side effects.
+Lists the space's admins, leaders and members, in that order, with whether each is connected. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -258,7 +258,7 @@ curl -X POST $BUS/v1/tools/bus_list_spaces -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_revoke_member
 
-Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending invite codes for the space; idempotent, deleted reports whether anything was removed. Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included, and the space is deleted when nobody remains. Leaders of the space and admins.
+Removes the member with its tokens, inbox entries and blackboards and cancels its pending invite codes; idempotent, `deleted` says whether anything was removed. Leaders cannot revoke leaders; an admin can, even the last leader, and the space is deleted when nobody remains. Leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -273,7 +273,7 @@ curl -X POST $BUS/v1/tools/bus_revoke_member -H "Authorization: Bearer $TOKEN" -
 
 ### bus_space_overview
 
-Shows one space at a glance: you and your role, the participants, open topics with your subscriptions, blackboards and the 10 most recently active threads. Participants and admins; no side effects.
+Shows one space at a glance: you and your role, the participants and whether each is connected, open topics with your subscriptions, blackboards and the 10 most recently active threads. Call it first in a space. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -301,7 +301,7 @@ curl -X POST $BUS/v1/tools/bus_whoami -H "Authorization: Bearer $TOKEN" -d '{}'
 
 ### bus_close_topic
 
-Closes the topic, notifies subscribers and drops all subscriptions. Pitfall: the all topic cannot be closed, and a closed topic's name can be reused. The topic's creator, leaders of the space and admins.
+Closes the topic, notifies subscribers and drops all subscriptions; the name can be reused. `all` cannot be closed. The topic's creator, leaders of the space and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -316,7 +316,7 @@ curl -X POST $BUS/v1/tools/bus_close_topic -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_create_topic
 
-Opens a new topic and subscribes the caller, unless it is an admin that has not joined the space. Pitfall: nobody else is notified, so subscribers must be told the topic name. Participants and admins.
+Opens a topic and subscribes you (not an admin that has not joined the space). Nobody else is notified: tell them the topic name. Participants and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -345,14 +345,14 @@ curl -X POST $BUS/v1/tools/bus_list_topics -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_send_direct
 
-Delivers the message to one recipient's inbox. Pitfalls: the recipient must be a participant of the same space, and an agent cannot send a direct message to itself. Participants and admins; critical requires a leader or an admin.
+Sends a message to one participant of the space; use bus_send_topic for several. You cannot message yourself, and an admin that has not joined the space is not a participant. Receipts show `live` or `queued` (not connected). Participants and admins; critical requires a leader or an admin.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `body` | string | yes | Message body, 1..65536 bytes. |
 | `space` | string | yes | Space name. |
 | `to` | string | yes | Recipient participant name. |
-| `critical` | boolean | no | Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true. |
+| `critical` | boolean | no | Leaders and admins only. Interrupts omp recipients; other clients see critical: true. |
 
 **Result:** `{ok: true, receipts: [{to, delivery: live|queued}]}`
 
@@ -362,14 +362,14 @@ curl -X POST $BUS/v1/tools/bus_send_direct -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_send_topic
 
-Delivers the message to every subscriber of the topic except the sender; every participant receives the all topic. Participants and admins; only leaders and admins may send to all or send critical.
+Sends a message to every subscriber of the topic except you; every participant gets `all`. Receipts show each subscriber as `live` or `queued` (not connected). Participants and admins; only leaders and admins may send to all or send critical.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `body` | string | yes | Message body, 1..65536 bytes. |
 | `space` | string | yes | Space name. |
 | `topic` | string | yes | Topic name. |
-| `critical` | boolean | no | Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true. |
+| `critical` | boolean | no | Leaders and admins only. Interrupts omp recipients; other clients see critical: true. |
 
 **Result:** `{ok: true, receipts: [{to, delivery: live|queued}]}`
 
@@ -379,7 +379,7 @@ curl -X POST $BUS/v1/tools/bus_send_topic -H "Authorization: Bearer $TOKEN" -d '
 
 ### bus_subscribe_topic
 
-Subscribes the caller to the topic; idempotent. Pitfall: the all topic cannot be subscribed or unsubscribed, because everyone receives it. Participants (admins join first).
+Subscribes you to the topic; idempotent. `all` needs no subscription and cannot be subscribed or unsubscribed. Participants (admins join first).
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -394,7 +394,7 @@ curl -X POST $BUS/v1/tools/bus_subscribe_topic -H "Authorization: Bearer $TOKEN"
 
 ### bus_unsubscribe_topic
 
-Stops topic deliveries to the caller; idempotent. The all topic cannot be unsubscribed. Participants (admins join first).
+Stops topic deliveries to you; idempotent. `all` cannot be unsubscribed. Participants (admins join first).
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -411,7 +411,7 @@ curl -X POST $BUS/v1/tools/bus_unsubscribe_topic -H "Authorization: Bearer $TOKE
 
 ### bus_add_post
 
-Appends a post and notifies the thread's subscribers except the author. Participants and admins.
+Appends a post and notifies the thread's subscribers except you. Each post wakes every subscriber: post what adds something. `postId` is not an inbox entry id. Participants and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -427,7 +427,7 @@ curl -X POST $BUS/v1/tools/bus_add_post -H "Authorization: Bearer $TOKEN" -d '{"
 
 ### bus_create_blackboard
 
-Creates a blackboard owned by the caller. Pitfall: a member's boards are deleted when it leaves or is revoked. Participants and admins.
+Creates a blackboard you own. A member's boards are deleted when it leaves or is revoked: keep results others need on a leader's board. Participants and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -442,7 +442,7 @@ curl -X POST $BUS/v1/tools/bus_create_blackboard -H "Authorization: Bearer $TOKE
 
 ### bus_create_thread
 
-Creates a thread with its first post. Pitfall: the creator is subscribed and gets later posts by others, unless it is an admin that has not joined the space. Participants and admins.
+Creates a thread with its first post and subscribes you to later posts by others (not an admin that has not joined the space). Nobody else is subscribed: tell them the threadId. Participants and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -503,7 +503,7 @@ curl -X POST $BUS/v1/tools/bus_list_threads -H "Authorization: Bearer $TOKEN" -d
 
 ### bus_read_thread
 
-Returns the thread with all posts. Participants and admins; no side effects.
+Returns the whole thread, every post, which can be large. A post notice already carries the new post: read the thread only for earlier ones. Post `id`s are not inbox entry ids. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -533,7 +533,7 @@ curl -X POST $BUS/v1/tools/bus_remove_thread -H "Authorization: Bearer $TOKEN" -
 
 ### bus_subscribe_thread
 
-Subscribes the caller to new posts in the thread; idempotent. Participants (admins join first).
+Subscribes you to new posts in the thread; idempotent. Participants (admins join first).
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -565,7 +565,7 @@ curl -X POST $BUS/v1/tools/bus_unsubscribe_thread -H "Authorization: Bearer $TOK
 
 ### bus_inbox_ack
 
-Permanently deletes the caller's inbox entries with id up to upTo and returns how many were removed. Pitfall: it deletes every entry with id up to upTo, so never acknowledge past what was handled; acknowledging everything lets the next mail notify again. Leaders, members and admins.
+Deletes your inbox entries with id up to upTo and returns how many. Acknowledge only what you handled; acknowledging everything lets the next mail notify again. Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -579,7 +579,7 @@ curl -X POST $BUS/v1/tools/bus_inbox_ack -H "Authorization: Bearer $TOKEN" -d '{
 
 ### bus_inbox_read
 
-Returns inbox entries after the given id without removing them; members see only their space. Pitfalls: omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). Leaders, members and admins.
+Returns your inbox entries after id `after` without removing them; members see only their space. Never blocks (use bus_wait) and does not acknowledge. omp sessions receive entries by themselves and need not call it. Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -594,7 +594,7 @@ curl -X POST $BUS/v1/tools/bus_inbox_read -H "Authorization: Bearer $TOKEN" -d '
 
 ### bus_wait
 
-Waits for mail: returns the matching unacknowledged entries of the caller's scope (at most 100, id order) as soon as there are any. Pitfall: it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you). In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry. The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). Leaders, members and admins.
+Blocks until unacknowledged entries match (at most 100, id order) or timeoutSeconds (1..300, default 30) pass, then returns them, or [] on timeout; `from` and `threadId` narrow it. Does not acknowledge (omp does). In omp a queued aside, steer or critical entry ends the wait early: continue with that entry. Leaders, members and admins.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -645,7 +645,7 @@ The [omp extension](../extension/README.md) fetches `GET /v1/tools` once per ses
 | `/bus server status` | Shows whether the local server is running. |
 | `/bus help` | Prints usage. |
 
-**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `[agent-bus]` message whose details carry the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
+**Inbox delivery.** The extension holds `GET /v1/inbox/stream` open. It delivers each entry into the session as an `<agent-bus-entry>` message whose details carry the entry's id, and acknowledges it with `bus_inbox_ack` once a model request contains that message. The server's delivery class decides how an entry enters the session: `interrupt` steers into the running turn, `queue` is injected at the next step boundary (and wakes an idle session), `deferred` waits for the next turn.
 
 **Subagents.** A subagent session gets neither `bus_inbox_read`/`bus_inbox_ack` nor an inbox stream; its parent session owns the inbox. `AGENT_BUS_URL`, `AGENT_BUS_TOKEN` and `AGENT_BUS_BIN` are read once at load and removed from the environment, so they are meant for direct-token use. Workers normally join with `/bus accept <url> <code>` or are started by a leader with `/bus spawn`.
 

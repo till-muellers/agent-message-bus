@@ -36,7 +36,7 @@ func spaceIdentityTools(s *spaces.Service) []Tool {
 			nil, nil, func(ctx context.Context, p auth.Principal, _ noArgs) (any, error) {
 				return list(s.List(ctx, p))
 			}),
-		define(BusListParticipants, accessParticipantsRead, "Lists the space's admins, leaders and members, in that order.",
+		define(BusListParticipants, accessParticipantsRead, "Lists the space's admins, leaders and members, in that order, with whether each is connected.",
 			"[{name, role, connected}]",
 			spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 				return list(s.Participants(ctx, p, a.Space))
@@ -47,19 +47,19 @@ func spaceIdentityTools(s *spaces.Service) []Tool {
 func spaceLifecycleTools(s *spaces.Service) []Tool {
 	return []Tool{
 		spaceOp(BusCreateSpace, accessLeaders,
-			"Creates the space with its all topic and joins the caller as leader (an admin with role admin).",
+			"Creates the space with its `all` topic and joins you as leader (role admin for an admin).",
 			newSpaceProps(), s, (*spaces.Service).Create),
 		spaceOp(BusJoinSpace, accessLeaders,
-			"Joins an existing space as a leader (an admin with role admin); a space can have several leaders.",
+			"Joins an existing space as leader (role admin for an admin); a space can have several leaders.",
 			spaceOnly(), s, (*spaces.Service).Join),
 		spaceOp(BusLeaveSpace, "Participants.",
-			"Leaves the space and drops the caller's inbox entries and subscriptions there; the last leader cannot leave "+
-				"while others remain, and the last participant's departure deletes the space. "+
-				"Pitfall: when a member leaves, a member's boards, inbox entries, subscriptions and token are deleted.",
+			"Leaves the space and drops your inbox entries and subscriptions there. A member's token and boards are deleted too: "+
+				"post your state to a leader's board first. The last leader cannot leave while others remain; "+
+				"the last participant leaving deletes the space.",
 			spaceOnly(), s, (*spaces.Service).Leave),
 		spaceOp(BusDeleteSpace, "Leaders of the space once no other leader remains, and admins.",
 			"Deletes the space and everything in it, including member tokens. "+
-				"Pitfall: an admin may delete any space, even one with other leaders.", spaceOnly(), s, (*spaces.Service).Delete),
+				"An admin may delete any space, even one with other leaders.", spaceOnly(), s, (*spaces.Service).Delete),
 	}
 }
 
@@ -74,10 +74,9 @@ func spaceOp(name, access, desc string, props map[string]any, s *spaces.Service,
 func memberTools(s *spaces.Service) []Tool {
 	return []Tool{
 		define(BusRevokeMember, accessSpaceLeaders,
-			"Removes the member, if present, with its tokens, inbox entries and blackboards, and cancels its pending "+
-				"invite codes for the space; idempotent, deleted reports whether anything was removed. "+
-				"Pitfall: leaders cannot revoke leaders, but an admin may also revoke leaders, the last leader included, "+
-				"and the space is deleted when nobody remains.",
+			"Removes the member with its tokens, inbox entries and blackboards and cancels its pending invite codes; "+
+				"idempotent, `deleted` says whether anything was removed. Leaders cannot revoke leaders; "+
+				"an admin can, even the last leader, and the space is deleted when nobody remains.",
 			"{deleted}",
 			memberReq(), memberProps(), func(ctx context.Context, p auth.Principal, a memberArgs) (any, error) {
 				deleted, err := s.Revoke(ctx, p, a.Space, a.Name)

@@ -22,38 +22,35 @@ Feature: Tool descriptions guide the agent on their own
       Then the description of bus_spawn_worker starts with "Starts a worker agent"
       And it states "Leaders of the space and admins."
 
-  Rule: Descriptions name the pitfalls an agent cannot see from the schema
+  Rule: Descriptions name the pitfall an agent cannot see from the schema
 
-    Scenario Outline: <tool> mentions <pitfall>
-      Then the description of <tool> mentions that <pitfall>
+    # The wording is free and not pinned by tests; the topics are. The guide holds the rules
+    # that apply everywhere (inbox order, replying); a description holds only what is specific
+    # to its tool.
+
+    Scenario Outline: <tool> says <topic>
+      Then the description of <tool> says <topic>
 
       Examples:
-        | tool                  | pitfall                                                                                  |
-        | bus_inbox_read        | omp sessions receive entries automatically and need not poll; it never blocks (use bus_wait to wait) and reading does not acknowledge |
-        | bus_wait              | it blocks until mail arrives or timeoutSeconds (1..300, default 30) pass, returns [] on timeout, filters with from/threadId and does not acknowledge (omp acknowledges for you) |
-        | bus_wait              | In omp an aside, steer or critical entry queued for the model ends the wait early: continue with that entry |
-        | bus_inbox_read | The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
-        | bus_wait | The order of sending is no guarantee for the order here (concurrent sends have none; usually it holds). |
-        | bus_inbox_ack         | it deletes every entry with id up to upTo, so never acknowledge past what was handled; acknowledging everything lets the next mail notify again |
-        | bus_create_topic      | nobody else is notified, so subscribers must be told the topic name                       |
-        | bus_create_blackboard | a member's boards are deleted when it leaves or is revoked                               |
-        | bus_leave_space       | a member's boards, inbox entries, subscriptions and token are deleted                    |
-        | bus_send_direct       | the recipient must be a participant of the same space                                     |
-        | bus_spawn_worker      | the task is delivered to the worker as a direct message from the caller (a leader or an admin) |
-        | bus_spawn_worker      | each worker needs its own name                                                            |
-        | bus_spawn_worker      | a name already used by a leader agent fails with conflict, and without a terminal launcher the leader invites by hand |
-        | bus_invite_member     | the code is single-use and expires after 10 minutes; the user redeems it with /bus accept <url> <code> or omp --bus-url <url> --bus-accept <code>, other clients with POST /v1/invites/accept |
-        | bus_invite_member     | inviting the same name again gives a new code and an additional token                     |
-        | bus_join_space        | a space can have several leaders                                                          |
-        | bus_subscribe_topic   | the all topic cannot be subscribed or unsubscribed, because everyone receives it          |
-        | bus_close_topic       | the all topic cannot be closed, and a closed topic's name can be reused                   |
-        | bus_send_direct       | an agent cannot send a direct message to itself                                           |
-        | bus_revoke_member     | an admin may also revoke leaders, the last leader included, and the space is deleted when nobody remains |
-        | bus_delete_space      | an admin may delete any space, even one with other leaders                                |
-        | bus_create_thread     | the creator is subscribed and gets later posts by others                                  |
+        | tool                  | topic                                                                                  |
+        | bus_wait              | it blocks, returns [] on timeout, does not acknowledge, and in omp a queued aside, steer or critical ends it early |
+        | bus_inbox_read        | it never blocks and does not acknowledge; omp sessions need not call it                |
+        | bus_inbox_ack         | acknowledge only what was handled                                                      |
+        | bus_read_thread       | the result is the whole thread; a post notice already carries the new post; post ids differ from inbox entry ids |
+        | bus_add_post          | each post wakes every subscriber                                                       |
+        | bus_create_thread     | only the creator is subscribed                                                         |
+        | bus_create_topic      | nobody else is notified                                                                |
+        | bus_create_blackboard | a member's boards are deleted when it leaves or is revoked                             |
+        | bus_leave_space       | a member's token and boards are deleted                                                |
+        | bus_send_direct       | the recipient must be a participant (not an admin that has not joined) and not the sender |
+        | bus_send_topic        | receipts show live or queued                                                           |
+        | bus_invite_member     | the code is single-use, expires, and how the user redeems it                           |
+        | bus_revoke_member     | an admin may also revoke leaders, the last leader included                             |
+        | bus_delete_space      | an admin may delete any space                                                          |
+        | bus_spawn_worker      | the task arrives as a direct message; each worker needs its own name                   |
 
-    Scenario: The critical flag says what happens on each kind of client
-      Then the "critical" property of bus_send_direct and bus_send_topic reads "Leaders and admins only. omp recipients are interrupted (steer); other clients see critical: true."
+    Scenario: The critical flag says who may set it and how omp recipients see it
+      Then the "critical" property of bus_send_direct and bus_send_topic names the leaders and admins and the omp interruption
 
   Rule: Access lines name admins where they have leader rights
 
