@@ -31,6 +31,9 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 }
 
 func load(lookup func(string) (string, bool), goos string, home func() (string, error)) (Config, error) {
+	if err := requireExplicit(lookup); err != nil {
+		return Config{}, err
+	}
 	getenv := func(k string) string { v, _ := lookup(k); return v }
 	c := Config{Addr: orDefault(getenv("AMB_ADDR"), DefaultAddr), WebAddr: webAddr(lookup),
 		DBPath: getenv("AMB_DB_PATH")}
