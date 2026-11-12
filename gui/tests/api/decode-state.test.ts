@@ -57,8 +57,14 @@ describe("decoding the space detail", () => {
 		expect(detail.overview.participants).toEqual([{ name: "x", role: "boss", connected: false }]);
 	});
 
+	test("a participant that is not connected keeps its offlineSince", () => {
+		const offline = { name: "x", role: "member", connected: false, offlineSince: "2026-11-04T19:00:00Z" };
+		expect(decodeSpaceDetail(withOverview("participants", [offline])).overview.participants).toEqual([offline]);
+	});
+
 	const broken: [string, unknown][] = [
 		["no overview", without(detailWire, "overview")],
+		["an offlineSince that is not text", withOverview("participants", [{ name: "x", role: "member", connected: false, offlineSince: 1 }])],
 		["a role that is not text", withOverview("participants", [{ name: "x", role: 1, connected: false }])],
 		["a topic without creator", withOverview("topics", [{ name: "all", subscribed: false }])],
 		["a thread id that is not a number", withOverview("recentThreads", [{ ...without(at(overview, "recentThreads", "0"), "id"), id: "7" }])],

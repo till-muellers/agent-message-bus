@@ -23,11 +23,13 @@
 			{
 				"connected": false,
 				"name": "lead",
+				"offlineSince": "2026-11-04T19:00:00Z",
 				"role": "leader"
 			},
 			{
 				"connected": false,
 				"name": "worker",
+				"offlineSince": "2026-11-04T19:00:00Z",
 				"role": "member"
 			}
 		],

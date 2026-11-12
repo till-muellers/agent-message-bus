@@ -66,7 +66,7 @@ func stalledClient(root context.Context, t *testing.T, w *world) *atomic.Int64 {
 	if _, err := fmt.Fprint(conn, "GET / HTTP/1.1\r\nHost: x\r\n\r\n"); err != nil {
 		t.Fatalf("requesting the stream: %v", err)
 	}
-	eventually(t, "the stream holds the slot", func() bool { return w.svc.Connected(w.agents["worker"]) })
+	eventually(t, "the stream holds the slot", func() bool { return w.svc.presence.connected(w.agents["worker"]) })
 	return pending
 }
 

@@ -31,7 +31,7 @@ func TestStreamSlots(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := newPresence()
+			s := newPresence(time.Now)
 			for i, st := range tc.steps {
 				if st.op == "release" {
 					s.release(st.agentID)
@@ -64,7 +64,7 @@ func TestPresenceConnected(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			p := newPresence()
+			p := newPresence(time.Now)
 			for _, id := range tc.streams {
 				p.acquire(id)
 			}
@@ -134,7 +134,7 @@ func TestReceiptsWaiterIsLive(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	ch := startWait(ctx, w.svc, w.principals["memberA"], WaitQuery{After: 1 << 40, Timeout: longWait})
 	deadline := time.Now().Add(waitTimeout)
-	for !w.svc.Connected(w.agents["worker"]) {
+	for !w.svc.presence.connected(w.agents["worker"]) {
 		if time.Now().After(deadline) {
 			t.Fatal("waiting agent never counted as connected")
 		}
@@ -148,7 +148,7 @@ func TestReceiptsWaiterIsLive(t *testing.T) {
 	if got := result(t, ch); len(got) != 0 {
 		t.Fatalf("Wait = %v, want []", got)
 	}
-	if w.svc.Connected(w.agents["worker"]) {
+	if w.svc.presence.connected(w.agents["worker"]) {
 		t.Fatal("agent still connected after its Wait returned")
 	}
 }
@@ -175,6 +175,40 @@ func TestReceiptAtCommit(t *testing.T) {
 			got := w.deliverTo(t, func() { tc.during(w.svc.presence, id) }, "worker")
 			if want := []Receipt{{"worker", tc.want}}; !slices.Equal(got, want) {
 				t.Fatalf("receipts = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestPresenceOfflineSince(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	ended := start.Add(time.Hour)
+	tests := []struct {
+		name        string
+		steps       func(p *presence)
+		wantOffline bool
+		want        time.Time
+	}{
+		{name: "never seen: server start", steps: func(*presence) {}, wantOffline: true, want: start},
+		{name: "stream open", steps: func(p *presence) { p.acquire(1) }},
+		{name: "stream ended", steps: func(p *presence) { p.acquire(1); p.release(1) }, wantOffline: true, want: ended},
+		{name: "waiting", steps: func(p *presence) { p.enterWait(1) }},
+		{name: "wait returned", steps: func(p *presence) { p.enterWait(1); p.leaveWait(1) }, wantOffline: true, want: ended},
+		{name: "one of two waits returned", steps: func(p *presence) { p.enterWait(1); p.enterWait(1); p.leaveWait(1) }},
+		{name: "stream ended, still waiting", steps: func(p *presence) { p.enterWait(1); p.acquire(1); p.release(1) }},
+		{name: "other agent's stream ended", steps: func(p *presence) { p.acquire(2); p.release(2) }, wantOffline: true, want: start},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			now := start
+			p := newPresence(func() time.Time { return now })
+			now = ended
+			tc.steps(p)
+			got, offline := p.offlineSince(1)
+			if offline != tc.wantOffline || !got.Equal(tc.want) {
+				t.Fatalf("offlineSince(1) = %v, %v; want %v, %v", got, offline, tc.want, tc.wantOffline)
 			}
 		})
 	}

@@ -40,7 +40,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 // slotFreed waits until worker's stream slot is released.
 func slotFreed(t *testing.T, w *world) {
 	t.Helper()
-	eventually(t, "the stream slot is free", func() bool { return !w.svc.Connected(w.agents["worker"]) })
+	eventually(t, "the stream slot is free", func() bool { return !w.svc.presence.connected(w.agents["worker"]) })
 }
 
 func TestStreamEndsOnTheWakeUpAfterItsTokenStoppedAuthenticating(t *testing.T) {

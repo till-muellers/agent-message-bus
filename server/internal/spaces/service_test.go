@@ -44,7 +44,7 @@ func TestCreate(t *testing.T) {
 				t.Fatalf("create: %v", err)
 			}
 			ps, _ := e.svc.Participants(context.Background(), tc.p, tc.space)
-			if want := []Participant{{"lead", RoleLeader, false}}; !reflect.DeepEqual(ps, want) {
+			if want := []Participant{{Name: "lead", Role: RoleLeader}}; !reflect.DeepEqual(roster(ps), want) {
 				t.Fatalf("participants = %+v", ps)
 			}
 		})
@@ -82,7 +82,8 @@ func TestJoin(t *testing.T) {
 				t.Fatalf("join: %v", err)
 			}
 			ps, _ := e.svc.Participants(context.Background(), tc.p, tc.space)
-			want := []Participant{{"lead", RoleLeader, false}, {"other", RoleLeader, false}, {"work", RoleMember, false}}
+			ps = roster(ps)
+			want := []Participant{{Name: "lead", Role: RoleLeader}, {Name: "other", Role: RoleLeader}, {Name: "work", Role: RoleMember}}
 			if !reflect.DeepEqual(ps, want) {
 				t.Fatalf("participants = %+v, want %+v", ps, want)
 			}
@@ -200,7 +201,7 @@ func TestAdmitMember(t *testing.T) {
 	lead := leader(t, e, 1, "lead")
 	mustCreate(t, e, lead, "alpha")
 	member, tok1 := inviteMember(t, e, lead, "alpha", "work")
-	alpha := []Participant{{"lead", RoleLeader, false}, {"work", RoleMember, false}}
+	alpha := []Participant{{Name: "lead", Role: RoleLeader}, {Name: "work", Role: RoleMember}}
 	wantParticipants(t, e, "alpha", alpha)
 	var agentID int64
 	var space, tok2 string
@@ -256,8 +257,8 @@ func TestParticipants(t *testing.T) {
 	member, _ := inviteMember(t, e, lead, "alpha", "bob")
 	inviteMember(t, e, lead, "alpha", "abe")
 	got, err := e.svc.Participants(ctx, member, "alpha")
-	want := []Participant{{"amy", RoleLeader, false}, {"zed", RoleLeader, false}, {"abe", RoleMember, false}, {"bob", RoleMember, false}}
-	if err != nil || !reflect.DeepEqual(got, want) {
+	want := []Participant{{Name: "amy", Role: RoleLeader}, {Name: "zed", Role: RoleLeader}, {Name: "abe", Role: RoleMember}, {Name: "bob", Role: RoleMember}}
+	if err != nil || !reflect.DeepEqual(roster(got), want) {
 		t.Fatalf("got %+v, %v; want %+v", got, err, want)
 	}
 	if _, err = e.svc.Participants(ctx, instanceAdmin(t, e), "alpha"); err != nil {
@@ -265,24 +266,56 @@ func TestParticipants(t *testing.T) {
 	}
 }
 
-// presenceStub reports the agents in connected as connected.
+// presenceStub reports the agents in connected as connected, every other one as offline
+// since stubOfflineSince.
 type presenceStub struct {
 	*inbox.Service
 	connected map[int64]bool
 }
 
-func (p presenceStub) Connected(agentID int64) bool { return p.connected[agentID] }
+var stubOfflineSince = time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 
-func TestParticipantsConnected(t *testing.T) {
+func (p presenceStub) OfflineSince(agentID int64) (time.Time, bool) {
+	if p.connected[agentID] {
+		return time.Time{}, false
+	}
+	return stubOfflineSince, true
+}
+
+// roster drops each participant's offlineSince, which is the inbox's start time here.
+func roster(ps []Participant) []Participant {
+	out := make([]Participant, len(ps))
+	for i, p := range ps {
+		p.OfflineSince = ""
+		out[i] = p
+	}
+	return out
+}
+
+// presenceOf maps each participant to "connected" or its offlineSince; a connected one
+// that also carries offlineSince shows both.
+func presenceOf(ps []Participant) map[string]string {
+	out := map[string]string{}
+	for _, p := range ps {
+		out[p.Name] = p.OfflineSince
+		if p.Connected {
+			out[p.Name] = "connected" + p.OfflineSince
+		}
+	}
+	return out
+}
+
+func TestParticipantsPresence(t *testing.T) {
 	t.Parallel()
+	offline := "2026-11-12T09:00:00Z"
 	tests := []struct {
 		name      string
 		connected []string
-		want      map[string]bool
+		want      map[string]string // name → "connected" or offlineSince
 	}{
-		{name: "nobody", want: map[string]bool{"lead": false, "peer": false, "worker": false}},
-		{name: "peer", connected: []string{"peer"}, want: map[string]bool{"lead": false, "peer": true, "worker": false}},
-		{name: "lead of two spaces", connected: []string{"lead"}, want: map[string]bool{"lead": true, "peer": false, "worker": false}},
+		{name: "nobody", want: map[string]string{"lead": offline, "peer": offline, "worker": offline}},
+		{name: "peer", connected: []string{"peer"}, want: map[string]string{"lead": offline, "peer": "connected", "worker": offline}},
+		{name: "lead of two spaces", connected: []string{"lead"}, want: map[string]string{"lead": "connected", "peer": offline, "worker": offline}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -303,12 +336,8 @@ func TestParticipantsConnected(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Participants: %v", err)
 			}
-			got := map[string]bool{}
-			for _, p := range ps {
-				got[p.Name] = p.Connected
-			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("connected = %v, want %v", got, tc.want)
+			if got := presenceOf(ps); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("presence = %v, want %v", got, tc.want)
 			}
 		})
 	}

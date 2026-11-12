@@ -81,7 +81,7 @@ Final: **34 server tools** (PO-3: no `bus_cancel_invite`). `bus_spawn_worker` is
  "recentThreads": [{"id": 1, "blackboard": "plan", "title": "design", "createdBy": "lead",
                     "posts": 1, "lastPostAt": "2026-…Z", "subscribed": false}]}
 ```
-  `you.role` ∈ `admin|leader|member|null` (null = unjoined admin); participants admins → leaders → members, each by name; topics open only, `all` first; `recentThreads` ≤ 10 across all boards, latest post first; empty lists `[]`. From slice 12 participants carry `connected` (§3.4).
+  `you.role` ∈ `admin|leader|member|null` (null = unjoined admin); participants admins → leaders → members, each by name; topics open only, `all` first; `recentThreads` ≤ 10 across all boards, latest post first; empty lists `[]`. From slice 12 participants carry `connected`, from 3jq.27 `offlineSince` when not connected (§3.4).
 - Errors: `invalid "space is required"`; `not_found "space nope not found"`; `forbidden "token is not valid for space beta"`; `forbidden "not a participant of space demo"`.
 
 ### 2.5 `bus_wait` [9] — Fixed (`mail/bus-wait.feature`)
@@ -136,7 +136,7 @@ Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature`, ru
 
 - `bus_whoami` → `{"kind": "admin"|"leader"|"member", "name": "<agent>", "space"?: "<member's space>", "spaces": [{"name", "role": "admin"|"leader"|"member"}]}`. From 4a the admin has a name (`"admin"` or minted); from 4d its joined spaces are listed with role `admin`.
 - `bus_list_spaces` → `[{"name", "leaders": [..], "admins": [..], "members": n, "joined": bool}]` [4d]; `members` counts role `member` only; `admins` = joined admins.
-- `bus_list_participants` → `[{"name", "role"}]`, order admins, leaders, members, each by name [4d]; `+ "connected": bool` [12].
+- `bus_list_participants` → `[{"name", "role"}]`, order admins, leaders, members, each by name [4d]; `+ "connected": bool` [12]; `+ "offlineSince"` when not connected (§3.4) [3jq.27].
 
 ### 3.3 Invites [2, 7]
 
@@ -150,6 +150,7 @@ Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature`, ru
 - `bus_add_post` → `{"postId": 7, "receipts": [...]}` (subscribers except the author).
 - `live` = recipient holds its stream slot or is blocked in a server `bus_wait` right after commit; else `queued`. Delivery is exactly-once either way.
 - `bus_list_participants` and overview participants: `"connected": bool`, per agent across spaces.
+- `bus_list_participants`, overview participants and the GUI state (§10.2) [3jq.27]: `"offlineSince": "<RFC 3339>"` on every participant that is not connected, absent on connected ones. It is when the agent's last inbox stream or server `bus_wait` ended, kept in memory only: an agent not connected since the server started gets the server's start time. MCP and RPC clients that never stream or wait always show it. Additive; the extension does not read it, so no protocol bump.
 
 ---
 

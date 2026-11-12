@@ -41,12 +41,13 @@ describe("the space page", () => {
 		expect(findAll(view, byTag("h1")).map(textOf)).toEqual(["demo"]);
 	});
 
-	test("lists the participants in the server's order with role and connection", () => {
-		expect(rows(view, "participants").map((r) => r.slice(0, 3))).toEqual([
+	test("lists the participants in the server's order with role and connection, offline ones since when", () => {
+		const shown = rows(view, "participants").map((r) => r.slice(0, 3).map((cell) => cell.replace(/\s+/g, " ")));
+		expect(shown).toEqual([
 			["Name", "Role", "Connected"],
-			["ops", "admin", "no"],
+			["ops", "admin", "no, since 2026-11-04 19:00"],
 			["lead", "leader", "yes"],
-			["worker", "member", "no"],
+			["worker", "member", "no, since 2026-11-04 19:45"],
 		]);
 	});
 

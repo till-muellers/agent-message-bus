@@ -14,9 +14,9 @@ export const spaceDetail: SpaceDetail = {
 	overview: {
 		space: "demo",
 		participants: [
-			{ name: "ops", role: "admin", connected: false },
+			{ name: "ops", role: "admin", connected: false, offlineSince: "2026-11-04T19:00:00Z" },
 			{ name: "lead", role: "leader", connected: true },
-			{ name: "worker", role: "member", connected: false },
+			{ name: "worker", role: "member", connected: false, offlineSince: "2026-11-04T19:45:00Z" },
 		],
 		topics: [
 			{ name: "all", createdBy: "lead", subscribed: false },

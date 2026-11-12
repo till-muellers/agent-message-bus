@@ -36,6 +36,8 @@ export interface Participant {
 	name: string;
 	role: string;
 	connected: boolean;
+	/** When a participant that is not connected last had an inbox stream or bus_wait (RFC 3339); absent while connected. */
+	offlineSince?: string;
 }
 
 export interface Topic {

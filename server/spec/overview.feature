@@ -13,7 +13,7 @@ Feature: Space overview (bus_space_overview)
   #
   # Result:
   #   {space, you: {name, role},                           role null for an admin that has not joined
-  #    participants: [{name, role, connected}],             admins, then leaders, then members; each by name
+  #    participants: [{name, role, connected, offlineSince?}], admins, then leaders, then members; each by name
   #    topics: [{name, createdBy, subscribed}],             open topics, all first, then by name
   #    blackboards: [{name, owner, threads}],               by name
   #    recentThreads: [{id, blackboard, title, createdBy, posts, lastPostAt, subscribed}]}

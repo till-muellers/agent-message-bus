@@ -69,8 +69,8 @@ func TestRevokeRefusals(t *testing.T) {
 		t.Fatalf("revoke leader: deleted = %v, hook calls = %d; want false, 0", deleted, hook.calls)
 	}
 	ps, _ := e.svc.Participants(ctx, lead, "alpha")
-	want := []Participant{{"lead", RoleLeader, false}, {"other", RoleLeader, false}, {"peer", RoleMember, false}}
-	if !reflect.DeepEqual(ps, want) {
+	want := []Participant{{Name: "lead", Role: RoleLeader}, {Name: "other", Role: RoleLeader}, {Name: "peer", Role: RoleMember}}
+	if !reflect.DeepEqual(roster(ps), want) {
 		t.Fatalf("participants = %+v", ps)
 	}
 }

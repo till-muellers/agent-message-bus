@@ -36,8 +36,9 @@ func spaceIdentityTools(s *spaces.Service) []Tool {
 			nil, nil, func(ctx context.Context, p auth.Principal, _ noArgs) (any, error) {
 				return list(s.List(ctx, p))
 			}),
-		define(BusListParticipants, accessParticipantsRead, "Lists the space's admins, leaders and members, in that order, with whether each is connected.",
-			"[{name, role, connected}]",
+		define(BusListParticipants, accessParticipantsRead, "Lists the space's admins, leaders and members, in that order, with whether each is connected. "+
+			offlineSinceNote,
+			"[{name, role, connected, offlineSince?}]",
 			spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 				return list(s.Participants(ctx, p, a.Space))
 			}),
