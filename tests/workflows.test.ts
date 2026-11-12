@@ -109,6 +109,29 @@ describe("the workflow files", () => {
 	test("do not use the cached result of an earlier run as a release gate", () => {
 		expect(all.filter(workflow => /release_ci_gate|actions\/workflows\/.*\/runs/.test(workflow.text)).map(workflow => workflow.file)).toEqual([]);
 	});
+
+	test("run the Go tests before golangci-lint, build the linter with go install when its binary download failed, and lint once", () => {
+		const lintJobs = all.flatMap(workflow =>
+			Object.entries(workflow.jobs)
+				.map(([name, job]) => ({ at: `${workflow.file}: ${name}`, steps: stepsOf(job) }))
+				.filter(({ steps }) => steps.some(step => String(step.uses ?? "").startsWith("golangci/"))),
+		);
+		expect(lintJobs.length).toBeGreaterThan(0);
+		for (const { at, steps } of lintJobs) {
+			const lints = steps.filter(step => String(step.uses ?? "").startsWith("golangci/"));
+			const testStep = steps.findIndex(step => String(step.run ?? "").startsWith("go test"));
+			const [binary, fallback, lint] = lints.map((step): Json & { with: Json } => ({ ...step, with: asRecord(step.with) }));
+			const fallbackRunsOnFailure = new RegExp(`steps\\.${String(binary?.id)}\\.outcome\\s*==\\s*'failure'`).test(String(fallback?.if));
+			expect({
+				at,
+				testsFirst: testStep >= 0 && testStep < steps.indexOf(lints[0] ?? {}),
+				binaryMayFail: binary?.["continue-on-error"] === true && binary.with["install-only"] === true,
+				fallback: fallbackRunsOnFailure && fallback?.with["install-mode"] === "goinstall" && fallback.with["install-only"] === true,
+				sameVersion: fallback?.with.version === binary?.with.version,
+				lintsOnceWithTheInstalledBinary: lints.length === 3 && lint?.with["install-mode"] === "none",
+			}).toEqual({ at, testsFirst: true, binaryMayFail: true, fallback: true, sameVersion: true, lintsOnceWithTheInstalledBinary: true });
+		}
+	});
 });
 
 describe.each(reduced.map(workflow => [workflow.file, workflow] as const))("reduced suite %s", (_file, workflow) => {
