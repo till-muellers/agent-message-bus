@@ -34,7 +34,7 @@ function revokeButton(page: Page, p: Participant): ChildArg {
 	return button(`revoke-${p.name}`, "Revoke", () => page.intents.ask({ kind: "revoke", space: page.space, name: p.name, role: p.role }));
 }
 
-/** "yes", or "no" with since when the participant has not been connected. */
+/** "yes", or "no" with the time the participant was last connected. */
 function connection(p: Participant): ChildArg {
 	if (p.connected) return "yes";
 	return p.offlineSince === undefined ? "no" : h("span", null, "no, since ", time(p.offlineSince));

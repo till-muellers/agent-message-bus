@@ -7,10 +7,6 @@ import (
 	"github.com/till-muellers/agent-message-bus/server/internal/overview"
 )
 
-// offlineSinceNote explains offlineSince in the participant tools' descriptions.
-const offlineSinceNote = "offlineSince: since when a participant has had no inbox stream and no bus_wait " +
-	"(MCP clients never stream, so it does not mean gone)."
-
 func overviewTools(o *overview.Service) []Tool {
 	return []Tool{
 		define(BusSpaceOverview, accessParticipantsRead,

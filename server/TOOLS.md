@@ -77,10 +77,10 @@ A subagent may only read and post on blackboards (`bus_list_blackboards`, `bus_l
 | [bus_invite_member](#bus_invite_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Returns an invite code for member agent `name`, with an optional task delivered to it as a direct message from you when the code is accepted. The code is single-use and expires after 10 minutes; the user redeems it with `/bus accept <url> <code>` or `omp --bus-url <url> --bus-accept <code>`, other clients with POST /v1/invites/accept. Inviting a name again gives a new code and another token; bus_revoke_member cancels pending codes. |
 | [bus_join_space](#bus_join_space) | [Spaces & membership](#spaces--membership) | Leaders and admins. | Joins an existing space as leader (role admin for an admin); a space can have several leaders. |
 | [bus_leave_space](#bus_leave_space) | [Spaces & membership](#spaces--membership) | Participants. | Leaves the space and drops your inbox entries and subscriptions there. A member's token and boards are deleted too: post your state to a leader's board first. The last leader cannot leave while others remain; the last participant leaving deletes the space. |
-| [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Lists the space's admins, leaders and members, in that order, with whether each is connected. offlineSince: since when a participant has had no inbox stream and no bus_wait (MCP clients never stream, so it does not mean gone). |
+| [bus_list_participants](#bus_list_participants) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Lists the space's admins, leaders and members, in that order, with whether each is connected. offlineSince: since when a participant has had no inbox stream and no bus_wait; clients that never stream or wait always have it, so it does not mean gone. |
 | [bus_list_spaces](#bus_list_spaces) | [Spaces & membership](#spaces--membership) | Leaders and admins see all spaces, members only their own; no side effects. | Lists spaces with their leaders, joined admins, member count and whether the caller joined. |
 | [bus_revoke_member](#bus_revoke_member) | [Spaces & membership](#spaces--membership) | Leaders of the space and admins. | Removes the member with its tokens, inbox entries and blackboards and cancels its pending invite codes; idempotent, `deleted` says whether anything was removed. Leaders cannot revoke leaders; an admin can, even the last leader, and the space is deleted when nobody remains. |
-| [bus_space_overview](#bus_space_overview) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Shows one space at a glance: you and your role, the participants and whether each is connected, open topics with your subscriptions, blackboards and the 10 most recently active threads. Call it first in a space. offlineSince: since when a participant has had no inbox stream and no bus_wait (MCP clients never stream, so it does not mean gone). |
+| [bus_space_overview](#bus_space_overview) | [Spaces & membership](#spaces--membership) | Participants and admins; no side effects. | Shows one space at a glance: you and your role, the participants and whether each is connected, open topics with your subscriptions, blackboards and the 10 most recently active threads. Call it first in a space. offlineSince: since when a participant has had no inbox stream and no bus_wait; clients that never stream or wait always have it, so it does not mean gone. |
 | [bus_whoami](#bus_whoami) | [Spaces & membership](#spaces--membership) | Any token; no side effects. | Returns the caller's kind, name and the spaces it participates in. |
 | [bus_close_topic](#bus_close_topic) | [Direct messages & topics](#direct-messages--topics) | The topic's creator, leaders of the space and admins. | Closes the topic, notifies subscribers and drops all subscriptions; the name can be reused. `all` cannot be closed. |
 | [bus_create_topic](#bus_create_topic) | [Direct messages & topics](#direct-messages--topics) | Participants and admins. | Opens a topic and subscribes you (not an admin that has not joined the space). Nobody else is notified: tell them the topic name. |
@@ -235,7 +235,7 @@ curl -X POST $BUS/v1/tools/bus_leave_space -H "Authorization: Bearer $TOKEN" -d 
 
 ### bus_list_participants
 
-Lists the space's admins, leaders and members, in that order, with whether each is connected. offlineSince: since when a participant has had no inbox stream and no bus_wait (MCP clients never stream, so it does not mean gone). Participants and admins; no side effects.
+Lists the space's admins, leaders and members, in that order, with whether each is connected. offlineSince: since when a participant has had no inbox stream and no bus_wait; clients that never stream or wait always have it, so it does not mean gone. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
@@ -276,7 +276,7 @@ curl -X POST $BUS/v1/tools/bus_revoke_member -H "Authorization: Bearer $TOKEN" -
 
 ### bus_space_overview
 
-Shows one space at a glance: you and your role, the participants and whether each is connected, open topics with your subscriptions, blackboards and the 10 most recently active threads. Call it first in a space. offlineSince: since when a participant has had no inbox stream and no bus_wait (MCP clients never stream, so it does not mean gone). Participants and admins; no side effects.
+Shows one space at a glance: you and your role, the participants and whether each is connected, open topics with your subscriptions, blackboards and the 10 most recently active threads. Call it first in a space. offlineSince: since when a participant has had no inbox stream and no bus_wait; clients that never stream or wait always have it, so it does not mean gone. Participants and admins; no side effects.
 
 | Argument | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
