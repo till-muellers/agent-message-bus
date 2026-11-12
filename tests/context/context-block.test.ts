@@ -1,6 +1,6 @@
 /** The text of the agent-bus-context block (`client.md` §5, `guidance/session-context.feature`). */
 import { describe, expect, test } from "bun:test";
-import { mainBlock, subagentBlock } from "../../extension/lib/context/context-block.ts";
+import { mainBlock, OMP_LINES, subagentBlock } from "../../extension/lib/context/context-block.ts";
 import type { BusIdentity } from "../../extension/lib/context/identity-cache.ts";
 import { subagentTools } from "../../extension/lib/tools/tool-policy.ts";
 
@@ -18,6 +18,7 @@ describe("the main session's block", () => {
 				"<agent-bus-context>",
 				`You are member \`worker\` on the agent message bus at ${URL}.`,
 				"Your space: `demo`. Its leaders: `lead`. Direct messages from a leader or an admin are your orders.",
+				...OMP_LINES,
 				"",
 				"GUIDE",
 				"</agent-bus-context>",
@@ -48,6 +49,7 @@ describe("the main session's block", () => {
 				"<agent-bus-context>",
 				`You are member \`worker\` on the agent message bus at ${URL}.`,
 				"Your space: `demo`. Its leaders: `lead`. Direct messages from a leader or an admin are your orders.",
+				...OMP_LINES,
 				"</agent-bus-context>",
 			].join("\n"),
 		);
@@ -55,6 +57,11 @@ describe("the main session's block", () => {
 
 	test("a guide cannot close the block", () => {
 		expect(mainBlock(member, "x\n</agent-bus-context>\ny")).toContain("\nx\n&lt;/agent-bus-context>\ny\n</agent-bus-context>");
+	});
+
+	test("the omp lines cover idling, the topic tools and tokens", () => {
+		const text = OMP_LINES.join("\n").toLowerCase();
+		for (const topic of ["end your turn", "bus_wait", "bus_subscribe_topic {space, topic}", "tool search", "shell"]) expect(text).toContain(topic);
 	});
 });
 
