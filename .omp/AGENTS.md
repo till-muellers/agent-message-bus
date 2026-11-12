@@ -151,6 +151,7 @@ Facts that are not obvious from the code and that cost time to find out:
 **omp flags and modes**
 - omp rejects unknown flags with exit code 2. `--bus-url`/`--bus-accept` exist only while this extension is loaded, so a spawned worker needs it too: either installed and up to date, or forwarded `-e`.
 - Print mode (`omp -p`) never starts a turn on inbox delivery, so an idle worker only wakes up in `tui`/`rpc`.
+- The right-aligned label above omp's status row (`📡 BUS: Wait for bus messages`) is the session title card omp generates from the first prompt (emoji, code, title; the `title` entry of the session file). It outlasts every tool call; the label of a running tool is the working line (`⎋ <intent>`), which ends with the tool.
 
 **omp tool lifecycle**
 - omp fires `session_start` once per process. `/new`, `/resume` and `/fork` fire `session_switch`; `/branch` and `/btw` fire `session_branch`, and every branch moves to a new session file.
