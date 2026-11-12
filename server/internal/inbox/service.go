@@ -43,7 +43,7 @@ type Service struct {
 // of an open stream or a pending Wait, now stamps CreatedAt on inserted entries.
 func NewService(root context.Context, conn *sql.DB, pub publisher, creds credentials, now func() time.Time) *Service {
 	return &Service{root: root, db: conn, pub: pub, creds: creds, now: now,
-		heartbeat: defaultHeartbeat, frameTimeout: defaultFrameTimeout, presence: newPresence()}
+		heartbeat: defaultHeartbeat, frameTimeout: defaultFrameTimeout, presence: newPresence(now)}
 }
 
 func topic(agentID int64) string { return fmt.Sprintf("inbox/%d", agentID) }

@@ -1,4 +1,4 @@
-import { count, type Decoder, type Fields, fields, flag, list, optionalCount, text, textItem } from "./decode.ts";
+import { count, type Decoder, type Fields, fields, flag, list, optionalCount, optionalText, text, textItem } from "./decode.ts";
 import type { Blackboard, Overview, Participant, PendingInvite, RecentThread, SpaceDetail, SpaceList, SpaceSummary, Topic } from "./types.ts";
 
 // Decoders of GET /web/api/state (contracts.md §10.2). "you" is not decoded: the session names the operator.
@@ -19,7 +19,9 @@ function summary(json: unknown, what: string): SpaceSummary {
 
 function participant(json: unknown, what: string): Participant {
 	const o = fields(json, what);
-	return { name: text(o, "name", what), role: text(o, "role", what), connected: flag(o, "connected", what) };
+	const offlineSince = optionalText(o, "offlineSince", what);
+	const row: Participant = { name: text(o, "name", what), role: text(o, "role", what), connected: flag(o, "connected", what) };
+	return offlineSince === undefined ? row : { ...row, offlineSince };
 }
 
 function topic(json: unknown, what: string): Topic {

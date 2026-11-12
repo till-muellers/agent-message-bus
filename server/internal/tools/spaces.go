@@ -18,6 +18,10 @@ type memberArgs struct {
 	Name  string `json:"name"`
 }
 
+// offlineSinceNote explains offlineSince in the descriptions of the tools that list participants.
+const offlineSinceNote = "offlineSince: since when a participant has had no inbox stream and no bus_wait; " +
+	"clients that never stream or wait always have it, so it does not mean gone."
+
 func spaceTools(s *spaces.Service) []Tool {
 	return append(spaceIdentityTools(s), append(spaceLifecycleTools(s), memberTools(s)...)...)
 }
@@ -36,8 +40,9 @@ func spaceIdentityTools(s *spaces.Service) []Tool {
 			nil, nil, func(ctx context.Context, p auth.Principal, _ noArgs) (any, error) {
 				return list(s.List(ctx, p))
 			}),
-		define(BusListParticipants, accessParticipantsRead, "Lists the space's admins, leaders and members, in that order, with whether each is connected.",
-			"[{name, role, connected}]",
+		define(BusListParticipants, accessParticipantsRead, "Lists the space's admins, leaders and members, in that order, with whether each is connected. "+
+			offlineSinceNote,
+			"[{name, role, connected, offlineSince?}]",
 			spaceReq(), spaceOnly(), func(ctx context.Context, p auth.Principal, a spaceArgs) (any, error) {
 				return list(s.Participants(ctx, p, a.Space))
 			}),

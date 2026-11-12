@@ -18,8 +18,11 @@ import (
 )
 
 const (
-	demoParticipants = `[{"connected":false,"name":"lead","role":"leader"},{"connected":false,"name":"peer","role":"member"},` +
-		`{"connected":false,"name":"worker","role":"member"}]`
+	// started is the inbox's start time: the first tick of the world's step clock, so the
+	// offlineSince of every participant that never connected.
+	started          = "2026-01-01T00:00:01Z"
+	demoParticipants = `[{"connected":false,"name":"lead","offlineSince":"` + started + `","role":"leader"},{"connected":false,"name":"peer","offlineSince":"` + started + `","role":"member"},` +
+		`{"connected":false,"name":"worker","offlineSince":"` + started + `","role":"member"}]`
 	allOnly = `[{"name":"all","createdBy":"lead","subscribed":true}]`
 )
 
@@ -80,7 +83,7 @@ func overviewCases() []overviewCase {
 			w.must(t, w.sp.Join(t.Context(), w.ops, "demo"))
 		}, caller: ops, space: "demo", want: map[string]string{
 			"you":          `{"name":"ops","role":"admin"}`,
-			"participants": `[{"connected":false,"name":"ops","role":"admin"},` + demoParticipants[1:],
+			"participants": `[{"connected":false,"name":"ops","offlineSince":"` + started + `","role":"admin"},` + demoParticipants[1:],
 			"topics":       allOnly,
 		}},
 		{name: "unjoined admin has no role and no subscriptions", setup: memberViewSetup, caller: ops, space: "demo",
@@ -92,7 +95,7 @@ func overviewCases() []overviewCase {
 		{name: "empty space shows empty lists", setup: func(t *testing.T, w *world) {
 			w.must(t, w.sp.Create(t.Context(), w.lead, "empty"))
 		}, caller: lead, space: "empty", want: map[string]string{
-			"you": `{"name":"lead","role":"leader"}`, "participants": `[{"connected":false,"name":"lead","role":"leader"}]`,
+			"you": `{"name":"lead","role":"leader"}`, "participants": `[{"connected":false,"name":"lead","offlineSince":"` + started + `","role":"leader"}]`,
 			"topics": allOnly, "blackboards": `[]`, "recentThreads": `[]`,
 		}},
 		{name: "the all topic shows as subscribed for every participant", caller: peer, space: "demo",

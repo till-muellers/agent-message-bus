@@ -19,7 +19,7 @@ const fixtureDir = "../web/testdata"
 // only volatile as text (an invite id), numeric ids are stable in a fresh database.
 var volatile = map[string]string{
 	"createdAt": "2026-11-04T20:00:00Z", "lastPostAt": "2026-11-04T20:00:00Z",
-	"expiresAt": "2026-11-04T20:10:00Z", "expires_at": "2026-11-04T20:10:00Z",
+	"expiresAt": "2026-11-04T20:10:00Z", "expires_at": "2026-11-04T20:10:00Z", "offlineSince": "2026-11-04T19:00:00Z",
 	"csrf": "csrf-of-the-session", "token": "token-shown-once", "code": "code-shown-once",
 	"id": "0123456789abcdef",
 }

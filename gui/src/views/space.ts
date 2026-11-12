@@ -34,8 +34,14 @@ function revokeButton(page: Page, p: Participant): ChildArg {
 	return button(`revoke-${p.name}`, "Revoke", () => page.intents.ask({ kind: "revoke", space: page.space, name: p.name, role: p.role }));
 }
 
+/** "yes", or "no" with the time the participant was last connected. */
+function connection(p: Participant): ChildArg {
+	if (p.connected) return "yes";
+	return p.offlineSince === undefined ? "no" : h("span", null, "no, since ", time(p.offlineSince));
+}
+
 function participants(o: Overview, page: Page): VNode {
-	const rows = o.participants.map((p) => ({ key: p.name, cells: [p.name, p.role, p.connected ? "yes" : "no", revokeButton(page, p)] }));
+	const rows = o.participants.map((p) => ({ key: p.name, cells: [p.name, p.role, connection(p), revokeButton(page, p)] }));
 	return section("participants", "Participants", "No participants.", ["Name", "Role", "Connected", ""], rows);
 }
 

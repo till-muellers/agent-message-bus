@@ -24,16 +24,17 @@ type inboxStore interface {
 	Stage(ctx context.Context, tx db.DBTX, es []inbox.Entry) (inbox.Staged, error)
 	Publish(st inbox.Staged) []inbox.Receipt
 	DeleteSpaceEntries(ctx context.Context, q db.DBTX, agentID, spaceID int64) error
-	Connected(agentID int64) bool
+	OfflineSince(agentID int64) (time.Time, bool)
 	Wake(agentIDs ...int64)
 }
 
 // Participant is one agent in a space; Connected means it holds its inbox stream or
-// is blocked in bus_wait, in any space.
+// is blocked in bus_wait, in any space. OfflineSince is set only when not connected.
 type Participant struct {
-	Name      string `json:"name"`
-	Role      Role   `json:"role"`
-	Connected bool   `json:"connected"`
+	Name         string `json:"name"`
+	Role         Role   `json:"role"`
+	Connected    bool   `json:"connected"`
+	OfflineSince string `json:"offlineSince,omitempty"`
 }
 
 // Service manages spaces and their participants.
@@ -264,7 +265,8 @@ func (s *Service) runDepartureHooks(ctx context.Context, tx db.DBTX, m Membershi
 	return entries, nil
 }
 
-// Participants lists the participants of space, leaders first, each marked connected.
+// Participants lists the participants of space, leaders first, each marked connected or
+// offline since when.
 func (s *Service) Participants(ctx context.Context, p auth.Principal, space string) ([]Participant, error) {
 	m, err := s.r.Resolve(ctx, s.db, p, space)
 	if err != nil {
@@ -280,7 +282,11 @@ func (s *Service) ParticipantsFor(ctx context.Context, m Membership) ([]Particip
 		return nil, err
 	}
 	for i, id := range ids {
-		ps[i].Connected = s.ib.Connected(id)
+		since, offline := s.ib.OfflineSince(id)
+		ps[i].Connected = !offline
+		if offline {
+			ps[i].OfflineSince = db.Timestamp(since)
+		}
 	}
 	return ps, nil
 }

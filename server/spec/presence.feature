@@ -81,3 +81,35 @@ Feature: Delivery receipts and presence
       Given member "peer" is blocked in a server bus_wait call
       When member "worker" lists the participants of space "alpha"
       Then "peer" is listed with "connected": true
+
+  Rule: Participant lists show since when an agent is not connected
+
+    # offlineSince is kept in memory only, like presence itself. MCP and RPC clients that
+    # never stream or wait always show it: it means "not connected", not "gone".
+
+    Scenario: An agent whose stream ended shows when it ended
+      Given member "peer" opened the inbox stream
+      And member "peer"'s stream ended at "2026-11-12T10:00:00Z"
+      When member "worker" lists the participants of space "alpha"
+      Then "peer" is listed with "connected": false and "offlineSince": "2026-11-12T10:00:00Z"
+
+    Scenario: An agent whose bus_wait returned shows when it returned
+      Given member "peer"'s server bus_wait call returned at "2026-11-12T10:05:00Z"
+      When member "worker" lists the participants of space "alpha"
+      Then "peer" is listed with "offlineSince": "2026-11-12T10:05:00Z"
+
+    Scenario: An agent not connected since the server started shows the start time
+      Given the server started at "2026-11-12T09:00:00Z"
+      When member "worker" lists the participants of space "alpha"
+      Then "worker" and "lead" are listed with "offlineSince": "2026-11-12T09:00:00Z"
+
+    Scenario: A connected agent has no offlineSince
+      Given member "peer" opened the inbox stream
+      When member "worker" lists the participants of space "alpha"
+      Then "peer" is listed without "offlineSince"
+
+    Scenario: The space overview and the web GUI show offlineSince the same way
+      Given member "peer"'s stream ended at "2026-11-12T10:00:00Z"
+      When member "worker" calls bus_space_overview with {"space":"alpha"}
+      Then participant "peer" has "offlineSince": "2026-11-12T10:00:00Z"
+      And the web GUI's participant list shows "peer" as not connected since then

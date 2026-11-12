@@ -88,7 +88,7 @@ func TestRevokedAdminActsNowhere(t *testing.T) {
 		})
 	}
 	wantSpace(t, e, "orphan", false)
-	wantParticipants(t, e, "demo", []Participant{{"lead", RoleLeader, false}, {"worker", RoleMember, false}})
+	wantParticipants(t, e, "demo", []Participant{{Name: "lead", Role: RoleLeader}, {Name: "worker", Role: RoleMember}})
 	wantAdmins(t, e, root, map[string]int{"admin": 0, "ops": 0, "web": 1})
 }
 
@@ -104,7 +104,7 @@ func TestReinvitedMemberIgnoresOldToken(t *testing.T) {
 	wantRevoke(t, e, lead, "worker", true)
 	inviteMember(t, e, lead, "alpha", "worker")
 	apperrtest.WantKind(t, e.svc.Leave(ctx, old, "alpha"), apperr.Unauthenticated, "invalid token")
-	wantParticipants(t, e, "alpha", []Participant{{"lead", RoleLeader, false}, {"worker", RoleMember, false}})
+	wantParticipants(t, e, "alpha", []Participant{{Name: "lead", Role: RoleLeader}, {Name: "worker", Role: RoleMember}})
 }
 
 // TestRotatedBootstrapTokenActsNowhere: a call of the bootstrap admin authenticated with the
