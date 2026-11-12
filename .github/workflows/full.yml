@@ -43,10 +43,28 @@ jobs:
       - name: go test -race
         run: go test -race ./...
 
-      - name: golangci-lint
+      # The release binary comes from GitHub, which can answer a download with a 5xx; then the same pinned version is
+      # built from the Go module proxy. The lint itself runs once, with whichever binary was installed.
+      - name: install golangci-lint
+        id: lint-binary
+        continue-on-error: true
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
+          install-only: true
+
+      - name: install golangci-lint (go install)
+        if: steps.lint-binary.outcome == 'failure'
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+          install-mode: goinstall
+          install-only: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          install-mode: none
           working-directory: server
 
   typescript:
