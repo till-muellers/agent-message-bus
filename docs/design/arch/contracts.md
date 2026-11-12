@@ -101,11 +101,11 @@ Final: **34 server tools** (PO-3: no `bus_cancel_invite`). `bus_spawn_worker` is
 
 ### 3.1 Description and access (all tools) [3, then 4c/4d/6a]
 
-`Tool.Access` is a separate field; descriptions open with the purpose and contain the access sentence; TOOLS.md "Access" column = `Tool.Access` (`tool-descriptions.feature:13-19`). Pitfall topics per `tool-descriptions.feature` (wording is free and not pinned by tests); the `critical` property names the leaders and admins and the omp interruption.
+`Tool.Access` is a separate field; descriptions open with the purpose and contain the access sentence; TOOLS.md "Access" column = `Tool.Access` (`server/spec/tool-descriptions.feature`, rule "Descriptions open with the purpose; the access rule follows"). Pitfall topics per `tool-descriptions.feature` (wording is free and not pinned by tests); the `critical` property names the leaders and admins and the omp interruption.
 
 Descriptions state only shipped behaviour.
 
-Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-69`); the rest [AD-13].
+Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature`, rule "Access lines name admins where they have leader rights"); the rest [AD-13].
 
 | Tool | Slice 3 (no admin authority yet) | Final (from 4c/4d/6a) |
 |---|---|---|
@@ -130,7 +130,7 @@ Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature:64-6
 | `bus_inbox_read` ✔, `bus_inbox_ack`, `bus_wait` ✔ | Leaders and members. | Leaders, members and admins. |
 | `bus_spawn_worker` ✔ (TOOLS.md only) | Leaders of the space. | Leaders of the space and admins. |
 
-`bus_spawn_worker` TOOLS.md entry (slice 3, `tool-descriptions.feature:22-23,73-79`): description starts "Starts a worker agent"; args `space` ("Space name."), `name` ("Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."), `task` ("Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report.", from slice 7), `cwd`; result `{name, space, launcher}`.
+`bus_spawn_worker` TOOLS.md entry (slice 3; `tool-descriptions.feature`, scenario "The extension's spawn tool follows the same shape" and rule "The extension's own tool is documented like the server's"): the description opens with "Starts a worker agent"; args `space` (an existing space, without the name rule), `name` (states the name rule), `task` (delivered as a direct message from the caller, 1..65536 bytes; from slice 7), `cwd`; result `{name, space, launcher}`. The texts live in `extension/lib/spawn/spawn-tool.ts` and `server/internal/tools/ledger_tail.md.tmpl`.
 
 ### 3.2 Identity and listing [4a, 4d]
 
@@ -186,7 +186,7 @@ Server rule, decided in exactly one place (`server/internal/inbox/class.go`, `Cl
 - **Derived, not stored** [AD-15]: the class is a pure function of two stored columns (`type`, `critical`), so storing it would duplicate data that can drift; deriving needs no migration, and a policy change applies uniformly to the backlog and to every surface (SSE, `bus_inbox_read`, `bus_wait`, web) because all of them build entries through the same scan/insert path. Observably this is the spec's "assigns the class when it stores an entry" (`delivery-class.feature:39`): the mapping is fixed per release, and an entry's type and critical flag never change after insert. If a future entry ever needs a per-entry choice not expressible from stored columns, that slice adds a numbered migration and stores it.
 - **Extensibility**: a new entry type is added to `classByType` in `class.go`; a test enumerates every `Type` constant and fails if one has no class. Producers never set the class.
 - **Clients**: an unknown class value is treated as `queue` (`delivery-class.feature:94-97`). The field ships in the protocol-2 release, so the omp extension (minimum 2) never sees an entry without it. MCP/HTTP clients: informational; the guide tells agents to handle `interrupt` first.
-- **Critical vs class**: `critical` stays in the entry (MCP and other clients read it, `tool-descriptions.feature:53`); `class` is what a client acts on.
+- **Critical vs class**: `critical` stays in the entry (MCP and other clients read it; `tool-descriptions.feature`, scenario "The critical flag says who may set it and how omp recipients see it"); `class` is what a client acts on.
 
 ### 4.2 Entry notes and stream
 
