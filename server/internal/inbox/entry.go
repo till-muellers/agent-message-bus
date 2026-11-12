@@ -26,6 +26,7 @@ type Entry struct {
 	Blackboard  string `json:"blackboard,omitempty"`
 	ThreadID    int64  `json:"threadId,omitempty"`
 	ThreadTitle string `json:"threadTitle,omitempty"`
+	PostID      int64  `json:"postId,omitempty"` // the announced post of a thread_post entry
 	Body        string `json:"body,omitempty"`
 	CreatedAt   string `json:"createdAt"`
 }

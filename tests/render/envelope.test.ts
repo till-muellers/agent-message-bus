@@ -54,6 +54,11 @@ describe("envelope", () => {
 		expect(text).toContain('\nEarlier posts: bus_read_thread {space: "alpha", threadId: 7}. Answer: bus_add_post {space: "alpha", threadId: 7}.\n');
 	});
 
+	test("a thread post names its post id next to the thread", () => {
+		const text = envelope(entry(3, { type: "thread_post", threadId: 7, threadTitle: "design", blackboard: "plan", space: "alpha", postId: 27 }));
+		expect(text).toContain('\nalpha · thread 7 "design" on plan · post 27 · from lead\n');
+	});
+
 	test("lifecycle notices have no reply hint, and an entry without a body has no body line", () => {
 		const notices = [
 			entry(4, { type: "topic_closed", topic: "x", body: undefined }),

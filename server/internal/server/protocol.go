@@ -6,4 +6,5 @@ package server
 //	2: invite task as a direct message, accept without task, kind/role admin,
 //	   bus_list_spaces.admins, inbox entry field class, bus_wait, bus_space_overview,
 //	   the mail notice and mail hint, receipts and connected, GET /v1/guide and MCP instructions.
-const Protocol = 2
+//	3: inbox entry field postId on thread_post entries.
+const Protocol = 3

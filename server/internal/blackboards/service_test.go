@@ -99,16 +99,17 @@ func TestPostNotifications(t *testing.T) {
 	id := boardWithThread(t, f, f.m1)
 	must(t, f.svc.Subscribe(ctx, f.m2, "alpha", id))
 	must(t, f.svc.Subscribe(ctx, f.m2, "alpha", id)) // idempotent
-	_, rs, err := f.svc.AddPost(ctx, f.m2, "alpha", id, "hi")
+	postID, rs, err := f.svc.AddPost(ctx, f.m2, "alpha", id, "hi")
 	must(t, err)
 	if want := []inbox.Receipt{{To: "m1", Delivery: inbox.Queued}}; !reflect.DeepEqual(rs, want) {
 		t.Fatalf("receipts = %+v, want %+v", rs, want)
 	}
 	es := readInbox(t, f.ib, f.m1)
 	want := inbox.Entry{Space: "alpha", Type: inbox.ThreadPost, From: "m2", Blackboard: "b",
-		ThreadID: id, ThreadTitle: "plan", Body: "hi"}
+		ThreadID: id, ThreadTitle: "plan", PostID: postID, Body: "hi"}
 	if len(es) != 1 || es[0].Space != want.Space || es[0].Type != want.Type || es[0].From != want.From ||
-		es[0].Blackboard != want.Blackboard || es[0].ThreadID != id || es[0].ThreadTitle != "plan" || es[0].Body != "hi" {
+		es[0].Blackboard != want.Blackboard || es[0].ThreadID != id || es[0].ThreadTitle != "plan" ||
+		es[0].PostID != want.PostID || es[0].Body != "hi" {
 		t.Fatalf("m1 inbox = %+v", es)
 	}
 	if es := readInbox(t, f.ib, f.m2); len(es) != 0 {

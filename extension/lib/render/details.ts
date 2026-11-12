@@ -26,8 +26,8 @@ export interface BusMessage {
 
 /** The entry's known fields; anything else the wire carries stays out of the session. */
 function entryFields(e: Entry): Entry {
-	const { id, space, type, from, critical, class: cls, createdAt, body, topic, blackboard, threadId, threadTitle } = e;
-	return { id, space, type, from, critical, class: cls, createdAt, body, topic, blackboard, threadId, threadTitle };
+	const { id, space, type, from, critical, class: cls, createdAt, body, topic, blackboard, threadId, threadTitle, postId } = e;
+	return { id, space, type, from, critical, class: cls, createdAt, body, topic, blackboard, threadId, threadTitle, postId };
 }
 
 function message(content: string, entries: readonly Entry[]): BusMessage {

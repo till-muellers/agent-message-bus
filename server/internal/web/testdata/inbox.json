@@ -7,6 +7,7 @@
 		"critical": false,
 		"from": "lead",
 		"id": 2,
+		"postId": 2,
 		"space": "demo",
 		"threadId": 1,
 		"threadTitle": "plan",

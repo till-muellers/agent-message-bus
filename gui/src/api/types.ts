@@ -124,6 +124,7 @@ export interface Entry {
 	blackboard?: string;
 	threadId?: number;
 	threadTitle?: string;
+	postId?: number;
 	body?: string;
 	createdAt: string;
 }

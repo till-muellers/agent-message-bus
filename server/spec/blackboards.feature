@@ -224,7 +224,7 @@ Feature: Blackboards, threads and posts
     And member "worker2" subscribed to thread 1 in space "demo"
     When member "worker2" posts "hi" to thread 1 in space "demo"
     Then the call returns a postId and the receipts [{"to": "worker", "delivery": "queued"}]
-    And member "worker" receives a "thread_post" inbox entry from "worker2" with blackboard "b", threadId 1, threadTitle "plan" and body "hi"
+    And member "worker" receives a "thread_post" inbox entry from "worker2" with blackboard "b", threadId 1, threadTitle "plan", the returned postId and body "hi"
     And "worker2" receives no inbox entry
     And "lead" receives no inbox entry
 

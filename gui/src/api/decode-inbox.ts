@@ -10,6 +10,7 @@ function details(o: Fields, what: string): Partial<Entry> {
 		blackboard: optionalText(o, "blackboard", what),
 		threadId: optionalCount(o, "threadId", what),
 		threadTitle: optionalText(o, "threadTitle", what),
+		postId: optionalCount(o, "postId", what),
 		body: optionalText(o, "body", what),
 	};
 	return Object.fromEntries(Object.entries(found).filter(([, value]) => value !== undefined));

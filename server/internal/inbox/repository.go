@@ -10,13 +10,13 @@ import (
 )
 
 const insertSQL = `INSERT INTO inbox (agent_id, space_id, type, from_name, critical,
-	topic, blackboard, thread_id, thread_title, body, created_at, edge)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	topic, blackboard, thread_id, thread_title, post_id, body, created_at, edge)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 // selectSQL takes agent_id, after, space filter (twice; 0 = all spaces), limit.
 const selectSQL = `SELECT i.id, i.agent_id, i.space_id, s.name, i.type, i.from_name, i.critical,
 	COALESCE(i.topic, ''), COALESCE(i.blackboard, ''), COALESCE(i.thread_id, 0),
-	COALESCE(i.thread_title, ''), COALESCE(i.body, ''), i.created_at
+	COALESCE(i.thread_title, ''), COALESCE(i.post_id, 0), COALESCE(i.body, ''), i.created_at
 	FROM inbox i JOIN spaces s ON s.id = i.space_id
 	WHERE i.agent_id = ? AND i.id > ? AND (? = 0 OR i.space_id = ?)
 	ORDER BY i.id LIMIT ?`
@@ -25,7 +25,7 @@ const selectSQL = `SELECT i.id, i.agent_id, i.space_id, s.name, i.type, i.from_n
 // thread id (twice; 0 = any thread), limit.
 const matchSQL = `SELECT i.id, i.agent_id, i.space_id, s.name, i.type, i.from_name, i.critical,
 	COALESCE(i.topic, ''), COALESCE(i.blackboard, ''), COALESCE(i.thread_id, 0),
-	COALESCE(i.thread_title, ''), COALESCE(i.body, ''), i.created_at
+	COALESCE(i.thread_title, ''), COALESCE(i.post_id, 0), COALESCE(i.body, ''), i.created_at
 	FROM inbox i JOIN spaces s ON s.id = i.space_id
 	WHERE i.agent_id = ? AND i.id > ? AND (? = 0 OR i.space_id = ?)
 	AND (? = '' OR i.from_name = ?) AND (? = 0 OR i.thread_id = ?)
@@ -61,8 +61,8 @@ const waitingSQL = `SELECT s.name, COUNT(*), SUM(i.critical)
 
 func insertEntry(ctx context.Context, q db.DBTX, e Entry, edge bool) (int64, error) {
 	id, err := db.InsertID(ctx, q, insertSQL, e.AgentID, e.SpaceID, string(e.Type), e.From, e.Critical,
-		nullString(e.Topic), nullString(e.Blackboard), sql.NullInt64{Int64: e.ThreadID, Valid: e.ThreadID != 0},
-		nullString(e.ThreadTitle), nullString(e.Body), e.CreatedAt, edge)
+		nullString(e.Topic), nullString(e.Blackboard), nullInt(e.ThreadID),
+		nullString(e.ThreadTitle), nullInt(e.PostID), nullString(e.Body), e.CreatedAt, edge)
 	if err != nil {
 		return 0, fmt.Errorf("inserting inbox entry for agent %d: %w", e.AgentID, err)
 	}
@@ -70,6 +70,8 @@ func insertEntry(ctx context.Context, q db.DBTX, e Entry, edge bool) (int64, err
 }
 
 func nullString(v string) sql.NullString { return sql.NullString{String: v, Valid: v != ""} }
+
+func nullInt(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: v != 0} }
 
 func selectEntries(ctx context.Context, q db.DBTX, agentID, after, space int64, limit int) ([]Entry, error) {
 	rows, err := q.QueryContext(ctx, selectSQL, agentID, after, space, space, limit)
@@ -105,7 +107,7 @@ func scanEntries(rows *sql.Rows) ([]Entry, error) {
 	for rows.Next() {
 		var e Entry
 		if err := rows.Scan(&e.ID, &e.AgentID, &e.SpaceID, &e.Space, &e.Type, &e.From, &e.Critical,
-			&e.Topic, &e.Blackboard, &e.ThreadID, &e.ThreadTitle, &e.Body, &e.CreatedAt); err != nil {
+			&e.Topic, &e.Blackboard, &e.ThreadID, &e.ThreadTitle, &e.PostID, &e.Body, &e.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning inbox entry: %w", err)
 		}
 		e.Class = ClassOf(e.Type, e.Critical)

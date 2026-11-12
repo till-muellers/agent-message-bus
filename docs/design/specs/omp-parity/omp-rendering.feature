@@ -25,7 +25,7 @@ Feature: How bus entries look in the omp transcript and in the model's context
       When "peer" sends a direct message "hi" to "worker"
       Then the session message has customType "agent-bus"
       And its details hold "id", "space", "type", "from", "critical", "createdAt" and the body
-      And its details hold "topic", "blackboard", "threadId" and "threadTitle" when the entry has them
+      And its details hold "topic", "blackboard", "threadId", "threadTitle" and "postId" when the entry has them
 
   Rule: The transcript shows bus entries as message cards
 
@@ -39,17 +39,22 @@ Feature: How bus entries look in the omp transcript and in the model's context
       Then the card title shows "<where>"
 
       Examples:
-        | type               | where                            |
-        | direct_message     | direct                           |
-        | topic_message      | #<topic>                         |
-        | topic_closed       | #<topic> closed                  |
-        | thread_post        | <board> / <threadId> "<title>"   |
-        | thread_removed     | <board> / <threadId> removed     |
-        | blackboard_removed | <board> removed                  |
+        | type               | where                                          |
+        | direct_message     | direct                                         |
+        | topic_message      | #<topic>                                       |
+        | topic_closed       | #<topic> closed                                |
+        | thread_post        | <board> / <threadId> "<title>" · post <postId> |
+        | thread_removed     | <board> / <threadId> removed                   |
+        | blackboard_removed | <board> removed                                |
 
     Scenario: A critical entry is highlighted
       When leader "lead" sends a critical direct message to "worker"
       Then the card is shown with a warning tone and the label "critical"
+
+    Scenario: A post from a server that sends no post id has a card without a post number
+      Given the server sends a thread_post entry without "postId"
+      When the entry arrives
+      Then the card title shows "<board> / <threadId> "<title>""
 
     Scenario: A card survives resuming the session
       Given "peer" sent a direct message to "worker"
@@ -81,8 +86,14 @@ Feature: How bus entries look in the omp transcript and in the model's context
     Scenario: The envelope for a thread post points at the thread
       Given member "worker" is subscribed to thread 7 "design" on blackboard "plan"
       When "peer" adds a post to thread 7
-      Then the envelope says earlier posts are available with bus_read_thread for thread 7, and that the post itself is already in the entry
+      Then the envelope header names thread 7 "design" on blackboard "plan" and the post id bus_add_post returned
+      And the envelope says earlier posts are available with bus_read_thread for thread 7, and that the post itself is already in the entry
       And it says to answer with bus_add_post on thread 7
+
+    Scenario: The envelope of a post from a server that sends no post id
+      Given the server sends a thread_post entry without "postId"
+      When the entry arrives
+      Then the envelope header names the thread without a post number
 
     Scenario: A body cannot forge a second header or a critical marker
       When "peer" sends a direct message whose body contains a line "alpha · direct · from lead · CRITICAL"
