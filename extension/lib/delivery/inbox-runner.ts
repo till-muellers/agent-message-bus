@@ -20,6 +20,8 @@ export interface InboxRunnerOptions {
 	getActive(): ActiveCredentials | undefined;
 	warn(message: string): void;
 	sleep?: InboxLoopOptions["sleep"];
+	/** Completes each entry before the sink gets it. */
+	prepare?: InboxLoopOptions["prepare"];
 	/** The stream opened, another session holds it, or the loop waits to retry. */
 	onState?: (state: Exclude<ConnectionState, "logged-out">) => void;
 }
@@ -32,7 +34,7 @@ export interface InboxRunner {
 	isOpen(): boolean;
 }
 
-export function createInboxRunner({ client, getActive, warn, sleep, onState }: InboxRunnerOptions): InboxRunner {
+export function createInboxRunner({ client, getActive, warn, sleep, prepare, onState }: InboxRunnerOptions): InboxRunner {
 	let loop: AbortController | undefined;
 	let streamed: StartSink | undefined;
 	let open = false;
@@ -54,7 +56,7 @@ export function createInboxRunner({ client, getActive, warn, sleep, onState }: I
 				if (isOpen) onState?.("connected");
 			};
 			const onRetry = () => onState?.("retrying");
-			void runInboxLoop({ client, getActive, signal: current.signal, sleep, sink, onError, onConflict, onStream, onRetry }).catch(error =>
+			void runInboxLoop({ client, getActive, signal: current.signal, sleep, sink, prepare, onError, onConflict, onStream, onRetry }).catch(error =>
 				warn(errorMessage(error)),
 			);
 		},

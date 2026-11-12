@@ -48,6 +48,18 @@ describe("envelope", () => {
 		expect(text).not.toContain("bus_send_topic");
 	});
 
+	test("a sender that has not joined the space is not offered a direct reply", () => {
+		const away = { from: "admin", space: "alpha", senderNotJoined: true } as const;
+		const direct = envelope(entry(2, away));
+		const topic = envelope(entry(3, { ...away, type: "topic_message", topic: "dev" }));
+		const all = envelope(entry(4, { ...away, type: "topic_message", topic: "all" }));
+		for (const text of [direct, topic, all]) {
+			expect(text).not.toContain("bus_send_direct");
+			expect(text).toContain("admin has not joined alpha");
+		}
+		expect(topic).toContain('bus_send_topic {space: "alpha", topic: "dev"}');
+	});
+
 	test("a thread post points at the full thread and at bus_add_post", () => {
 		const text = envelope(entry(3, { type: "thread_post", threadId: 7, threadTitle: "design", blackboard: "plan", space: "alpha" }));
 		expect(text).toContain('\nalpha · thread 7 "design" on plan · from lead\n');

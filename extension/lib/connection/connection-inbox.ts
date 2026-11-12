@@ -1,11 +1,13 @@
 /**
  * The inbox side of the connection: the inbox ledger of the current connection start, the stream that fills it,
  * the status line of the handed-over posts and what the local `bus_wait` waits with (`docs/design/arch/client.md` §3).
- * Each connection start begins with a new ledger: what the last start handed over or left pending is forgotten.
+ * Each connection start begins with a new ledger: what the last start handed over or left pending is forgotten, and so
+ * are the participants the sender reach knew.
  */
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import type { BusClient } from "../bus/client.ts";
+import { BusError, type BusClient } from "../bus/client.ts";
 import type { ActiveCredentials } from "../bus/credentials.ts";
+import type { Entry } from "../bus/entry.ts";
 import { NOT_LOGGED_IN } from "../bus/errors.ts";
 import { createAcker } from "../delivery/acker.ts";
 import type { BusEvents } from "../delivery/bus-events.ts";
@@ -13,6 +15,7 @@ import { phaseOf } from "../delivery/delivery-class.ts";
 import { createInboxLedger, type InboxLedger } from "../delivery/inbox-ledger.ts";
 import type { InboxLoopOptions } from "../delivery/inbox-loop.ts";
 import { createInboxRunner } from "../delivery/inbox-runner.ts";
+import { createSenderReach, type SenderReach, type SenderReachDeps } from "../delivery/sender-reach.ts";
 import { createUnreadPosts, type UnreadPosts } from "../render/status-line.ts";
 import { WAIT_TOOL, type WaitToolDeps } from "../tools/wait-tool.ts";
 import type { SessionView } from "./session-view.ts";
@@ -46,12 +49,27 @@ export interface ConnectionInbox {
 	forgetPosts(): void;
 }
 
-/** The server's `bus_wait` for a session without its own stream; it acks nothing. */
-function serverWait(client: BusClient, getActive: () => ActiveCredentials | undefined): WaitToolDeps["forward"] {
+/** The server's `bus_wait` for a session without its own stream; it acks nothing. The entries it returns are marked by `reach`. */
+function serverWait(client: BusClient, getActive: () => ActiveCredentials | undefined, reach: SenderReach): WaitToolDeps["forward"] {
 	return async (args, timeoutMs, signal) => {
 		const current = getActive();
 		if (!current) throw new Error(NOT_LOGGED_IN);
-		return client.callTool(current.url, current.token, WAIT_TOOL, { ...args }, { timeoutMs, signal });
+		const result = await client.callTool(current.url, current.token, WAIT_TOOL, { ...args }, { timeoutMs, signal });
+		return Array.isArray(result) ? Promise.all(result.map((entry: Entry) => reach.mark(entry))) : result;
+	};
+}
+
+/** A participant lookup holds up the delivery of the stream's next entries, so it gives up after this long. */
+const PARTICIPANTS_TIMEOUT_MS = 5000;
+
+/** The names of a space's participants, read with the active credentials. */
+function participantsOf(client: BusClient, getActive: () => ActiveCredentials | undefined): SenderReachDeps["participants"] {
+	return async space => {
+		const current = getActive();
+		if (!current) throw new Error(NOT_LOGGED_IN);
+		const list: unknown = await client.callTool(current.url, current.token, "bus_list_participants", { space }, { timeoutMs: PARTICIPANTS_TIMEOUT_MS });
+		if (!Array.isArray(list)) throw new BusError("invalid_response", "bus_list_participants: unexpected result");
+		return list.flatMap((item: { name?: unknown } | null) => (typeof item?.name === "string" ? [item.name] : []));
 	};
 }
 
@@ -77,18 +95,20 @@ export function createConnectionInbox(deps: ConnectionInboxDeps, getActive: () =
 	const unread = createUnreadPosts((key, text) => view.setStatus(key, text));
 	const startLedger = ledgerFactory(deps, getActive, unread);
 	let ledger = startLedger();
-	const runner = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, onState: deps.events?.connection });
+	const reach = createSenderReach({ participants: participantsOf(client, getActive) });
+	const runner = createInboxRunner({ client, getActive, warn, sleep: deps.sleep, prepare: reach.mark, onState: deps.events?.connection });
 	return {
 		ledger: () => ledger,
 		consume: ids => ledger.consumed(ids),
 		wait: {
 			source: () => (runner.isOpen() ? ledger : undefined),
 			claims: { claimFromServer: entries => ledger.claimFromServer(entries) },
-			forward: serverWait(client, getActive),
+			forward: serverWait(client, getActive, reach),
 		},
 		threadRead: unread.read,
 		startOver() {
 			runner.stop();
+			reach.forget();
 			ledger = startLedger();
 			unread.clear();
 		},

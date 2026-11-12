@@ -65,6 +65,17 @@ describe("inbox streaming", () => {
 		}
 	});
 
+	test("a direct message from a sender that is no participant of the space offers no direct reply; the details stay the wire entry", async () => {
+		const fromAdmin = entry(1, { from: "admin" });
+		const { sent } = await runSession("tui", {
+			streams: [() => new Response(streamOf([frame(fromAdmin), frame(entry(2))]))],
+			tools: { bus_list_participants: () => Response.json({ result: [{ name: "lead", role: "leader" }, { name: "worker", role: "member" }] }) },
+		});
+		expect(sent.map(s => s.message.content)).toEqual([envelope({ ...fromAdmin, senderNotJoined: true }), envelope(entry(2))]);
+		expect(sent[0].message.content).not.toContain("bus_send_direct");
+		expect(sent[0].message.details).toEqual(busMessage(fromAdmin).details);
+	});
+
 	test("agent-bus messages render as entry cards from their details, so a resumed session shows the same card", async () => {
 		const { sent, renderers } = await runSession("tui");
 		const render = renderers.get("agent-bus");
@@ -133,10 +144,14 @@ describe("inbox streaming", () => {
 			const stream = liveStream();
 			const bus = fakeBus({ streams: [stream.response, () => new Response(streamOf([frame(entry(1))]))] });
 			const env = { OMP_AGENT_BUS_DIR: await tempDir(), AGENT_BUS_URL: URL_, AGENT_BUS_TOKEN: "mem" };
-			const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" });
+			const events = fakeEvents();
+			const handed = Promise.withResolvers<void>();
+			events.on("agent-bus:entry", () => handed.resolve());
+			const app = await boot({ fetchFn: bus.fetchFn, env }, { mode: "tui" }, events);
 			await app.emit("session_start");
 			await stream.opened;
 			stream.push(entry(1));
+			await handed.promise;
 			await app.emit("session_switch", { type: "session_switch", reason });
 			await app.warning("invalid token");
 			expect({ reason, sent: app.sent.map(s => s.message.content) }).toEqual({ reason, sent: [envelope(entry(1)), envelope(entry(1))] });
@@ -496,6 +511,22 @@ describe("bus_wait in omp", () => {
 		expect(callsTo(bus, "/v1/tools/bus_wait").map(call => call.body)).toEqual([{ timeoutSeconds: 10 }]);
 		await app.context([{ role: "toolResult", content: "[]" }]);
 		expect(callsTo(bus, "/bus_inbox_ack")).toEqual([]);
+		await app.emit("session_shutdown");
+	});
+
+	test("a forwarded bus_wait offers no direct reply to a sender that is no participant of the space", async () => {
+		const conflict = () => errorResponse(409, "conflict", "agent w already has an active inbox stream");
+		const { app } = await bootWorker({
+			streams: [conflict],
+			tools: {
+				bus_whoami: () => Response.json({ result: { kind: "member", name: "w", spaces: [] } }),
+				bus_list_participants: () => Response.json({ result: [{ name: "w", role: "member" }] }),
+				bus_wait: () => Response.json({ result: [entry(5, { from: "admin" })] }),
+			},
+		});
+		await app.warning("invalid token");
+		const text = resultOf(await app.tool("bus_wait").execute("id", { timeoutSeconds: 10 }));
+		expect(text).toBe(envelope({ ...entry(5, { from: "admin" }), senderNotJoined: true }));
 		await app.emit("session_shutdown");
 	});
 

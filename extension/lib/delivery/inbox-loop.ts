@@ -16,6 +16,8 @@ export interface InboxLoopOptions {
 	signal: AbortSignal;
 	/** Receives every entry of the stream; it hands it over to the session. */
 	sink: EntrySink;
+	/** Completes an entry before the sink gets it (`sender-reach.ts`); the next frame waits for it, so the order holds. */
+	prepare?: (entry: Entry) => Promise<Entry>;
 	onError: (error: Error) => void;
 	/** Another session holds this agent's stream (409): called once per streak of refusals; the loop keeps retrying. */
 	onConflict: (error: BusError) => void | Promise<void>;
@@ -56,7 +58,10 @@ interface LoopState {
 async function consume(options: InboxLoopOptions, state: LoopState, body: ReadableStream<Uint8Array>): Promise<void> {
 	for await (const frame of parseSse(body)) {
 		if (frame.event !== "inbox") continue;
-		const entry = JSON.parse(frame.data) as Entry;
+		const parsed = JSON.parse(frame.data) as Entry;
+		const entry = options.prepare ? await options.prepare(parsed) : parsed;
+		// A stopped loop hands nothing more to its sink.
+		if (options.signal.aborted) return;
 		options.sink.deliver(entry);
 		state.delay = INITIAL_DELAY_MS;
 	}
