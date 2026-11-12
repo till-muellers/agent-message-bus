@@ -83,6 +83,19 @@ Feature: How bus entries look in the omp transcript and in the model's context
       When "peer" sends "build is red" to topic "dev"
       Then the envelope says to reply with bus_send_topic on topic "dev" or with bus_send_direct to "peer"
 
+    Scenario Outline: The envelope offers no direct reply to a sender that has not joined the space (<type>)
+      Given admin "admin" has not joined space "alpha"
+      When "admin" sends <message> in space "alpha"
+      Then the envelope says that "admin" has not joined "alpha", so a direct reply cannot reach it
+      And the envelope offers no bus_send_direct to "admin"
+      And <topic hint>
+
+      Examples:
+        | type   | message                  | topic hint                                                    |
+        | direct | a direct message         | the envelope offers no other reply                            |
+        | topic  | "status?" to topic "dev" | the envelope says to reply with bus_send_topic on topic "dev" |
+        | all    | "stop" to topic "all"    | the envelope offers no other reply                            |
+
     Scenario: The envelope for a thread post points at the thread
       Given member "worker" is subscribed to thread 7 "design" on blackboard "plan"
       When "peer" adds a post to thread 7

@@ -80,5 +80,29 @@ describe("runInboxLoop", () => {
 			expect({ code, delivered, opens: bus.calls.length }).toEqual({ code, delivered: [], opens: 1 });
 		}
 	});
+
+	test("every entry is prepared before the sink gets it, in stream order even when an earlier one takes longer", async () => {
+		const bus = fakeBus({ streams: [() => new Response(streamOf([frame(entry(1)), frame(entry(2))]))] });
+		const delivered: Entry[] = [];
+		await runInboxLoop({
+			client: createClient(bus.fetchFn),
+			getActive: () => ({ url: URL_, token: "tok" }),
+			signal: new AbortController().signal,
+			sink: { deliver: e => void delivered.push(e) },
+			prepare: async e => {
+				// The first entry resolves several microtasks after the second would.
+				if (e.id === 1) for (let tick = 0; tick < 5; tick++) await Promise.resolve();
+				return { ...e, senderNotJoined: true };
+			},
+			onError: () => {},
+			onConflict: () => {},
+			onStream: () => {},
+			sleep: async () => {},
+		});
+		expect(delivered.map(e => [e.id, e.senderNotJoined])).toEqual([
+			[1, true],
+			[2, true],
+		]);
+	});
 });
 

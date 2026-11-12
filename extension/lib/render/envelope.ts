@@ -36,13 +36,15 @@ function replyHint(e: Entry): string | undefined {
 	const { about, ended } = labelOf(e);
 	if (ended) return undefined;
 	const direct = `bus_send_direct {space: "${e.space}", to: "${e.from}"}`;
+	const topic = `bus_send_topic {space: "${e.space}", topic: "${e.topic}"}`;
+	const notJoined = `${e.from} has not joined ${e.space}, so a direct reply cannot reach it.`;
 	switch (about) {
 		case "direct":
-			return `Reply: ${direct}.`;
+			return e.senderNotJoined ? notJoined : `Reply: ${direct}.`;
 		case "topic":
 			// Members cannot send to `all`: a broadcast is answered directly.
-			if (e.topic === "all") return `Reply: ${direct}.`;
-			return `Reply: bus_send_topic {space: "${e.space}", topic: "${e.topic}"}, or ${direct}.`;
+			if (e.topic === "all") return e.senderNotJoined ? notJoined : `Reply: ${direct}.`;
+			return e.senderNotJoined ? `Reply: ${topic}. ${notJoined}` : `Reply: ${topic}, or ${direct}.`;
 		case "thread":
 			return `Earlier posts: bus_read_thread {space: "${e.space}", threadId: ${e.threadId}}. Answer: bus_add_post {space: "${e.space}", threadId: ${e.threadId}}.`;
 		case "blackboard":

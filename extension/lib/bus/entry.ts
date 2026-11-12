@@ -25,4 +25,6 @@ export interface Entry {
 	postId?: number;
 	body?: string;
 	createdAt: string;
+	/** Set by the extension, never on the wire: the sender was no participant of the space when the entry arrived (`delivery/sender-reach.ts`). */
+	senderNotJoined?: true;
 }
