@@ -125,8 +125,9 @@ func mustClaim(t *testing.T, dir string) *Lock {
 }
 
 // TestClaimFailsFastOnServingInstance: a claim that finds the lock held by a serving instance
-// fails at once; it never waits for that instance to stop, or it would take the data dir over
-// from a start whose instance an operator just stopped.
+// fails at once, whatever its patience; it never waits for that instance to stop, or the loser
+// of a start race would take the data dir over from the winner an operator just stopped. A
+// pause stops the winner, so a loser that waited would win without any timing; it never pauses.
 func TestClaimFailsFastOnServingInstance(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -143,21 +144,4 @@ func TestClaimFailsFastOnServingInstance(t *testing.T) {
 		_ = f.Close()
 	}
 	_ = first.Release()
-}
-
-// TestClaimLoserNeverTakesOver: the loser of a start race, with the full patience, still
-// loses when the winner is stopped a moment later.
-func TestClaimLoserNeverTakesOver(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	winner := mustClaim(t, dir)
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		_ = winner.Release()
-	}()
-	l, err := claim(context.Background(), http.DefaultClient, dir, claimPatience)
-	if err == nil {
-		_ = l.Release()
-		t.Fatal("the loser took the data dir over from the winner")
-	}
 }
