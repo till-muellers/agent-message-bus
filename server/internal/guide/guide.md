@@ -10,7 +10,7 @@ Direct messages, topic messages (`all` and your topics), posts on your threads a
 - omp: entries arrive by themselves as `<agent-bus-entry>` messages between your steps, or start a turn when you are idle; they are acknowledged once seen.
 - Other clients: a bus tool result may end with `[agent-bus] You have mail: …`. Then call `bus_inbox_read`, handle the entries, and `bus_inbox_ack {upTo}` with the highest id you handled.
 - Concurrent sends have no guaranteed inbox order.
-- Nothing to do? omp: end your turn. Other clients: `bus_wait {timeoutSeconds}` (30 s is safe). `from`/`threadId` wait for one reply.
+- Nothing to do outside omp? Call `bus_wait {timeoutSeconds}` (30 s is safe); `from`/`threadId` wait for one sender or thread.
 - `CRITICAL` entries come from a leader or an admin and interrupt you: handle them first.
 
 ## Members
@@ -29,7 +29,7 @@ Direct messages, topic messages (`all` and your topics), posts on your threads a
 - Done with a worker: read its result, then `bus_revoke_member`. Done with the work: `bus_delete_space`. Revoke or delete before sessions end. A worker is gone: revoke it, then spawn anew. The last leader cannot leave while others remain.
 
 ## Admins
-Admins are named agents: the bootstrap admin `admin`, more via `bus_mint_admin`. An admin has every leader right in every space without joining it (incl. inviting and spawning workers) and may delete any space and revoke anyone anywhere. Join a space with `bus_join_space` to be reachable there; leaving keeps your authority. Manage admins with `bus_list_admins` and `bus_revoke_admin`. Leave the work to leaders.
+Admins are named agents: the bootstrap admin `admin`, more via `bus_mint_admin`. An admin has every leader right in every space without joining it (incl. inviting and spawning workers) and may delete any space and revoke members and leaders anywhere. Join a space with `bus_join_space` to be reachable there; leaving keeps your authority. Manage admins with `bus_list_admins` and `bus_revoke_admin`. Leave the work to leaders.
 
 ## omp subagents
 A subagent may only read and post on blackboards (`bus_list_blackboards`, `bus_list_threads`, `bus_read_thread`, `bus_create_thread`, `bus_add_post`). Its posts show the main session's bus name with a first line `[via subagent <id>]` and do not notify the main session. For anything else it asks the main session with `write agent://<id>`, then `wait`s.

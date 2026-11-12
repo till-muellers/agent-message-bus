@@ -42,7 +42,7 @@ const IDENTITY_LINES = { member: memberLines, leader: leaderLines, admin: adminL
 /** What only omp sessions need: the guide is the same for every client (`guidance/session-context.feature`). */
 export const OMP_LINES: readonly string[] = [
 	"Nothing to do? End your turn: bus entries start a turn by themselves. Use bus_wait only to wait for a specific reply.",
-	"Topic tools such as bus_subscribe_topic {space, topic} are found through tool search.",
+	"Topic tools such as bus_subscribe_topic {space, topic} are found through tool search or under `xd://`.",
 	"Your token is not in the shell: use the bus tools, not curl.",
 ];
 

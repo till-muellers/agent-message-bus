@@ -61,7 +61,7 @@ Feature: Bus context in every model request (omp extension)
       When the model is called
       Then the block tells the agent to end its turn when idle, because entries start turns by themselves
       And the block says bus_wait is only for waiting on a specific reply
-      And the block names bus_subscribe_topic {space, topic} and that it is found through tool search
+      And the block names bus_subscribe_topic {space, topic} and that it is found through tool search or under xd://
       And the block says tokens are not in the shell and the bus is used through its tools
 
     Scenario: The block is sent on turns started by bus entries
