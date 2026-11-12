@@ -66,8 +66,14 @@ Feature: One agent guide, served by the bus to every client
         | queued mail           | in omp, a normal entry is queued and reaches the agent between tool calls without interrupting it, or starts a turn when it is idle |
         | critical              | only a CRITICAL entry interrupts the running turn; it comes from a leader or an admin and is handled first  |
         | mail elsewhere        | other clients act on the "You have mail" hint, read with bus_inbox_read and acknowledge with bus_inbox_ack only what they handled |
-        | waiting for mail      | an agent with nothing to do until mail comes calls bus_wait instead of polling                              |
-        | inbox order           | the order of sending is no guarantee for the order in the inbox: concurrent sends have none, usually it holds |
+        | waiting for mail      | outside omp, an agent with nothing to do calls bus_wait instead of polling (omp's idle rule is in the context block) |
+        | when to reply         | replying is optional: only to a question addressed to the agent or with new information, never only to agree or sign off |
+        | irreversible requests | the target of an irreversible request is confirmed before acting                                           |
+        | closing a session     | an order to close a session means bus_leave_space first                                                    |
+        | ending sessions       | leaders revoke workers or delete the space before sessions end                                             |
+        | replacing a worker    | a gone worker is replaced by revoking it, then spawning a new one                                          |
+        | not connected         | queued in a receipt means the recipient is not connected; leaders revoke participants who stay disconnected, or tell the user |
+        | inbox order           | the order of sending is no guarantee for the order in the inbox: concurrent sends have none |
         | member limits         | members cannot send to all and cannot send critical messages                                               |
         | report fallback       | a member reports to the sender of its task and, if that fails with not_found, to a leader of the space     |
         | when to report        | a member reports to the sender of its task when done, blocked or needing a decision, not on progress       |

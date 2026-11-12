@@ -39,10 +39,17 @@ function adminLines(id: BusIdentity): string[] {
 
 const IDENTITY_LINES = { member: memberLines, leader: leaderLines, admin: adminLines };
 
-/** The block of a main session: its identity, then the guide when the server gave one. */
+/** What only omp sessions need: the guide is the same for every client (`guidance/session-context.feature`). */
+export const OMP_LINES: readonly string[] = [
+	"Nothing to do? End your turn: bus entries start a turn by themselves. Use bus_wait only to wait for a specific reply.",
+	"Topic tools such as bus_subscribe_topic {space, topic} are found through tool search or under `xd://`.",
+	"Your token is not in the shell: use the bus tools, not curl.",
+];
+
+/** The block of a main session: its identity, the omp lines, then the guide when the server gave one. */
 export function mainBlock(id: BusIdentity, guide: string | undefined): string {
 	const tail = guide === undefined ? [] : ["", escapeBody(guide.trimEnd())];
-	return [OPEN, ...IDENTITY_LINES[id.kind](id), ...tail, CLOSE].join("\n");
+	return [OPEN, ...IDENTITY_LINES[id.kind](id), ...OMP_LINES, ...tail, CLOSE].join("\n");
 }
 
 /** Whom a subagent acts as: the main session's kind, name and spaces. */

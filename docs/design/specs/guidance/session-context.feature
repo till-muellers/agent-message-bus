@@ -20,7 +20,8 @@ Feature: Bus context in every model request (omp extension)
   # Block layout:
   #   <agent-bus-context>
   #   <identity lines, rendered by the extension>
-  #   <main session: the guide markdown from GET /v1/guide (agent-guide.feature)>
+  #   <main session: the omp lines (idle rule, where the topic tools are), then the guide
+  #    markdown from GET /v1/guide (server/spec/guide.feature)>
   #   <subagent: the subagent lines instead of the guide>
   #   </agent-bus-context>
   # Identity data comes from bus_whoami and, for a member, bus_list_participants of its space.
@@ -53,6 +54,15 @@ Feature: Bus context in every model request (omp extension)
       And an omp session promoted to leader "solo"
       When the model is called
       Then the block contains "You lead no space yet: create one with bus_create_space."
+
+    Scenario: A main session reads the omp-only conduct lines
+      # Topics, not wording: the guide is the same for every client, so omp specifics live here.
+      Given an omp session connected as member "worker" of space "demo"
+      When the model is called
+      Then the block tells the agent to end its turn when idle, because entries start turns by themselves
+      And the block says bus_wait is only for waiting on a specific reply
+      And the block names bus_subscribe_topic {space, topic} and that it is found through tool search or under xd://
+      And the block says tokens are not in the shell and the bus is used through its tools
 
     Scenario: The block is sent on turns started by bus entries
       Given an idle omp session in tui mode that accepted an invite as member "worker" of space "demo"
