@@ -18,10 +18,12 @@ type admission interface {
 	AuthorizeInvites(ctx context.Context, q db.DBTX, p auth.Principal, space string) (int64, error)
 }
 
-// stager stores inbox entries in the caller's transaction and publishes them after commit.
+// stager stores inbox entries in the caller's transaction and publishes them after commit;
+// Wake makes an admitted member's streams and waits re-check their token.
 type stager interface {
 	Stage(ctx context.Context, tx db.DBTX, es []inbox.Entry) (inbox.Staged, error)
 	Publish(st inbox.Staged) []inbox.Receipt
+	Wake(agentIDs ...int64)
 }
 
 // TTL is how long an invite code stays redeemable.
@@ -112,13 +114,15 @@ func (s *Service) store(ctx context.Context, tx db.DBTX, p auth.Principal, space
 
 // Accept redeems code once for a member token and, in the same transaction, stores the
 // invite's task as a direct message from the inviter. A failed admission keeps the code
-// and delivers nothing.
+// and delivers nothing. After commit the member's streams and waits re-check their token,
+// so those of a re-invited member's old token end.
 func (s *Service) Accept(ctx context.Context, code string) (Admission, error) {
 	norm := normalize(code)
 	if len(norm) != codeLen {
 		return Admission{}, apperr.New(apperr.Unauthenticated, invalidCode)
 	}
 	var a Admission
+	var agentID int64
 	_, err := inbox.InTx(ctx, s.db, s.ib, func(tx db.DBTX) ([]inbox.Entry, error) {
 		r, found, err := takeInvite(ctx, tx, auth.Hash(norm))
 		if err != nil {
@@ -127,16 +131,17 @@ func (s *Service) Accept(ctx context.Context, code string) (Admission, error) {
 		if !found || s.now().Unix() >= r.expiresAt {
 			return nil, apperr.New(apperr.Unauthenticated, invalidCode)
 		}
-		agentID, space, token, err := s.admit.AdmitMember(ctx, tx, r.spaceID, r.name)
+		id, space, token, err := s.admit.AdmitMember(ctx, tx, r.spaceID, r.name)
 		if err != nil {
 			return nil, err
 		}
-		a = Admission{Name: r.name, Space: space, Token: token}
-		return taskEntry(r, agentID, space), nil
+		a, agentID = Admission{Name: r.name, Space: space, Token: token}, id
+		return taskEntry(r, id, space), nil
 	})
 	if err != nil {
 		return Admission{}, err
 	}
+	s.ib.Wake(agentID)
 	return a, nil
 }
 

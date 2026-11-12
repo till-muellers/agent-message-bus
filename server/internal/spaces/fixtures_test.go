@@ -38,7 +38,7 @@ func newEnvHooks(t *testing.T, hooks Hooks) env {
 	ib := inbox.NewService(t.Context(), conn, broker.NewMemory(64), a, time.Now)
 	r := NewResolver(a)
 	return env{db: conn, auth: a, inbox: ib, svc: NewService(conn, r, a, ib, time.Now, hooks),
-		adm: NewAdmitter(r, a, time.Now)}
+		adm: NewAdmitter(r, a, ib, time.Now, nil)}
 }
 
 // leader seeds leader agent id with a token and returns its principal.

@@ -20,7 +20,8 @@ func inviteTools(inv *invites.Service) []Tool {
 	desc := fmt.Sprintf("Returns an invite code for member agent `name`, with an optional task delivered to it as a direct message from you "+
 		"when the code is accepted. The code is single-use and expires after %d minutes; the user redeems it with "+
 		"`/bus accept <url> <code>` or `omp --bus-url <url> --bus-accept <code>`, other clients with POST /v1/invites/accept. "+
-		"Inviting a name again gives a new code and another token; bus_revoke_member cancels pending codes.",
+		"Inviting a name again gives a new code; accepting it ends the old token and clears that member's inbox and "+
+		"subscriptions in the space. bus_revoke_member cancels pending codes.",
 		int(invites.TTL/time.Minute))
 	return []Tool{
 		define(BusInviteMember, accessSpaceLeaders, desc, "{name, space, code, expires_at}",

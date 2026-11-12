@@ -59,6 +59,16 @@ func depart(name string) step {
 	}
 }
 
+func readmit(name string) step {
+	return func(ctx context.Context, w *world) error {
+		m, err := spaces.NewResolver(anyCredential{}).Resolve(ctx, w.db, w.p[name], space)
+		if err != nil {
+			return err
+		}
+		return w.svc.OnReadmission(ctx, w.db, m)
+	}
+}
+
 func TestOperations(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -113,6 +123,8 @@ func TestOperations(t *testing.T) {
 			msg: "the all topic cannot be subscribed or unsubscribed"},
 		{name: "unsubscribe all", op: unsub("ann", "all"), kind: apperr.Invalid},
 		{name: "departure drops subscriptions", setup: []step{create("ann", "dev"), sub("bob", "dev"), depart("bob")},
+			op: sendTopic("ann", "dev", "m", false), inboxes: map[string][]string{"bob": {}}},
+		{name: "readmission drops subscriptions", setup: []step{create("ann", "dev"), sub("bob", "dev"), readmit("bob")},
 			op: sendTopic("ann", "dev", "m", false), inboxes: map[string][]string{"bob": {}}},
 	}
 	for _, tc := range tests {

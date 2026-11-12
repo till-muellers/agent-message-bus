@@ -23,14 +23,41 @@ Feature: Space membership
         | lead   | leader |
         | worker | member |
 
-    Scenario: Re-inviting a member yields a second working token without duplicating the participant
+    Scenario: Re-inviting a member starts it clean in that space
+      # A new agent under the same name never reads the old agent's orders, and a resumed old
+      # session gets unauthenticated instead of competing for the inbox stream. Dropped in the
+      # accepting transaction: the member's tokens bound to the space, its inbox entries and
+      # its topic and thread subscriptions there. Kept: the agent, its participant row and
+      # the blackboards it owns. A task on the new code arrives after the reset. Leaders are
+      # minted, not invited: re-minting a leader stays additive (auth.feature).
       Given leader "lead" invited member "worker" to space "demo"
+      And leader "lead" created topic "news" in space "demo"
+      And member "worker" subscribed to topic "news" in space "demo"
+      And member "worker" created blackboard "notes" in space "demo"
+      And member "worker" created thread "t1" on blackboard "notes" in space "demo"
+      And member "worker" has an unread "direct_message" inbox entry from "lead" in space "demo"
+      And member "worker" opened the inbox stream with its first token
       When leader "lead" invites member "worker" to space "demo" again
       And the code is accepted
-      Then the returned token is different from the first one
-      And it authenticates as the same member "worker" in space "demo"
-      And the first token still authenticates as member "worker"
+      Then the returned token authenticates as the same member "worker" in space "demo"
+      And the first token fails with unauthenticated "invalid token"
+      And the server ends the inbox stream of the first token
+      And member "worker" has no inbox entries left
       And "worker" appears exactly once among the participants of space "demo"
+      And blackboard "notes" still exists in space "demo" owned by "worker"
+      When leader "lead" sends "hi" to topic "news" in space "demo"
+      And leader "lead" posts "update" to thread "t1" on blackboard "notes" in space "demo"
+      Then "worker" receives no inbox entry
+
+    Scenario: Re-inviting a member leaves its other spaces untouched
+      Given leader "lead" created space "beta"
+      And leader "lead" invited member "worker" to space "demo"
+      And leader "lead" invited member "worker" to space "beta"
+      And member "worker" has an unread "direct_message" inbox entry from "lead" in space "beta"
+      When leader "lead" invites member "worker" to space "demo" again
+      And the code is accepted
+      Then the "beta" token of "worker" still authenticates as member "worker" bound to space "beta"
+      And member "worker" still has its inbox entry from space "beta"
 
     Scenario: A member agent can be invited into another space with a token for that space
       Given leader "lead" created space "beta"

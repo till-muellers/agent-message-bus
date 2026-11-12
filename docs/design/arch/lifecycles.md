@@ -39,6 +39,8 @@ sequenceDiagram
 
 Leader and admin tokens are bound to no space, so leaving or being revoked from a space leaves them valid. The last leader cannot leave.
 
+Re-invite: accepting a code for a name that already participates first runs the readmission hooks (messaging and blackboards drop its subscriptions in the space), deletes its inbox rows and its tokens bound to the space, then issues the new token; the participant row and its blackboards stay, and the accept wakes the agent so the old token's stream ends. Source: [`spaces/readmission.go`](../../../server/internal/spaces/readmission.go); spec `membership.feature`.
+
 Source: [`service.go:233-270`](../../../server/internal/spaces/service.go), [`revoke.go:17-30`](../../../server/internal/spaces/revoke.go), [`auth/revoke.go:15-19`](../../../server/internal/auth/revoke.go); spec `membership.feature`.
 
 ### Invite
@@ -211,7 +213,7 @@ Delivery classes: see [`inbox/class.go`](../../../server/internal/inbox/class.go
 |`topic_closed`|`bus_close_topic`|subscribers except closer|deferred|nextTurn; acked on model request|
 |`thread_removed`|`bus_remove_thread`|thread subscribers except remover|deferred|same|
 |`blackboard_removed`|`bus_delete_blackboard`; member-owner departure|subscribers of the board's threads|deferred|same|
-|Wake signal|delete space, leave, revoke, revoke admin, rotate token|the agent's stream and waits|none (no entry)|stream or wait revalidates the token; no ledger change|
+|Wake signal|delete space, leave, revoke, revoke admin, rotate token, invite accept|the agent's stream and waits|none (no entry)|stream or wait revalidates the token; no ledger change|
 |Mail notice (`mail` key)|first result after mail reaches an empty mailbox, or a critical entry|calling agent via tool results|n/a|none; `bus_inbox_read`, `bus_wait` or the stream count as told|
 |`agent-bus:entry`|ledger, per handed-over entry|other extension code via the pi events|n/a|published after handover|
 
