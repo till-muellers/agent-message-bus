@@ -31,7 +31,7 @@ func TestWritesRevalidateInTheirTransaction(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, nil, nil)
 	r := NewResolver(txOnly{e.auth})
-	e.svc, e.adm = NewService(e.db, r, e.auth, e.inbox, time.Now, Hooks{}), NewAdmitter(r, e.auth, time.Now)
+	e.svc, e.adm = NewService(e.db, r, e.auth, e.inbox, time.Now, Hooks{}), NewAdmitter(r, e.auth, e.inbox, time.Now, nil)
 	root := bootstrapRoot(t, e)
 	lead := leader(t, e, 50, "lead")
 	_, ops := mintedAdmin(t, e, root, "ops")

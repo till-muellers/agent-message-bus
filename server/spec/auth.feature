@@ -148,7 +148,8 @@ Feature: Authentication and leader minting
       When leader "lead" invites member "lead" to space "demo"
       Then the call fails with conflict "agent lead is a leader agent"
 
-    Scenario: Re-inviting an existing member reuses the agent and issues an additional token
+    Scenario: Re-inviting an existing member reuses the agent and replaces its token for that space
+      # What else a re-invite resets is in membership.feature.
       Given the admin minted leader "lead"
       And leader "lead" created space "demo"
       And leader "lead" invited member "worker" to space "demo"
@@ -156,6 +157,7 @@ Feature: Authentication and leader minting
       And the member accepts the new invite code
       Then the second token belongs to the same member agent "worker"
       And the second token differs from the first one
+      And the first token fails with unauthenticated "invalid token"
 
   Rule: A call is re-validated inside its write transaction; a revocation that commits first wins
 

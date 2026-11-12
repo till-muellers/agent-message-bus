@@ -37,7 +37,8 @@ func Build(streamRoot context.Context, conn *sql.DB, adminToken, instanceID stri
 	resolver := spaces.NewResolver(authSvc)
 	msgSvc := messaging.NewService(conn, resolver, inboxSvc, time.Now)
 	bbSvc := blackboards.NewService(conn, resolver, inboxSvc, time.Now)
-	invSvc := invites.NewService(conn, spaces.NewAdmitter(resolver, authSvc, time.Now), inboxSvc, time.Now)
+	admitter := spaces.NewAdmitter(resolver, authSvc, inboxSvc, time.Now, []spaces.ReadmissionHook{msgSvc, bbSvc})
+	invSvc := invites.NewService(conn, admitter, inboxSvc, time.Now)
 	spaceSvc := spaces.NewService(conn, resolver, authSvc, inboxSvc, time.Now, spaces.Hooks{
 		Departure:  []spaces.DepartureHook{msgSvc, bbSvc},
 		Creation:   []spaces.CreationHook{msgSvc},

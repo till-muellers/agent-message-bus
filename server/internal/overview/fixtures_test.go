@@ -70,7 +70,7 @@ func newWorld(t *testing.T) *world {
 	authSvc := auth.NewService(conn, "overview-test-admin-token-0123456789", now)
 	w.sp = spaces.NewService(conn, r.Resolver, authSvc, ib, now, spaces.Hooks{
 		Departure: []spaces.DepartureHook{w.msg, w.bb}, Creation: []spaces.CreationHook{w.msg}})
-	w.inv = invites.NewService(conn, spaces.NewAdmitter(r.Resolver, authSvc, now), ib, now)
+	w.inv = invites.NewService(conn, spaces.NewAdmitter(r.Resolver, authSvc, ib, now, nil), ib, now)
 	w.ov = overview.NewService(overview.Deps{DB: conn, Resolver: r, Spaces: w.sp, Topics: w.msg,
 		Boards: w.bb, Invites: w.inv, Inbox: ib})
 	w.reg = tools.New(tools.Deps{Auth: authSvc, Spaces: w.sp, Messaging: w.msg, Blackboards: w.bb, Inbox: ib,

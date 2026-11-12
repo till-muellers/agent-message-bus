@@ -154,14 +154,42 @@ func TestTaskFromDepartedInviter(t *testing.T) {
 	}
 }
 
-func TestReinviteSendsAnotherTask(t *testing.T) {
+// TestReinviteReplacesTheTask: the re-invited member's inbox holds only the new task; the
+// old one, unread, went with the old agent's backlog.
+func TestReinviteReplacesTheTask(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	mustAccept(t, e, mustCreate(t, e, "worker", nil).Code)
+	first := "first task"
+	mustAccept(t, e, mustCreate(t, e, "worker", &first).Code)
 	task := "second task"
 	a := mustAccept(t, e, mustCreate(t, e, "worker", &task).Code)
 	if got := memberEntries(t, e, a); len(got) != 1 || got[0] != "lead:second task" {
-		t.Fatalf("worker inbox = %v, want the second task", got)
+		t.Fatalf("worker inbox = %v, want only the second task", got)
+	}
+}
+
+// wakeRecorder records the agents an Accept wakes.
+type wakeRecorder struct {
+	*inbox.Service
+	woken []int64
+}
+
+func (w *wakeRecorder) Wake(ids ...int64) {
+	w.woken = append(w.woken, ids...)
+	w.Service.Wake(ids...)
+}
+
+// TestAcceptWakesTheMember: the old token's stream and waits re-check their token after a
+// re-invite, so a resumed old session stops instead of holding the stream slot.
+func TestAcceptWakesTheMember(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	rec := &wakeRecorder{Service: e.ib}
+	e.svc.ib = rec
+	mustAccept(t, e, mustCreate(t, e, "worker", nil).Code)
+	p, err := e.auth.Authenticate(context.Background(), mustAccept(t, e, mustCreate(t, e, "worker", nil).Code).Token)
+	if err != nil || len(rec.woken) != 2 || rec.woken[1] != p.AgentID {
+		t.Fatalf("woken = %v (%v); want the worker woken on each accept", rec.woken, err)
 	}
 }
 

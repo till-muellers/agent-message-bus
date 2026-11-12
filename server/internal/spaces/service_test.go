@@ -220,9 +220,8 @@ func TestAdmitMember(t *testing.T) {
 	if err != nil || again.Kind != auth.Member || again.AgentID != member.AgentID || again.SpaceID != member.SpaceID {
 		t.Fatalf("second token = %+v, %v; want the identity of %+v", again, err, member)
 	}
-	if _, err := e.auth.Authenticate(ctx, tok1); err != nil {
-		t.Fatalf("first token: %v", err)
-	}
+	_, err = e.auth.Authenticate(ctx, tok1)
+	apperrtest.WantKind(t, err, apperr.Unauthenticated, "invalid token")
 	wantParticipants(t, e, "alpha", alpha)
 }
 

@@ -211,6 +211,8 @@ Server rule, decided in exactly one place (`server/internal/inbox/class.go`, `Cl
 ```
 `task` is gone (breaking for clients that read it; the task arrives as the member's first inbox entry, §4). Errors unchanged: `unauthenticated "invalid or expired invite code"`, `conflict "agent x is a leader agent"` (code kept, nothing delivered).
 
+**Re-invite starts clean** (D4 q4, `membership.feature`): when the name already participates in the space, the accept transaction first deletes the member's tokens bound to that space, its inbox entries and its topic and thread subscriptions there, keeping the agent, its participant row and its blackboards; then it issues the new token and stores the task. After commit the member's streams and waits are woken, so the old token's stream ends and its calls fail with `401 unauthenticated "invalid token"`. Behaviour only, no wire change, no protocol bump. Leader re-mint (`bus_mint_leader`) stays additive.
+
 ---
 
 ## 6. `GET /healthz` and protocol versioning [7]

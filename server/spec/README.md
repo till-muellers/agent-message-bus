@@ -60,7 +60,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | Invite id | The opaque handle of one invite code: 16 lowercase hex characters, random, not derivable from the code (migration `0004_invites_id`). Only the web GUI sees it: it lists open invites with their ids and cancels one with `DELETE /web/api/spaces/{space}/invites/{id}`; there is no cancel tool. See [web/gui-invite-cancel.feature](web/gui-invite-cancel.feature). |
 | Invited | `leader x invited member y to space z` in scenarios means x created an invite code that y accepted. |
 | Open invite | An invite code that was neither redeemed nor cancelled and has not expired. The web GUI lists it to leaders of its space and admins as invite id, invited name, inviter and expiry, never the code; see [web/invites.feature](web/invites.feature). |
-| Member token | Minted by accepting an invite code. Valid in exactly one space. Accepting a new invite issues an additional token. Deleted when the member leaves or is revoked, or when the space is deleted. |
+| Member token | Minted by accepting an invite code. Valid in exactly one space. Accepting a new invite for the same space replaces it (`membership.feature`); a token for another space is additional. Deleted when the member leaves, is revoked or is invited into that space again, or when the space is deleted. |
 | Space | A named workspace. Every space has the topic `all`. |
 | Participant | An agent in a space, with role `admin`, `leader` or `member`, listed in that order. A joined admin is not a leader: it does not count for the last-leader rule. |
 | Connected | An agent that holds its inbox stream slot or is blocked in a server `bus_wait` call. Presence is per agent, not per space, and is kept in memory only. `bus_list_participants`, `bus_space_overview` and the web GUI show it as `connected`, and an agent that is not connected with `offlineSince`: when its last stream or wait ended, or the server's start time if it has not connected since. |
@@ -92,7 +92,7 @@ Locally, `agent-message-bus start|stop|status|admin-token|rotate-token` manage o
 | [auth.feature](auth.feature) | Token kinds, minting leaders, name-kind conflicts, invalid and missing tokens; the token re-validated inside the write transaction (the space access gate, create, join, mints, `bus_revoke_admin`), so a revocation or rotation that commits first fails calls in flight |
 | [spaces.feature](spaces.feature) | Listing, creating, joining and deleting spaces; participants; whoami; the space access gate |
 | [invites.feature](invites.feature) | Creating invite codes with an optional task; redeeming them once via `POST /v1/invites/accept`; the task delivered as a direct message from the inviter; expiry, normalization, rejection, cancellation by revoke |
-| [membership.feature](membership.feature) | Invite, re-invite, idempotent revoke, leave, departure cascades, last leader, delete blocked by other leaders |
+| [membership.feature](membership.feature) | Invite, re-invite (starts the member clean in that space), idempotent revoke, leave, departure cascades, last leader, delete blocked by other leaders |
 | [direct-messages.feature](direct-messages.feature) | Direct messages and critical delivery |
 | [topics.feature](topics.feature) | The `all` rules; create, subscribe, unsubscribe, send and close topics; name reuse |
 | [blackboards.feature](blackboards.feature) | Blackboards, threads, posts, thread subscriptions and their permissions; thread activity order by newest post |

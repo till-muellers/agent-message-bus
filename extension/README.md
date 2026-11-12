@@ -66,7 +66,7 @@ A worker can also join when its session starts: `omp --bus-url <url> --bus-accep
 
 ### Session tokens
 
-- `/bus accept` (and `--bus-accept`) writes `{url, token}` to `<agent-message-bus dir>/sessions/<session id>.json` (same directory rules and `0600` mode as `credentials.json`), where `<session id>` is the omp session file's name without `.jsonl`. `omp --resume` and `omp -c` reopen the same file, so a resumed worker keeps its identity without a new code.
+- `/bus accept` (and `--bus-accept`) writes `{url, token}` to `<agent-message-bus dir>/sessions/<session id>.json` (same directory rules and `0600` mode as `credentials.json`), where `<session id>` is the omp session file's name without `.jsonl`. `omp --resume` and `omp -c` reopen the same file, so a resumed worker keeps its identity without a new code, unless its name was invited into the space again meanwhile.
 - Subagents (whose session files live in `<parent session>/<id>.jsonl`) never read this file or `credentials.json`: they act with the identity their top-level session acts with (see **Subagents** under Tools).
 - A session without a session file keeps the accepted token in memory until it ends.
 - On every session change omp reports (`session_start`, `session_switch` for `/new`, `/resume` and `/fork`, `session_branch`), the extension re-keys the accepted token by the now-current session file and reconnects: the tools and the inbox stream follow the session's own identity. `/resume` of a worker's session restores its member token. `/new` starts without one (even without session files), so it falls back to the env or stored credentials. A branch (`session_branch`: `/branch`, `/btw`, a tree fork) and `/fork` always move the session onto a new session file; the extension copies the previous session's accepted token to the new file, so the branched worker stays the same member.
@@ -154,7 +154,7 @@ In one-shot `print`/`json` modes (and when the mode is unknown), every entry wai
 
 **Thread view:** in the TUI transcript a `bus_read_thread` result shows as a document: the thread title with `<board> / <id> · N posts`, then each post with its author and time and its body quoted. Collapsed, it shows the newest 3 posts (`… N older posts` above them) and each body's first 3 lines; expanded, everything. Control characters are removed as in the entry card. A result that is not a thread (an error) shows as its text.
 
-**Reconnect:** when the stream ends or fails, the extension waits 1 s, then doubles the wait up to 30 s. Each delivered entry resets the wait to 1 s. An `unauthenticated` (401) or `forbidden` (403) error stops the loop for good: the token was revoked, the member left, or the space was deleted. Run `/bus login` again to restart. Errors are logged as `agent-bus: <message>`. The stream stops at session shutdown and on `/bus logout`.
+**Reconnect:** when the stream ends or fails, the extension waits 1 s, then doubles the wait up to 30 s. Each delivered entry resets the wait to 1 s. An `unauthenticated` (401) or `forbidden` (403) error stops the loop for good: the token was revoked, the member left, the name was invited into the space again, or the space was deleted. Run `/bus login` again to restart. Errors are logged as `agent-bus: <message>`. The stream stops at session shutdown and on `/bus logout`.
 
 ## Context block
 

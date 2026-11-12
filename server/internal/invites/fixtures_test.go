@@ -44,7 +44,7 @@ func newEnv(t *testing.T) env {
 	pub := broker.NewMemory(64)
 	ib := inbox.NewService(t.Context(), conn, pub, anyCredential{}, now)
 	r := spaces.NewResolver(anyCredential{})
-	svc := NewService(conn, spaces.NewAdmitter(r, a, now), ib, now)
+	svc := NewService(conn, spaces.NewAdmitter(r, a, ib, now, nil), ib, now)
 	sp := spaces.NewService(conn, r, a, ib, now, spaces.Hooks{Revocation: []spaces.RevocationHook{svc}})
 	dbtest.SeedAgent(t, conn, 1, "lead", "leader")
 	lead := auth.Principal{Kind: auth.Leader, AgentID: 1, AgentName: "lead"}
