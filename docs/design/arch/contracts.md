@@ -155,15 +155,17 @@ Access sentences. Spec-verbatim rows marked ✔ (`tool-descriptions.feature`, ru
 
 ## 4. Inbox entry and stream
 
-One `Entry` shape everywhere: SSE `event: inbox` data, `bus_inbox_read` element, `bus_wait` element, `GET /web/api/inbox` element, MCP inbox resource (`inbox/entry.go:15-30`). One field is added by slice D1: `class`.
+One `Entry` shape everywhere: SSE `event: inbox` data, `bus_inbox_read` element, `bus_wait` element, `GET /web/api/inbox` element, MCP inbox resource (`inbox/entry.go`). Slice D1 added `class`; protocol 3 adds `postId`.
 
 ```json
 {"id": 12, "space": "demo", "type": "direct_message", "from": "lead", "critical": false,
  "class": "queue",
- "topic": "build", "blackboard": "plan", "threadId": 3, "threadTitle": "design",
+ "topic": "build", "blackboard": "plan", "threadId": 3, "threadTitle": "design", "postId": 27,
  "body": "…", "createdAt": "2026-10-26T10:00:00.123Z"}
 ```
-`topic`, `blackboard`, `threadId`, `threadTitle`, `body` are omitted when empty; `class` is **always present** (from D1). `type` ∈ `direct_message`, `topic_message`, `topic_closed`, `thread_post`, `thread_removed`, `blackboard_removed`. No new type.
+`topic`, `blackboard`, `threadId`, `threadTitle`, `postId`, `body` are omitted when empty; `class` is **always present** (from D1). `type` ∈ `direct_message`, `topic_message`, `topic_closed`, `thread_post`, `thread_removed`, `blackboard_removed`. No new type.
+
+- **`postId`** [3jq.2]: set on `thread_post` entries only. It is the id of the post the entry announces, the same number `bus_add_post` returns as `postId` and `bus_read_thread` lists as `posts[].id`, and unrelated to the entry `id` (the inbox counter). Stored in the column `inbox.post_id` (migration `0007_inbox_post_id`). Entries stored before that migration have no `postId`.
 
 ### 4.1 Delivery class [D1] — Fixed, PO-5 (`mail/delivery-class.feature`)
 
@@ -212,12 +214,12 @@ Server rule, decided in exactly one place (`server/internal/inbox/class.go`, `Cl
 
 ## 6. `GET /healthz` and protocol versioning [7]
 
-- `GET /healthz`, no auth → `200`, `Content-Type: text/plain; charset=utf-8`, body `ok`, header **`Agent-Bus-Protocol: 2`**.
+- `GET /healthz`, no auth → `200`, `Content-Type: text/plain; charset=utf-8`, body `ok`, header **`Agent-Bus-Protocol: 3`**.
 - The value is an integer. A response without the header = legacy server (the extension reports it as `none`). [AD-1]
 - Header **`Agent-Bus-Instance: <id>`**: the random id the serving process drew when it took its data dir lock, also written as `instanceId` to `<datadir>/agent-message-bus.state.json`. The server CLI (`status`, `start`, `stop`, `rotate-token`) accepts a state file only when its `url` answers with that id, so it never acts on another process listening on the same url. Additive and not read by the extension: no protocol bump.
-- Source of truth: `server/internal/server/protocol.go` `const Protocol = 2`.
+- Source of truth: `server/internal/server/protocol.go` `const Protocol = 3`.
 - Bump policy: at most +1 per release, by the first slice after a release tag that adds or changes a contract the extension depends on (a tool it calls, a result field it reads, an entry it renders, an endpoint). Additive server changes the extension ignores do not bump. `protocol.go` keeps one comment line per value.
-- History: `2` = everything merged before the first release tag after slice 7 (`v0.2.0`; no tag was cut in between): invite task as direct message, accept without `task`, kind/role `admin`, `bus_list_spaces.admins`, entry field `class` (1–7, D1), and also `bus_wait` (9), `bus_space_overview` (8), the mail notice and `mail` hint (13a, 13b), receipts and `connected` (12) and `GET /v1/guide` + MCP `instructions` (11, merged before that tag). Next: `3` only for the first extension-facing contract change merged after that tag.
+- History: `3` = inbox entry field `postId` (§4; the extension renders it and shows a post without it when an older server leaves it out, so `MIN_SERVER_PROTOCOL` stays 2). `2` = everything merged before the first release tag after slice 7 (`v0.2.0`; no tag was cut in between): invite task as direct message, accept without `task`, kind/role `admin`, `bus_list_spaces.admins`, entry field `class` (1–7, D1), and also `bus_wait` (9), `bus_space_overview` (8), the mail notice and `mail` hint (13a, 13b), receipts and `connected` (12) and `GET /v1/guide` + MCP `instructions` (11, merged before that tag). Next: `4` only for the first extension-facing contract change merged after the tag that ships `3`.
 - The extension's minimum is its own constant (Arch-client). Old extension + new server needs no check (additive); the invite task then arrives via the old extension's inbox stream as a normal message.
 
 ---
@@ -299,7 +301,7 @@ Leader and member tokens may sign in with their normal reach. Sessions are in me
 ```
 No message bodies, never an invite code. `mayManage` as on the list row, for this space. `invites` only for leader-rights sessions (absent for members and non-leading participants); `id` from slice 10. Errors: unknown space 404; non-participant leader 403; no session 401.
 
-Clients decide on leader controls from `mayManage`, never from whether `invites` is present, and treat roles and agent kinds as open text (a newer server may send a role they do not know) [R15]. Web API only, not extension-facing: `Agent-Bus-Protocol` stays 2.
+Clients decide on leader controls from `mayManage`, never from whether `invites` is present, and treat roles and agent kinds as open text (a newer server may send a role they do not know) [R15]. Web API only, not extension-facing: no `Agent-Bus-Protocol` bump.
 
 | Read | Response |
 |---|---|

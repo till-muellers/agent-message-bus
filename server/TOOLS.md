@@ -586,7 +586,7 @@ Returns your inbox entries after id `after` without removing them; members see o
 | `after` | integer | no | Return entries with id greater than this; default 0. |
 | `limit` | integer | no | Maximum entries, 1..500; default 100. |
 
-**Result:** `[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]`
+**Result:** `[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, postId?, body?, createdAt}]`
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_inbox_read -H "Authorization: Bearer $TOKEN" -d '{}'
@@ -603,7 +603,7 @@ Blocks until unacknowledged entries match (at most 100, id order) or timeoutSeco
 | `threadId` | integer | no | Only entries of this thread. |
 | `timeoutSeconds` | integer | no | Longest wait in seconds, 1..300; default 30. |
 
-**Result:** `[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]`
+**Result:** `[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, postId?, body?, createdAt}]`
 
 ```sh
 curl -X POST $BUS/v1/tools/bus_wait -H "Authorization: Bearer $TOKEN" -d '{}'

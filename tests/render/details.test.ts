@@ -19,9 +19,9 @@ describe("busMessage", () => {
 		});
 	});
 
-	test("topic, blackboard, threadId and threadTitle are in the stored details when the entry has them", () => {
+	test("topic, blackboard, threadId, threadTitle and postId are in the stored details when the entry has them", () => {
 		const stored = (e: Entry) => JSON.parse(JSON.stringify(busMessage(e).details.entries[0])) as Record<string, unknown>;
-		expect(stored(entry(2, { type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "design" }))).toMatchObject({ blackboard: "plan", threadId: 7, threadTitle: "design" });
+		expect(stored(entry(2, { type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "design", postId: 27 }))).toMatchObject({ blackboard: "plan", threadId: 7, threadTitle: "design", postId: 27 });
 		expect(stored(entry(3, { type: "topic_message", topic: "dev" }))).toMatchObject({ topic: "dev" });
 		expect(Object.keys(stored(entry(4)))).not.toContain("topic");
 	});

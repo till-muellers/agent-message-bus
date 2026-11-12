@@ -9,6 +9,11 @@ import { labelOf } from "./entry-label.ts";
 import { escapeBody, escapeTitle } from "./escape.ts";
 import { isoMillis } from "./iso-millis.ts";
 
+/** The post number of a thread post, when the server sends it. */
+function postLabel(e: Entry): string {
+	return e.postId === undefined ? "" : ` · post ${e.postId}`;
+}
+
 function where(e: Entry): string {
 	const { about, ended } = labelOf(e);
 	const title = escapeTitle(e.threadTitle ?? "");
@@ -18,7 +23,7 @@ function where(e: Entry): string {
 		case "topic":
 			return ended ? `topic #${e.topic} closed` : `topic #${e.topic}`;
 		case "thread":
-			return ended ? `thread ${e.threadId} "${title}" removed` : `thread ${e.threadId} "${title}" on ${e.blackboard}`;
+			return ended ? `thread ${e.threadId} "${title}" removed` : `thread ${e.threadId} "${title}" on ${e.blackboard}${postLabel(e)}`;
 		case "blackboard":
 			return `blackboard ${e.blackboard} removed`;
 		case "other":

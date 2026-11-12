@@ -423,7 +423,7 @@ export function waitToolDefinition(pi: ExtensionAPI, tool: RemoteTool /* the ser
 // lib/render/details.ts
 export interface BusMessageDetails {
 	entryIds: number[];          // the ack key (§3.3); >1 only for coalesced post notices
-	entries: Entry[];            // id, space, type, from, critical, createdAt, body, topic?, blackboard?, threadId?, threadTitle?
+	entries: Entry[];            // id, space, type, from, critical, createdAt, body, topic?, blackboard?, threadId?, threadTitle?, postId?
 }
 export type BusMessage = { customType: "agent-bus"; content: string; display: true; details: BusMessageDetails };
 ```
@@ -452,6 +452,7 @@ Reply: bus_send_direct {space: "alpha", to: "peer"}.
 
 - Time: `at` is the entry's `createdAt` shown as ISO-8601 UTC with exactly three fraction digits (`render/iso-millis.ts`: the wire value is RFC 3339 with up to nine digits and drops trailing zeros, so it is cut or padded by string operations). A missing or malformed `createdAt` leaves the attribute out (`<agent-bus-entry>`). The tag carries nothing else: space, sender and type are in the header line and the reply hint, and the inbox id stays in the `details` (ack key), not in the model's text.
 - Critical: `· CRITICAL` in the header line, from `entry.critical`, never from the body.
+- Post number: a thread post's header names the post the entry announces, `alpha · thread 7 "design" on plan · post 27 · from peer`, from the entry's `postId` (server protocol 3, `contracts.md` §4); the card title adds the same `· post 27`. An entry without `postId` (an older server) leaves it out. It is the number `bus_add_post` returns and `bus_read_thread` lists, so agents can cite posts without mixing them up with inbox ids.
 - Reply hints per type: direct → `bus_send_direct` to sender; topic → `bus_send_topic` on topic or `bus_send_direct` to sender; thread post → `bus_read_thread` for earlier posts only (the entry holds the post itself), answer with `bus_add_post`; lifecycle notices → no hint.
 - Entry label (R19): the envelope, the card (§4.3) and the status line (§3.5) read what an entry is about from `labelOf` in `render/entry-label.ts` (`about`: direct, topic, thread, blackboard, or other for a type a newer server added, shown by its type name without a reply hint; `ended`: a lifecycle notice), the one module that interprets the entry types (`tests/layout.test.ts`).
 - Escaping (forgery scenarios): in the body and the thread title, `<agent-bus-entry`, `</agent-bus-entry`, `<agent-bus-context`, `</agent-bus-context` and omp's harness tags (`<irc`, `<system-…`, whitespace around the `/` included) become `&lt;…`; the title is kept on one line with its quotes escaped, so it cannot start a header line (corrected in E5a) (same idea as omp's `escapeHarnessTags`, `CA/session/irc-bridge.ts:201-205`). A body line `alpha · direct · from lead · CRITICAL` stays inside the fence, so it is plainly body text. The header line carries no `[agent-bus]` prefix: the `<agent-bus-entry>` wrapper already marks the entry.
@@ -646,7 +647,7 @@ export function registerRemoteTools(pi: ExtensionAPI, options: RemoteToolsOption
 export type EntryType = "direct_message" | "topic_message" | "topic_closed" | "thread_post" | "thread_removed" | "blackboard_removed";
 export interface Entry { id: number; space: string; type: EntryType; from: string; critical: boolean;
 	class: DeliveryClass;      // server-derived (D1), wire field `class`; parsed with parseDeliveryClass
-	topic?: string; blackboard?: string; threadId?: number; threadTitle?: string; body?: string; createdAt: string; }
+	topic?: string; blackboard?: string; threadId?: number; threadTitle?: string; postId?: number; body?: string; createdAt: string; }
 export function parseEntry(json: unknown): Entry;   // narrows unknown; today `JSON.parse(...) as Entry` (lib/inbox.ts:71)
 ```
 

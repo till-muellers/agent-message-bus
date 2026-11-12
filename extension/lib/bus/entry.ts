@@ -21,6 +21,8 @@ export interface Entry {
 	blackboard?: string;
 	threadId?: number;
 	threadTitle?: string;
+	/** The post a `thread_post` entry announces, as `bus_add_post` returns it; missing on a server before protocol 3. */
+	postId?: number;
 	body?: string;
 	createdAt: string;
 }

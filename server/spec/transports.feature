@@ -29,7 +29,7 @@ Feature: Transports
     Scenario: The server reports its protocol version
       When a client sends GET /healthz without an Authorization header
       Then the response status is 200 and the body is "ok"
-      And the response header "Agent-Bus-Protocol" is "2"
+      And the response header "Agent-Bus-Protocol" is "3"
 
   Rule: Bearer authentication on the web API
 

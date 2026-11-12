@@ -172,8 +172,12 @@ Owners: `spaces` (spaces), `blackboards` (threads). Source: `agent-message-bus-c
 
 Both up and down rebuild the table (create `x_new`, copy every row with its id, drop `x`, rename); the runner applies it with foreign keys off, so the children (tokens, participants, topics, blackboards, inbox, invites; posts, thread_subscriptions) keep their rows and point at the new table. Neither table has an extra index or trigger to recreate. `sqlite_sequence` starts at the highest id present at migration time; `0006_id_sequences` (§2.7) raises the threads sequence past removed threads that inbox entries still name. The down file also deletes the two `sqlite_sequence` rows; run by hand, it needs foreign keys off (`server/DEPLOYMENT.md` §8 Downgrade), or its `DROP TABLE` cascades into every child table.
 
-Checked and left alone: `agents` (rows are never deleted), `topics` and `blackboards` (addressed by name; their ids never leave a transaction), `posts` (ids are only keys within one thread), `inbox` (already `AUTOINCREMENT`).
+Checked and left alone: `agents` (rows are never deleted), `topics` and `blackboards` (addressed by name; their ids never leave a transaction), `posts` (rows go only with their thread, and every reference to a post names its thread too, §2.8), `inbox` (already `AUTOINCREMENT`).
 
 ### 2.7 `0006_id_sequences` (M5, bead `agent-message-bus-c5h.2`)
 
 Owner: `blackboards` (threads). `0005_autoincrement_ids` let `sqlite_sequence` start at the highest thread id left at migration time, so a thread removed before it whose `thread_removed` entry is still in an inbox (`inbox.thread_id` is no foreign key) could give its id to the next thread. The up file raises the threads sequence to `MAX(seq, MAX(inbox.thread_id))`; it never lowers a sequence. The row always exists: the copy in `0005_autoincrement_ids` writes it (seq 0) even when no thread was left. `spaces` needs nothing: every column holding a space id is a foreign key, which the runner checks before each migration commits, so a deleted space leaves no id behind. The down file is a no-op: lowering the sequence again would bring the reuse back, and reverting `0005_autoincrement_ids` next deletes the row anyway.
+
+### 2.8 `0007_inbox_post_id` (bead `agent-message-bus-3jq.2`)
+
+Owner: `inbox`. Adds the nullable column `inbox.post_id INTEGER`: the id of the post a `thread_post` entry announces, served as the entry field `postId` (`contracts.md` §4). No foreign key and no backfill: entries stored before it have no post id. `posts` has no `AUTOINCREMENT`, so the ids of a removed thread's last posts can be handed out again; the entry's `thread_id` tells them apart. No index (never filtered on). The down file drops the column.

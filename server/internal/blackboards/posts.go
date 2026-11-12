@@ -33,7 +33,7 @@ func (s *Service) AddPost(ctx context.Context, p auth.Principal, space string, i
 		if err != nil {
 			return nil, err
 		}
-		tmpl := inbox.Entry{Type: inbox.ThreadPost, Blackboard: t.board, ThreadID: id, ThreadTitle: t.title, Body: body}
+		tmpl := inbox.Entry{Type: inbox.ThreadPost, Blackboard: t.board, ThreadID: id, ThreadTitle: t.title, PostID: postID, Body: body}
 		return m.Notify(ids, tmpl), nil
 	})
 	return postID, rs, err

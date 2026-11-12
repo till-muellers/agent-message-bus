@@ -225,8 +225,8 @@ func TestHealthzProtocolHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = res.Body.Close() }()
-	if got := res.Header.Get("Agent-Bus-Protocol"); got != "2" {
-		t.Fatalf("Agent-Bus-Protocol = %q, want 2", got)
+	if got := res.Header.Get("Agent-Bus-Protocol"); got != "3" {
+		t.Fatalf("Agent-Bus-Protocol = %q, want 3", got)
 	}
 }
 

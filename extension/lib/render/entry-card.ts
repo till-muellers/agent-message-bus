@@ -25,7 +25,8 @@ function where(e: Entry): string {
 		case "topic":
 			return ended ? `#${e.topic} closed` : `#${e.topic}`;
 		case "thread":
-			return ended ? `${e.blackboard} / ${e.threadId} removed` : `${e.blackboard} / ${e.threadId} "${title}"`;
+			if (ended) return `${e.blackboard} / ${e.threadId} removed`;
+			return `${e.blackboard} / ${e.threadId} "${title}"${e.postId === undefined ? "" : ` · post ${e.postId}`}`;
 		case "blackboard":
 			return `${e.blackboard} removed`;
 		case "other":

@@ -26,15 +26,15 @@ Feature: Agent inbox
     Scenario: An entry exposes only its public fields
       When member "worker" reads its inbox with its "alpha" token
       Then every returned entry has the fields "id", "space", "type", "from", "critical", "class" and "createdAt"
-      And the optional fields "topic", "blackboard", "threadId", "threadTitle" and "body" appear only when set
+      And the optional fields "topic", "blackboard", "threadId", "threadTitle", "postId" and "body" appear only when set
       And no entry exposes the recipient agent id or the space id
 
     Scenario: Stored entries get increasing ids and a UTC creation time
       Given the clock reads "2026-10-25T09:30:00.123456789+02:00"
       When these inbox entries are stored for "worker" in space "alpha" in one transaction:
-        | type         | from | critical | blackboard | threadId | threadTitle | topic | body  |
-        | thread_post  | lead | true     | plan       | 7        | design      |       | hello |
-        | topic_closed | lead | false    |            |          |             | news  |       |
+        | type         | from | critical | blackboard | threadId | threadTitle | postId | topic | body  |
+        | thread_post  | lead | true     | plan       | 7        | design      | 27     |       | hello |
+        | topic_closed | lead | false    |            |          |             |        | news  |       |
       Then both entries get ids greater than every earlier entry, in insertion order
       And both entries have createdAt "2026-10-25T07:30:00.123456789Z"
       And member "worker" reading its "alpha" inbox after entry "a2" gets exactly those two entries with all their fields

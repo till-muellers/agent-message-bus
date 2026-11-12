@@ -119,7 +119,7 @@ func TestInsert(t *testing.T) {
 	base := Entry{AgentID: w.agents["worker"], SpaceID: w.spaces["alpha"], Space: "alpha", From: "lead"}
 	post, closed := base, base
 	post.Type, post.Critical, post.Body = ThreadPost, true, "hello"
-	post.Blackboard, post.ThreadID, post.ThreadTitle = "plan", 7, "design"
+	post.Blackboard, post.ThreadID, post.ThreadTitle, post.PostID = "plan", 7, "design", 27
 	closed.Type, closed.Topic = TopicClosed, "news"
 	in := []Entry{post, closed}
 	wantClass := []Class{ClassInterrupt, ClassDeferred}

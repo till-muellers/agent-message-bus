@@ -28,7 +28,7 @@ func inboxTools(ib *inbox.Service) []Tool {
 		define(BusInboxRead, accessInbox,
 			"Returns your inbox entries after id `after` without removing them; members see only their space. "+
 				"Never blocks (use bus_wait) and does not acknowledge. omp sessions receive entries by themselves and need not call it.",
-			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
+			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, postId?, body?, createdAt}]",
 			nil, map[string]any{"after": integer("Return entries with id greater than this; default 0."), "limit": integer("Maximum entries, 1..500; default 100.")},
 			func(ctx context.Context, p auth.Principal, a readArgs) (any, error) {
 				limit, err := inbox.PageSize(a.Limit)
@@ -57,7 +57,7 @@ func inboxTools(ib *inbox.Service) []Tool {
 			"Blocks until unacknowledged entries match (at most 100, id order) or timeoutSeconds (1..300, default 30) pass, "+
 				"then returns them, or [] on timeout; `from` and `threadId` narrow it. Does not acknowledge (omp does). "+
 				"In omp a queued aside, steer or critical entry ends the wait early: continue with that entry.",
-			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, body?, createdAt}]",
+			"[{id, space, type, from, critical, class, topic?, blackboard?, threadId?, threadTitle?, postId?, body?, createdAt}]",
 			nil, waitProps(), func(ctx context.Context, p auth.Principal, a waitArgs) (any, error) {
 				timeout, err := inbox.WaitTimeout(a.TimeoutSeconds)
 				if err != nil {

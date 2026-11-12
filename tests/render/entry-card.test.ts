@@ -20,6 +20,7 @@ describe("the entry card", () => {
 			[{ type: "topic_message", topic: "dev" }, "#dev"],
 			[{ type: "topic_closed", topic: "dev" }, "#dev closed"],
 			[{ type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "Rollout" }, 'plan / 7 "Rollout"'],
+			[{ type: "thread_post", blackboard: "plan", threadId: 7, threadTitle: "Rollout", postId: 27 }, 'plan / 7 "Rollout" · post 27'],
 			[{ type: "thread_removed", blackboard: "plan", threadId: 7 }, "plan / 7 removed"],
 			[{ type: "blackboard_removed", blackboard: "plan", body: undefined }, "plan removed"],
 			[{ type: "space_renamed" as string as EntryType }, "space_renamed"],
