@@ -39,9 +39,9 @@ sequenceDiagram
 
 Leader and admin tokens are bound to no space, so leaving or being revoked from a space leaves them valid. The last leader cannot leave.
 
-Re-invite: accepting a code for a name that already participates first runs the readmission hooks (messaging and blackboards drop its subscriptions in the space), deletes its inbox rows and its tokens bound to the space, then issues the new token; the participant row and its blackboards stay, and the accept wakes the agent so the old token's stream ends. Source: [`spaces/readmission.go`](../../../server/internal/spaces/readmission.go); spec `membership.feature`.
-
 Source: [`service.go:233-270`](../../../server/internal/spaces/service.go), [`revoke.go:17-30`](../../../server/internal/spaces/revoke.go), [`auth/revoke.go:15-19`](../../../server/internal/auth/revoke.go); spec `membership.feature`.
+
+Re-invite: accepting a code for a name that already participates first runs the readmission hooks (messaging and blackboards drop its subscriptions in the space), deletes its inbox rows and its tokens bound to the space, then issues the new token; the participant row and its blackboards stay, and the accept wakes the agent so the old token's stream ends. Source: [`spaces/readmission.go`](../../../server/internal/spaces/readmission.go); spec `membership.feature`.
 
 ### Invite
 
@@ -55,7 +55,7 @@ stateDiagram-v2
 
 A failed admission rolls back and keeps the code.
 
-Source: [`invites/service.go:28`](../../../server/internal/invites/service.go) (TTL), [`:95`](../../../server/internal/invites/service.go), [`:122-123`](../../../server/internal/invites/service.go); spec `invites.feature`.
+Source: [`invites/service.go:30`](../../../server/internal/invites/service.go) (TTL), [`:97`](../../../server/internal/invites/service.go), [`:126-127`](../../../server/internal/invites/service.go); spec `invites.feature`.
 
 ### Topic
 

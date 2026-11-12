@@ -196,11 +196,12 @@ Feature: Invite codes
       When the code is posted to /v1/invites/accept
       Then member "worker" has an inbox entry from "admin" with body "audit the board"
 
-    Scenario: Re-inviting an existing member with a task sends another direct message
-      Given leader "lead" invited member "worker" to space "demo"
+    Scenario: Re-inviting an existing member with a task delivers only the new task
+      Given leader "lead" invited member "worker" to space "demo" with task "first task"
       And leader "lead" created an invite code for member "worker" in space "demo" with task "second task"
       When the code is posted to /v1/invites/accept
       Then member "worker" has an inbox entry from "lead" with body "second task"
+      And member "worker" has no other inbox entry
 
     Scenario: A client without the omp extension reads the task from its inbox
       Given leader "lead" created an invite code for member "worker" in space "demo" with task "fix the bug"
