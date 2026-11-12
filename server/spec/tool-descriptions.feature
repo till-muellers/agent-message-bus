@@ -4,7 +4,7 @@ Feature: Tool descriptions guide the agent on their own
   So that I use the right tool correctly without reading other documents
 
   # Descriptions live in server/internal/tools/*.go (one registry for MCP, RPC and the omp
-  # extension) and in extension/lib/spawn-tool.ts for bus_spawn_worker. omp registers extension
+  # extension) and in extension/lib/spawn/spawn-tool.ts for bus_spawn_worker. omp registers extension
   # tools as "discoverable": the model first sees a short summary, so the opening words of a
   # description matter most.
   #
@@ -99,6 +99,7 @@ Feature: Tool descriptions guide the agent on their own
       Then the section "omp extension" lists bus_spawn_worker with its arguments space, name, task and cwd and its result {name, space, launcher}
 
     Scenario: bus_spawn_worker arguments carry the same rules as the server's
-      Then the "space" property of bus_spawn_worker reads "Space name."
-      And the "name" property of bus_spawn_worker reads "Member agent name, matching ^[a-z0-9][a-z0-9_-]{0,62}$."
-      And the "task" property reads "Task for the worker, delivered as a direct message from you, 1..65536 bytes: goal, done criteria and where to report."
+      # The wording is free; the topics are pinned.
+      Then the "space" property of bus_spawn_worker names an existing space without the name rule
+      And the "name" property states the name rule
+      And the "task" property says that the task arrives as a direct message from the caller, its size limit, and that it holds the goal, the done criteria and where to report
